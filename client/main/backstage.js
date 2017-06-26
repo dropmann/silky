@@ -27,6 +27,9 @@ const FSEntryListModel = Backbone.Model.extend({
     },
     requestExport : function(path, type) {
         this.trigger('dataSetExportRequested', path, type);
+    },
+    requestBrowse : function(list, type) {
+        this.trigger('browseRequested', list, type);
     }
 });
 
@@ -163,7 +166,8 @@ var FSEntryBrowserView = SilkyView.extend({
         'keyup .silky-bs-fslist-browser-save-name' : '_nameChanged',
         'paste .silky-bs-fslist-browser-save-name' : '_nameChanged',
         'focus .silky-bs-fslist-browser-save-name' : '_nameGotFocus',
-        'focus .silky-bs-fslist-browser-save-filetype' : '_focusChanged'
+        'focus .silky-bs-fslist-browser-save-filetype' : '_focusChanged',
+        'click .silky-bs-fslist-browse-button' : '_manualBrowse'
     },
     _saveTypeChanged : function() {
         var selected = this.$el.find('option:selected');
@@ -215,6 +219,13 @@ var FSEntryBrowserView = SilkyView.extend({
             }
         }
     },
+    _manualBrowse: function(event) {
+        let type = 'open';
+        if (this.model.clickProcess === "save" || this.model.clickProcess === "export")
+            type = 'save';
+
+        this.model.requestBrowse(this.model.fileExtensions, type);
+    },
     _createHeader: function() {
         var html = '';
         html += '<div class="silky-bs-fslist-header">';
@@ -222,6 +233,7 @@ var FSEntryBrowserView = SilkyView.extend({
         html += '       <div class="silky-bs-fslist-browser-back-button"><span class="mif-arrow-up"></span></div>';
         html += '       <div class="silky-bs-fslist-browser-location-icon silky-bs-flist-item-folder-browse-icon"></div>';
         html += '       <div class="silky-bs-fslist-browser-location" style="flex: 1 1 auto; height=18px; border-width: 0px; background-color: inherit"></div>';
+        html += '       <div class="silky-bs-fslist-browse-button"></div>';
         html += '   </div>';
         var extension = null;
         if (this.model.clickProcess === "save" || this.model.clickProcess === "export") {
@@ -532,7 +544,7 @@ var BackstageModel = Backbone.Model.extend({
         taskProgress : 0,
         operation : '',
         place : '',
-        lastSelectedPlace : 'recent',
+        lastSelectedPlace : '',
         settings : null,
         ops : [ ],
     },
@@ -555,8 +567,14 @@ var BackstageModel = Backbone.Model.extend({
 
         this._pcListModel = new FSEntryListModel();
         this._pcListModel.clickProcess = "open";
-        this._pcListModel.fileExtensions = [ { extensions: ["omv"], description: "jamovi file (*.omv)" } ];
+        this._pcListModel.fileExtensions = [
+            { description: 'Data files', extensions: ['omv', 'csv', 'txt', 'jasp']},
+            { description: 'jamovi file', extensions: ['omv'] },
+            { description: 'CSV (Comma delimited)', extensions: ['csv', 'txt'] },
+            { description: 'JASP', extensions: ['jasp'] }
+        ];
         this._pcListModel.on('dataSetOpenRequested', this.tryOpen, this);
+        this._pcListModel.on('browseRequested', this.tryBrowse, this);
 
         this._pcSaveListModel = new FSEntryListModel();
         this._pcSaveListModel.clickProcess = "save";
@@ -564,6 +582,7 @@ var BackstageModel = Backbone.Model.extend({
         this._pcSaveListModel.fileExtensions = [ { extensions: ["omv"], description: "jamovi file (*.omv)" } ];
         this._pcSaveListModel.on('dataSetOpenRequested', this.tryOpen, this);
         this._pcSaveListModel.on('dataSetSaveRequested', this.trySave, this);
+        this._pcSaveListModel.on('browseRequested', this.tryBrowse, this);
 
 
         this._pcExportListModel = new FSEntryListModel();
@@ -572,6 +591,7 @@ var BackstageModel = Backbone.Model.extend({
         this._pcExportListModel.fileExtensions = [ { extensions: ["csv"], description: "CSV (Comma delimited) (*.csv)" } ];
         this._pcExportListModel.on('dataSetExportRequested', this.tryExport, this);
         this._pcExportListModel.on('dataSetOpenRequested', this.tryOpen, this);
+        this._pcExportListModel.on('browseRequested', this.tryBrowse, this);
 
         this._savePromiseResolve = null;
 
@@ -585,11 +605,11 @@ var BackstageModel = Backbone.Model.extend({
                 name: 'open',
                 title: 'Open',
                 places: [
-                    { name: 'recent', title: 'Recent', model: this._recentsListModel, view: FSEntryListView, separator: true },
+                    //{ name: 'recent', title: 'Recent', model: this._recentsListModel, view: FSEntryListView, separator: true },
                     { name: 'thispc', title: 'This PC', model: this._pcListModel, view: FSEntryBrowserView },
                     //{ name: 'osf',    title: 'OSF', model: { title: "Access to the OSF is under development", msg: "Support for saving your data to the OSF is coming soon!" }, view: InDevelopmentView },
                     { name: 'examples', title: 'Examples', model: this._examplesListModel, view: FSEntryListView, separator: true },
-                    { name: 'browse', title: 'Browse', action: () => { this._browse('open'); } }
+                    //{ name: 'browse', title: 'Browse', action: () => { this._browse('open'); } }
                 ]
             },
             {
@@ -609,7 +629,7 @@ var BackstageModel = Backbone.Model.extend({
                 places: [
                     { name: 'thispc', title: 'This PC', separator: true, model: this._pcSaveListModel, view: FSEntryBrowserView },
                     //{ name: 'osf',    title: 'OSF', separator: true, model: { title: "Saving to the OSF is under development", msg: "Support for saving your data to the OSF is coming soon!" }, view: InDevelopmentView },
-                    { name: 'browse', title: 'Browse', action: () => { this._browse('saveAs'); } },
+                    //{ name: 'browse', title: 'Browse', action: () => { this._browse('saveAs'); } },
                 ]
             },
             {
@@ -620,8 +640,8 @@ var BackstageModel = Backbone.Model.extend({
                 },
                 places: [
                     {
-                        name: 'csvDoc',
-                        title: 'As CSV file',
+                        name: 'dataExport',
+                        title: 'Data',
                         separator: true,
                         action: () => {
                             this._pcExportListModel.fileExtensions = [ { extensions: ["csv"], description: "CSV (Comma delimited) (*.csv)" } ];
@@ -631,27 +651,51 @@ var BackstageModel = Backbone.Model.extend({
                     },
                     //{ name: 'excelDoc',    title: 'As Excel document', separator: true, model: { title: "Exporting to an Excel document is under development", msg: "Support for exporting your data to other formats is coming soon!" }, view: InDevelopmentView },
                     {
-                        name: 'htmlDoc',
-                        title: 'As HTML file',
+                        name: 'resultsExport',
+                        title: 'Results',
                         action: () => {
-                            this._pcExportListModel.fileExtensions = [ { extensions: ["html", "htm"], description: "Web Page (*.html, *.htm)" } ];
+                            this._pcExportListModel.fileExtensions = [ { extensions: ["pdf"], description: "Portable Document Format (*.pdf)" }, { extensions: ["html", "htm"], description: "Web Page (*.html, *.htm)" } ];
                         },
                         model: this._pcExportListModel,
                         view: FSEntryBrowserView
                     },
-                    {
-                        name: 'pdfDoc',
-                        title: 'As PDF document', separator: true,
-                        action: () => {
-                            this._pcExportListModel.fileExtensions = [ { extensions: ["pdf"], description: "Portable Document Format (*.pdf)" } ];
-                        },
-                        model: this._pcExportListModel,
-                        view: FSEntryBrowserView
-                    },
-                    { name: 'browse', title: 'Browse', action: () => { this._browse('export'); } }
+                    //{ name: 'browse', title: 'Browse', action: () => { this._browse('export'); } }
                 ]
             }
         ];
+    },
+    tryBrowse: function(list, type) {
+        if (host.isElectron) {
+
+            var remote = window.require('electron').remote;
+            var dialog = remote.dialog;
+
+            let filters = [];
+            for (let i = 0; i < list.length; i++)
+                filters.push({ name: list[i].description, extensions: list[i].extensions });
+
+            if (type === 'open') {
+
+                dialog.showOpenDialog({ filters: filters, properties: [ 'openFile' ]}, (fileNames) => {
+                    if (fileNames) {
+                        var path = fileNames[0].replace(/\\/g, '/');
+                        this.requestOpen(path);
+                    }
+                });
+            }
+            else if (type === 'save') {
+
+                dialog.showSaveDialog({ filters : filters }, (fileName) => {
+                    if (fileName) {
+                        fileName = fileName.replace(/\\/g, '/');
+                        this.requestSave(fileName, true);
+                    }
+                });
+            }
+        }
+        else {
+            this.trigger("browse_invoker");
+        }
     },
     _browse : function(type) {
 
@@ -1037,7 +1081,7 @@ var BackstageView = SilkyView.extend({
         // this.$opPanel.append($('<div class="silky-bs-op-button" data-op="' + 'Examples' + '" ' + '>' + 'Examples' + '</div>'));
 
         let $op = $('<div class="silky-bs-op-recents-main"></div>');
-        let $opTitle = $('<div class="silky-bs-op-button" data-op="' + 'Recent' + '" ' + '>' + 'Recent' + '</div>').appendTo($op);
+        let $opTitle = $('<div class="silky-bs-op-header" data-op="' + 'Recent' + '" ' + '>' + 'Recent' + '</div>').appendTo($op);
         let $recentsBody = $('<div class="silky-bs-op-recents"></div>').appendTo($op);
         $op.appendTo(this.$opPanel);
 
@@ -1068,6 +1112,8 @@ var BackstageView = SilkyView.extend({
             () => this.deactivate());
 
         this.model.set('activated', true);
+
+        $('body').find('.app-dragable').addClass('ignore');
     },
     deactivate : function() {
 
@@ -1081,6 +1127,8 @@ var BackstageView = SilkyView.extend({
 
         this.model.set('operation', '');
         this.model.set('place', '');
+
+        $('body').find('.app-dragable').removeClass('ignore');
 
         /*setTimeout(() => {
             var ops = this.model.attributes.ops;

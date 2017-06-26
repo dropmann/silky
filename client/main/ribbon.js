@@ -83,7 +83,7 @@ const RibbonView = Backbone.View.extend({
                 this.selectedTab.$el.addClass('selected');
         }, this);
 
-        this.$el.addClass('jmv-ribbon');
+        this.$el.addClass('jmv-ribbon app-dragable');
 
         let html = '';
         html += '<div class="jmv-ribbon-header">';

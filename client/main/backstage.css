@@ -36,6 +36,7 @@
     display: flex;
     flex: 1;
     position: relative;
+    -webkit-app-region: no-drag;
 }
 
 .silky-bs-header {
@@ -90,12 +91,12 @@
     pointer-events: none;
 }
 
-.silky-bs-op-button {
+.silky-bs-op-button, .silky-bs-op-header {
     padding: 12px 24px 12px 18px;
     cursor: default ;
     /*font-weight: bold;*/
-    font-size: 135%;
-    font-weight: 300;
+    font-size: 120%;
+    font-weight: 400;
 }
 
 .silky-bs-op-button:hover {
@@ -104,7 +105,7 @@
 
 .selected > .silky-bs-op-button {
     background-color: #F0F0F0 ;
-    font-weight: 400;
+    font-weight: 500;
     /*color: #cf901b;*/
 }
 
@@ -478,6 +479,24 @@
     font-size: 120% ;
     overflow: hidden;
     white-space: nowrap ;
+    margin-left: 5px;
+}
+
+.silky-bs-fslist-browse-button {
+    width: 23px ;
+    height: 23px ;
+    border-style: solid;
+    border-width: 1px;
+    border-color: transparent;
+    background-image: url('assets/bs-browse.svg');
+    background-position: center;
+    background-repeat: no-repeat ;
+    background-size: contain;
+}
+
+.silky-bs-fslist-browse-button:hover {
+    border-color: #B1C5DE ;
+    background-color: #DBE4F3 ;
 }
 
 .silky-bs-fslist-browser-location-icon {
@@ -489,7 +508,7 @@
     text-align: center ;
     vertical-align: middle ;
     cursor: default ;
-    margin-right: 3px ;
+    margin: 0px 3px ;
 }
 
 .silky-bs-fslist-browser-back-button {
