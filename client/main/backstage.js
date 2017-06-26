@@ -786,12 +786,12 @@ var BackstageModel = Backbone.Model.extend({
             var place = op.places[index].name;
             var old = this.attributes.place;
 
-            if (old) {
+            //if (old !== place) {
                 this.attributes.place = place;
                 setTimeout(() => {
                     this.trigger('change:place');
                 }, 0);
-            }
+            //}
         }
     },
     uploadFile: function(file) {
@@ -962,6 +962,7 @@ var BackstageView = SilkyView.extend({
         this.render();
         this.model.on("change:activated", this._activationChanged, this);
         this.model.on('change:operation', this._opChanged, this);
+        this.model.on('change:place',     this._placeChanged, this);
     },
     events: {
         'click .silky-bs-back-button' : 'deactivate'
@@ -1000,13 +1001,18 @@ var BackstageView = SilkyView.extend({
                 for (let place of op.places) {
                     let $opPlace = $('<div class="silky-bs-op-place" data-op="' + place.name + '"' + '>' + place.title + '</div>')
                     $opPlace.on('click', (event) => {
-                        let $places = this.$ops.find('.silky-bs-op-place');
-                        $places.removeClass("selected-place");
-
                         this.model.set('op', op.name);
-                        this.model.set('place', place.name);
+                        //this.model.set('place', place.name);
+                        //this.model.set('lastSelectedPlace', place.name);
 
-                        $opPlace.addClass("selected-place");
+                        //var place = event.data;
+                        if ('action' in place)
+                            place.action();
+
+                        if ('view' in place) {
+                            this.model.set('lastSelectedPlace', place.name);
+                            this.model.set('place', place.name);
+                        }
                     });
                     $opPlaces.append($opPlace)
 
@@ -1103,11 +1109,24 @@ var BackstageView = SilkyView.extend({
             }
         }
     },
+    _placeChanged : function() {
+        let $places = this.$ops.find('.silky-bs-op-place');
+
+        var place = this.model.getCurrentPlace();
+        if (place === null)
+            $places.removeClass("selected-place");
+        else if ('view' in place) {
+            $places.removeClass("selected-place");
+
+            var $place = this.$ops.find('[data-op="' + place.name + '"]');
+
+            $place.addClass("selected-place");
+        }
+    },
     _opChanged : function() {
 
         this.$ops.removeClass('selected');
         this._hideSubMenus()
-
 
         var operation = this.model.get('operation');
         var $op = this.$ops.filter('[data-op="' + operation + '-item"]');
