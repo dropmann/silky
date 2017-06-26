@@ -985,6 +985,23 @@ var BackstageView = SilkyView.extend({
 
         $('<div class="silky-bs-main"></div>').appendTo(this.$el);
 
+        let createCallback = (place, op) => {
+            return (event) => {
+                this.model.set('op', op.name);
+                //this.model.set('place', place.name);
+                //this.model.set('lastSelectedPlace', place.name);
+
+                //var place = event.data;
+                if ('action' in place)
+                    place.action();
+
+                if ('view' in place) {
+                    this.model.set('lastSelectedPlace', place.name);
+                    this.model.set('place', place.name);
+                }
+            };
+        };
+
         let $opList = $('<div class="silky-bs-op-list"></div>');
         var currentOp = null;
         for (let i = 0; i < this.model.attributes.ops.length; i++) {
@@ -996,28 +1013,17 @@ var BackstageView = SilkyView.extend({
             let $op = $('<div class="silky-bs-menu-item" data-op="' + op.name + '-item"></div>');
             let $opTitle = $('<div class="silky-bs-op-button" data-op="' + op.name + '">' + op.title + '</div>').appendTo($op);
 
+
+
             if ('places' in op) {
                 let $opPlaces = $('<div class="silky-bs-op-places"></div>');
                 for (let place of op.places) {
-                    let $opPlace = $('<div class="silky-bs-op-place" data-op="' + place.name + '"' + '>' + place.title + '</div>')
-                    $opPlace.on('click', (event) => {
-                        this.model.set('op', op.name);
-                        //this.model.set('place', place.name);
-                        //this.model.set('lastSelectedPlace', place.name);
-
-                        //var place = event.data;
-                        if ('action' in place)
-                            place.action();
-
-                        if ('view' in place) {
-                            this.model.set('lastSelectedPlace', place.name);
-                            this.model.set('place', place.name);
-                        }
-                    });
-                    $opPlaces.append($opPlace)
+                    let $opPlace = $('<div class="silky-bs-op-place" data-op="' + place.name + '"' + '>' + place.title + '</div>');
+                    $opPlace.on('click', createCallback(place, op));
+                    $opPlaces.append($opPlace);
 
                 }
-                $opPlaces.appendTo($op)
+                $opPlaces.appendTo($op);
             }
 
             op.$el = $op;
@@ -1057,7 +1063,7 @@ var BackstageView = SilkyView.extend({
 
         this.$el.addClass('activated');
 
-        tarp.show(true, .3).then(
+        tarp.show(true, 0.3).then(
             undefined,
             () => this.deactivate());
 
@@ -1102,7 +1108,7 @@ var BackstageView = SilkyView.extend({
     },
     _hideSubMenus : function() {
         if (this.$ops) {
-            let $subOps = this.$ops.find('.silky-bs-op-places')
+            let $subOps = this.$ops.find('.silky-bs-op-places');
             for (let i = 0; i < $subOps.length; i++) {
                 $($subOps[i]).css('height', '');
                 $subOps.css("opacity", '');
@@ -1126,7 +1132,7 @@ var BackstageView = SilkyView.extend({
     _opChanged : function() {
 
         this.$ops.removeClass('selected');
-        this._hideSubMenus()
+        this._hideSubMenus();
 
         var operation = this.model.get('operation');
         var $op = this.$ops.filter('[data-op="' + operation + '-item"]');
