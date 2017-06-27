@@ -103,7 +103,6 @@ const FSEntryListView = SilkyView.extend({
     _itemClicked : function(event) {
         var target = event.currentTarget;
         var path = $(target).attr('data-path');
-        console.log(path);
         this.model.requestOpen(path, FSItemType.File);
     }
 });
@@ -226,7 +225,7 @@ var FSEntryBrowserView = SilkyView.extend({
             type = 'save';
             filename = this.$header.find(".silky-bs-fslist-browser-save-name").val().trim();
         }
-        
+
         let dirInfo = this.model.get('dirInfo');
         let directory = dirInfo.path;
 
@@ -258,7 +257,7 @@ var FSEntryBrowserView = SilkyView.extend({
                 let selected = "";
                 if (i === 0)
                     selected = "selected";
-                html += '                   <option data-extensions="' + JSON.stringify(exts) + ' s' + selected + '>' + desc + '</option>';
+                html += "                   <option data-extensions='" + JSON.stringify(exts) + "' " + selected + ">" + desc + "</option>";
             }
             //html += '                   <option data-extensions="[jasp]" value=".jasp">JASP File (*.jasp)</option>';
             html += '               </select>';
@@ -686,8 +685,6 @@ var BackstageModel = Backbone.Model.extend({
             let filters = [];
             for (let i = 0; i < list.length; i++)
                 filters.push({ name: list[i].description, extensions: list[i].extensions });
-
-            console.log(directory + "/" + filename);
 
             if (type === 'open') {
 
@@ -1201,7 +1198,6 @@ var BackstageView = SilkyView.extend({
         var $op = this.$ops.filter('[data-op="' + operation + '-item"]');
         let $subOps = $op.find('.silky-bs-op-places');
         let $contents = $subOps.contents();
-        console.log($contents);
         let height = 0;
         for(let i = 0; i < $contents.length; i++) {
             height += $contents[i].offsetHeight;
