@@ -398,10 +398,11 @@
     display: flex;
     flex-flow: row nowrap;
     align-items: center;
+    border-top: #e1e1e1 solid 2px;
 }
 
 .silky-bs-fslist-header {
-    padding-bottom: 5px;
+    /*padding-bottom: 5px;*/
     margin-bottom: 5px;
     border-bottom-style: solid;
     border-bottom-width: 2px;
@@ -439,7 +440,7 @@
 }
 
 .silky-bs-fslist-save-options {
-    margin-bottom: 7px;
+    margin-bottom: 10px;
 }
 
 .silky-bs-fslist-browser-save-name:hover, .silky-bs-fslist-browser-save-filetype:hover {
@@ -477,25 +478,26 @@
 
 .silky-bs-fslist-browser-location {
     font-size: 120% ;
+    height: 19px;
     overflow: hidden;
     white-space: nowrap ;
     margin-left: 5px;
+    /*padding: 3px 0px 3px 5px;
+    background-color: white;
+    border: #c1c1c1 solid 1px;
+    border-right-style: none;*/
 }
 
 .silky-bs-fslist-browse-button {
-    width: 23px ;
-    height: 23px ;
-    border-style: solid;
-    border-width: 1px;
-    border-color: transparent;
-    background-image: url('assets/bs-browse.svg');
-    background-position: center;
-    background-repeat: no-repeat ;
-    background-size: contain;
+    font-weight: 300;
+    font-size: 120%;
+    height: 19px;
+    padding: 3px 10px;
+    border-left: #e1e1e1 solid 1px;
 }
 
 .silky-bs-fslist-browse-button:hover {
-    border-color: #B1C5DE ;
+    /*border-color: #B1C5DE ;*/
     background-color: #DBE4F3 ;
 }
 
@@ -522,8 +524,8 @@
     text-align: center ;
     vertical-align: middle ;
     cursor: default ;
-    margin-top: 6px ;
-    margin-bottom: 6px ;
+    /*margin-top: 6px ;
+    margin-bottom: 6px ;*/
     margin-left: 0px ;
 
     color: #3E6DA9 ;

@@ -28,8 +28,8 @@ const FSEntryListModel = Backbone.Model.extend({
     requestExport : function(path, type) {
         this.trigger('dataSetExportRequested', path, type);
     },
-    requestBrowse : function(list, type) {
-        this.trigger('browseRequested', list, type);
+    requestBrowse : function(list, type, directory, filename) {
+        this.trigger('browseRequested', list, type, directory, filename);
     }
 });
 
@@ -220,21 +220,24 @@ var FSEntryBrowserView = SilkyView.extend({
         }
     },
     _manualBrowse: function(event) {
+        let filename = '';
         let type = 'open';
-        if (this.model.clickProcess === "save" || this.model.clickProcess === "export")
+        if (this.model.clickProcess === "save" || this.model.clickProcess === "export") {
             type = 'save';
+            filename = this.$header.find(".silky-bs-fslist-browser-save-name").val().trim();
+        }
+        
+        let dirInfo = this.model.get('dirInfo');
+        let directory = dirInfo.path;
 
-        this.model.requestBrowse(this.model.fileExtensions, type);
+        this.model.requestBrowse(this.model.fileExtensions, type, directory, filename);
     },
     _createHeader: function() {
         var html = '';
         html += '<div class="silky-bs-fslist-header">';
-        html += '   <div class="silky-bs-fslist-path-browser">';
-        html += '       <div class="silky-bs-fslist-browser-back-button"><span class="mif-arrow-up"></span></div>';
-        html += '       <div class="silky-bs-fslist-browser-location-icon silky-bs-flist-item-folder-browse-icon"></div>';
-        html += '       <div class="silky-bs-fslist-browser-location" style="flex: 1 1 auto; height=18px; border-width: 0px; background-color: inherit"></div>';
-        html += '       <div class="silky-bs-fslist-browse-button"></div>';
-        html += '   </div>';
+
+
+        /////////////////////////////////////////////////////
         var extension = null;
         if (this.model.clickProcess === "save" || this.model.clickProcess === "export") {
             var path = this.model.currentActivePath;
@@ -270,6 +273,16 @@ var FSEntryBrowserView = SilkyView.extend({
             html += '       </div>';
             html += '   </div>';
         }
+        ////////////////////////////////////////////////
+
+
+        html += '   <div class="silky-bs-fslist-path-browser">';
+        html += '       <div class="silky-bs-fslist-browser-back-button"><span class="mif-arrow-up"></span></div>';
+        html += '       <div class="silky-bs-fslist-browser-location-icon silky-bs-flist-item-folder-browse-icon"></div>';
+        html += '       <div class="silky-bs-fslist-browser-location" style="flex: 1 1 auto;"></div>';
+        html += '       <div class="silky-bs-fslist-browse-button">Browse</div>';
+        html += '   </div>';
+
         html += '</div>';
         this.$header = $(html);
         this.$header.find('.silky-bs-fslist-browser-save-name').focus(function() { $(this).select(); } );
@@ -664,7 +677,7 @@ var BackstageModel = Backbone.Model.extend({
             }
         ];
     },
-    tryBrowse: function(list, type) {
+    tryBrowse: function(list, type, directory, filename) {
         if (host.isElectron) {
 
             var remote = window.require('electron').remote;
@@ -674,9 +687,11 @@ var BackstageModel = Backbone.Model.extend({
             for (let i = 0; i < list.length; i++)
                 filters.push({ name: list[i].description, extensions: list[i].extensions });
 
+            console.log(directory + "/" + filename);
+
             if (type === 'open') {
 
-                dialog.showOpenDialog({ filters: filters, properties: [ 'openFile' ]}, (fileNames) => {
+                dialog.showOpenDialog({ filters: filters, properties: [ 'openFile' ], defaultPath: directory }, (fileNames) => {
                     if (fileNames) {
                         var path = fileNames[0].replace(/\\/g, '/');
                         this.requestOpen(path);
@@ -685,7 +700,7 @@ var BackstageModel = Backbone.Model.extend({
             }
             else if (type === 'save') {
 
-                dialog.showSaveDialog({ filters : filters }, (fileName) => {
+                dialog.showSaveDialog({ filters : filters, defaultPath: directory + "/" + filename }, (fileName) => {
                     if (fileName) {
                         fileName = fileName.replace(/\\/g, '/');
                         this.requestSave(fileName, true);
