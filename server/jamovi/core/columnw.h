@@ -26,10 +26,11 @@ public:
     void setName(const char *name);
     void setMeasureType(MeasureType::Type measureType);
     void setAutoMeasure(bool yes);
-    void appendLevel(int value, const char *label);
-    void insertLevel(int value, const char *label);
+    void appendLevel(int value, const char *label, const char *importValue);
+    void insertLevel(int value, const char *label, const char *importValue);
     void removeLevel(int value);
     void clearLevels();
+    void updateLevelCounts();
     void insertRows(int from, int to);
     void setDPs(int dps);
 

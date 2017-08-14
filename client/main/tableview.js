@@ -759,16 +759,39 @@ const TableView = SilkyView.extend({
                     case 'ordinal':
                         if (Number.isInteger(number))
                             value = number;
-                        else if ( ! this.currentColumn.autoMeasure)
-                            throw {
-                                title: 'Integer value required',
-                                message: 'Nominal and Ordinal variables only accept integer values',
-                                type: 'error'
-                            };
+                        else if ( ! this.currentColumn.autoMeasure) {
+                            let found = false;
+
+                            if (typeof value === 'string') {
+                                for (let i = 0; i < this.currentColumn.levels.length; i++) {
+                                    let levelInfo = this.currentColumn.levels[i];
+                                    if (value === levelInfo.label) {
+                                        value = levelInfo.value;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (!found) {
+                                throw {
+                                    title: 'Integer value required',
+                                    message: 'Nominal and Ordinal variables only accept integer values',
+                                    type: 'error'
+                                };
+                            }
+                        }
                         else if ( ! Number.isNaN(number))
                             value = number;
                         break;
                     case 'nominaltext':
+                        for (let i = 0; i < this.currentColumn.levels.length; i++) {
+                            let levelInfo = this.currentColumn.levels[i];
+                            if (value === levelInfo.importValue) {
+                                value = levelInfo.label;
+                                break;
+                            }
+                        }
                         break;
                 }
             }
@@ -1295,11 +1318,12 @@ const TableView = SilkyView.extend({
             let $column = $(this.$columns[colOffset + colNo]);
             let $cells  = $column.children();
 
-            let dps = columns[colOffset + colNo].dps;
+            let columnInfo = columns[colOffset + colNo];
+            let dps = columnInfo.dps;
 
             for (let rowNo = 0; rowNo < column.length; rowNo++) {
                 let $cell = $($cells[rowNo]);
-                let content = column[rowNo];
+                let content = this._rawValueToDisplay(column[rowNo], columnInfo);
 
                 this._updateCell($cell, content, dps);
             }
@@ -1332,10 +1356,23 @@ const TableView = SilkyView.extend({
             for (let rowNo = 0; rowNo < nRows; rowNo++) {
 
                 let $cell = $($cells[rowOffset + rowNo]);
-                let content = column[rowOffset + rowNo];
+                let content = this._rawValueToDisplay(column[rowOffset + rowNo], columnInfo);
                 this._updateCell($cell, content, dps);
             }
         }
+    },
+    _rawValueToDisplay(raw, columnInfo) {
+        if (columnInfo.measureType === 'continuous')
+            return raw;
+        else {
+            for (let i = 0; i < columnInfo.levels.length; i++) {
+                if (raw === columnInfo.levels[i].value) {
+                    return columnInfo.levels[i].label;
+                }
+            }
+        }
+
+        return raw;
     },
     _updateCell($cell, content, dps) {
 

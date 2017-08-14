@@ -5,6 +5,7 @@ const _ = require('underscore');
 const $ = require('jquery');
 const Backbone = require('backbone');
 Backbone.$ = $;
+const keyboardJS = require('keyboardjs');
 
 const DataVarWidget = Backbone.View.extend({
     className: 'DataVarWidget',
@@ -59,8 +60,11 @@ const DataVarWidget = Backbone.View.extend({
 
         this.$typesHighlight = $('<div class="silky-variable-editor-widget-types-highlight"></div>').appendTo(this.$types);
 
-        this.model.on('change:measureType', event => this._setType(event.changed.measureType));
-        this.model.on('change:levels',      event => this._setLevels(event.changed.levels));
+        this.model.on('change:measureType', event => {
+            this._setType(event.changed.measureType);
+            this._setLevels(event.changed.measureType, this.model.get('levels'));
+        });
+        this.model.on('change:levels',      event => this._setLevels(this.model.get('measureType'), event.changed.levels));
         this.model.on('change:autoMeasure', event => this._setAutoMeasure(event.changed.autoMeasure));
     },
     _moveUp() {
@@ -128,19 +132,107 @@ const DataVarWidget = Backbone.View.extend({
             this._enableDisableMoveButtons();
         }
     },
-    _setLevels(levels) {
+    _setLevels(measureType, levels) {
         if ( ! this.attached)
             return;
-        this.$levelItems.off('click');
-        this.$levels.empty();
+
+        if (levels.length === 0)
+            this.$levels.empty();
+        else
+            this.$levelItems.remove(":gt(" + (levels.length - 1) + ")");
 
         this.$moveUp.addClass('disabled');
         this.$moveDown.addClass('disabled');
 
         if (levels) {
+
+            let keydownFunction = ((event) => {
+                let $input = $(event.delegateTarget);
+                let keypressed = event.keyCode || event.which;
+                if (keypressed === 13) { // enter key
+                    $input.blur();
+                    if (this.model.get('changes'))
+                        this.model.apply();
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                else if (keypressed === 27) { // escape key
+                    $input.blur();
+                    if (this.model.get('changes'))
+                        this.model.revert();
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            });
+
+            let changeFunction = (event) => {
+                let $input = $(event.delegateTarget);
+                let index = $input.data('index');
+                this.model.editLevelLabel(index, $input.val());
+                let level = this.model.get('levels')[index];
+                let diff = level.importValue !== level.label;
+                let $ivLabel = this.$levels.find(".silky-variable-editor-level[data-index = " + index + "]");
+                $ivLabel.attr('data-changed', diff);
+            };
+
+            let focusFunction = (event) => {
+                this._currentKeyboardContext = keyboardJS.getContext();
+                keyboardJS.setContext('');
+                let $input = $(event.delegateTarget);
+                $input.select();
+            };
+
+            let blurFunction = () => {
+                keyboardJS.setContext(this._currentKeyboardContext);
+            };
+
+            let clickFunction = event => {
+                this.$levelItems.removeClass('selected');
+                let $level = $(event.delegateTarget);
+                $level.addClass('selected');
+
+                let index = this.$levelItems.index($level);
+                this.selectedLevelIndex = index;
+                this._enableDisableMoveButtons();
+            };
+
+            let ivTag = 'Base Value';
+            if (measureType === 'nominaltext')
+                ivTag = 'Imported Value';
+
+            this.$levelItems.removeClass('selected');
             for (let i = 0; i < levels.length; i++) {
                 let level = levels[i];
-                let $level = $('<div data-index="' + i + '", class="silky-variable-editor-level">' + level.label + '</div>').appendTo(this.$levels);
+                let $level = null;
+                let $label = null;
+                let $value = null;
+                if (i >= this.$levelItems.length) {
+                    let diff = level.importValue !== level.label;
+                    $level = $('<div data-index="' + i + '" data-changed="' + diff + '" class="silky-variable-editor-level"></div>');
+                    this.$levels.append($level);
+
+                    $value = $('<div class="jmv-variable-editor-level-value">' + ivTag + ': ' + level.importValue + '</div>').appendTo($level);
+
+                    $label = $('<input class="jmv-variable-editor-level-label" data-index="' + i + '" type="text" value="' + level.label + '" />').appendTo($level);
+                    $label.on("change keyup paste", changeFunction);
+                    $label.focus(focusFunction);
+                    $label.blur(blurFunction);
+                    $label.keydown(keydownFunction);
+
+                    $level.on('click', clickFunction);
+                    this.$levelItems.push($level);
+                }
+                else {
+                    $level = $(this.$levelItems[i]);
+                    $label = $level.find('.jmv-variable-editor-level-label');
+                    $label.val(level.label);
+
+                    let diff = level.importValue !== level.label;
+                    $level.attr('data-changed', diff);
+
+                    $value = $level.find('.jmv-variable-editor-level-value');
+                    $value.text(ivTag + ': ' + level.importValue);
+                }
                 if (i === this.selectedLevelIndex)
                     $level.addClass('selected');
             }
@@ -149,15 +241,6 @@ const DataVarWidget = Backbone.View.extend({
         this._enableDisableMoveButtons();
 
         this.$levelItems = this.$levels.find('.silky-variable-editor-level');
-        this.$levelItems.on('click', event => {
-            this.$levelItems.removeClass('selected');
-            let $level = $(event.target);
-            $level.addClass('selected');
-
-            let index = this.$levelItems.index($level);
-            this.selectedLevelIndex = index;
-            this._enableDisableMoveButtons();
-        });
     },
     _setAutoMeasure(auto) {
         if ( ! this.attached)
@@ -176,7 +259,7 @@ const DataVarWidget = Backbone.View.extend({
         this.selectedLevelIndex = -1;
         this._setType(this.model.get('measureType'));
         this._setAutoMeasure(this.model.get('autoMeasure'));
-        this._setLevels(this.model.get('levels'));
+        this._setLevels(this.model.get('measureType'), this.model.get('levels'));
     }
 });
 

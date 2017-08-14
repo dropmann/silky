@@ -262,12 +262,7 @@
     overflow-x: hidden ;
 }
 
-.silky-variable-editor-level {
-    padding: 4px 12px ;
-    box-sizing: border-box;
-}
-
-.silky-variable-editor-level.selected {
+.silky-variable-editor-level.selected, .silky-variable-editor-level.selected > .jmv-variable-editor-level-label:not(:focus) {
     background-color: #B5CAEF ;
 }
 
@@ -293,4 +288,35 @@
 .silky-variable-editor-widget-move-up:not(.disabled):hover,
 .silky-variable-editor-widget-move-down:not(.disabled):hover {
     color: #999999 ;
+}
+
+.silky-variable-editor-level {
+    padding: 5px 0px 5px 12px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column-reverse;
+    border-bottom: 1px solid #e6e6e6;
+}
+
+.jmv-variable-editor-level-value {
+    padding-left: 4px;
+    padding-top: 2px;
+    font-size: 75%;
+}
+
+.silky-variable-editor-level[data-changed=false] > .jmv-variable-editor-level-value {
+    display: none;
+}
+
+.jmv-variable-editor-level-label {
+    padding: 0;
+    padding-left: 4px;
+    border-bottom-style: none;
+    border-right-style: none;
+    border-top-style: none;
+    border-left-style: none;
+    border-width: 1px;
+    border-color: #e6e6e6;
+    height: 100%;
+    outline: none;
 }
