@@ -528,7 +528,8 @@ class Instance:
             response.schema.rowCount = self._data.row_count
             response.schema.vRowCount = self._data.virtual_row_count
             response.schema.columnCount = self._data.column_count
-            response.schema.vColumnCount = self._data.virtual_column_count
+            response.schema.vColumnCount = self._data.visible_column_count
+            response.schema.tColumnCount = self._data.total_column_count
 
             for column in self._data:
                 column_schema = response.schema.columns.add()
@@ -677,11 +678,15 @@ class Instance:
             column.change(measure_type=column_pb.measureType)
             column.column_type = column_pb.columnType
             column.auto_measure = column_pb.autoMeasure
+            column.child_of = column_pb.childOf
+            column.hidden = column_pb.hidden
+            column.active = column_pb.active
 
         response.schema.rowCount = self._data.row_count
         response.schema.vRowCount = self._data.virtual_row_count
         response.schema.columnCount = self._data.column_count
-        response.schema.vColumnCount = self._data.virtual_column_count
+        response.schema.vColumnCount = self._data.visible_column_count
+        response.schema.tColumnCount = self._data.total_column_count
 
         response.incSchema = True
         column_pb = response.schema.columns.add()
@@ -718,9 +723,9 @@ class Instance:
 
     def _apply_schema(self, request, response):
 
-        n_cols_before = self._data.virtual_column_count
+        n_cols_before = self._data.total_column_count
 
-        min_index = self._data.virtual_column_count
+        min_index = self._data.total_column_count
 
         for column_schema in request.schema.columns:
             column = self._data.get_column_by_id(column_schema.id)
@@ -755,7 +760,11 @@ class Instance:
                 measure_type=column_schema.measureType,
                 levels=levels,
                 auto_measure=column_schema.autoMeasure,
-                formula=column_schema.formula)
+                formula=column_schema.formula,
+                description=column_schema.description,
+                hidden=column_schema.hidden,
+                active=column_schema.active,
+                child_of=column_schema.childOf)
 
             column.needs_recalc = True
             column.recalc()
@@ -780,7 +789,7 @@ class Instance:
 
         self._data.is_edited = True
 
-        for i in range(n_cols_before, self._data.virtual_column_count):  # cols added
+        for i in range(n_cols_before, self._data.total_column_count):  # cols added
             column = self._data[i]
             cols_w_schema_change.add(column)
 
@@ -791,6 +800,10 @@ class Instance:
             response.incSchema = True
             columnPB = response.schema.columns.add()
             self._populate_column_schema(column, columnPB)
+
+        response.schema.columnCount = self._data.column_count
+        response.schema.vColumnCount = self._data.visible_column_count
+        response.schema.tColumnCount = self._data.total_column_count
 
     def _parse_cells(self, request):
 
@@ -857,9 +870,34 @@ class Instance:
         else:
             return [ ], { }
 
+    def _get_column(self, index, base=0, is_display_index=False):
+        column = None
+        if is_display_index == True:
+            count = 0
+            i = 0
+            while True:
+                next_index = base + count + i
+                if next_index >= self._data.total_column_count:
+                    break
+                column = self._data[next_index]
+                if column.hidden == False:
+                    if count == index:
+                        break
+                    count += 1;
+                else:
+                    i += 1
+        else:
+            next_index = base + index
+            if next_index < self._data.total_column_count:
+                column = self._data[next_index]
+
+        return column
+
     def _apply_cells(self, request, response):
 
         cells, selection = self._parse_cells(request)
+
+        exclude_hidden_Cols = request.excHiddenCols
 
         row_start = selection['row_start']
         col_start = selection['col_start']
@@ -877,17 +915,24 @@ class Instance:
             return
 
         # check that the assignments are possible
-
+        base_index = 0
+        search_index = col_start;
         for i in range(col_count):
-            index = col_start + i
-            if index >= self._data.column_count:
+
+            column = self._get_column(search_index, base_index, exclude_hidden_Cols)
+
+            if column is None:
                 break
-            column = self._data[index]
+
+            base_index = column.index + 1
+            search_index = 0
 
             if column.column_type == ColumnType.COMPUTED:
                 raise TypeError("Cannot assign to computed column '{}'".format(column.name))
             elif column.column_type == ColumnType.RECODED:
                 raise TypeError("Cannot assign to recoded column '{}'".format(column.name))
+            elif column.column_type == ColumnType.FILTER:
+                raise TypeError("Cannot assign to filter column '{}'".format(column.name))
 
             if column.auto_measure:
                 continue
@@ -906,7 +951,7 @@ class Instance:
 
         # assign
 
-        n_cols_before = self._data.virtual_column_count
+        n_cols_before = self._data.total_column_count
         n_rows_before = self._data.row_count
 
         if row_end >= self._data.row_count:
@@ -920,8 +965,16 @@ class Instance:
             column.realise()
             cols_w_schema_change.add(column)
 
+        base_index = 0
+        search_index = col_start;
         for i in range(col_count):
-            column = self._data[col_start + i]
+            column = self._get_column(search_index, base_index, exclude_hidden_Cols)
+            if column is None:
+                break
+            base_index = column.index + 1
+            search_index = 0
+
+            #column = self._data[col_start + i]
             column.column_type = ColumnType.DATA
             column.needs_recalc = True  # invalidate dependent nodes
 
@@ -1029,14 +1082,15 @@ class Instance:
 
         self._data.is_edited = True
 
-        for i in range(n_cols_before, self._data.virtual_column_count):  # cols added
+        for i in range(n_cols_before, self._data.total_column_count):  # cols added
             column = self._data[i]
             cols_w_schema_change.add(column)
 
         response.schema.rowCount = self._data.row_count
         response.schema.vRowCount = self._data.virtual_row_count
         response.schema.columnCount = self._data.column_count
-        response.schema.vColumnCount = self._data.virtual_column_count
+        response.schema.vColumnCount = self._data.visible_column_count
+        response.schema.tColumnCount = self._data.total_column_count
 
         if n_rows_before != self._data.row_count:
             recalc = self._data  # if more rows recalc all
@@ -1098,8 +1152,18 @@ class Instance:
         row_count = row_end - row_start + 1
         col_count = col_end - col_start + 1
 
-        for c in range(col_start, col_start + col_count):
-            column = self._data[c]
+        exclude_hidden_Cols = request.excHiddenCols
+        base_index = 0
+        search_index = col_start;
+        for cc in range(col_count):
+
+            column = self._get_column(search_index, base_index, exclude_hidden_Cols)
+
+            if column is None:
+                break
+
+            base_index = column.index + 1
+            search_index = 0
 
             col_res = response.data.add()
 
@@ -1145,7 +1209,8 @@ class Instance:
         response.schema.rowCount = self._data.row_count
         response.schema.vRowCount = self._data.virtual_row_count
         response.schema.columnCount = self._data.column_count
-        response.schema.vColumnCount = self._data.virtual_column_count
+        response.schema.vColumnCount = self._data.visible_column_count
+        response.schema.tColumnCount = self._data.total_column_count
 
     def _populate_column_schema(self, column, column_schema):
         column_schema.name = column.name
@@ -1163,6 +1228,11 @@ class Instance:
         column_schema.columnType = column.column_type.value
         column_schema.formula = column.formula
         column_schema.formulaMessage = column.formula_message
+
+        column_schema.description = column.description
+        column_schema.hidden = column.hidden
+        column_schema.active = column.active
+        column_schema.childOf = column.child_of
 
         if column.measure_type is MeasureType.NOMINAL_TEXT:
             for level in column.levels:

@@ -20,6 +20,8 @@ const VariableEditor = Backbone.View.extend({
         this.$el.empty();
         this.$el.addClass('jmv-variable-editor');
 
+        this._showId = null;
+
         this.$main = $('<div class="jmv-variable-editor-main" data-type="none"></div>').appendTo(this.$el);
 
         this.$ok = $('<div class="jmv-variable-editor-ok jmv-tooltip" data-tippy-dynamictitle="true" title="Hide"><span class="mif-checkmark"></span><span class="mif-arrow-up"></span></div>').appendTo(this.$main);
@@ -170,14 +172,15 @@ const VariableEditor = Backbone.View.extend({
         this.model.on('change:editingVar', event => this._editingVarChanged(event));
     },
     _update() {
-        let columnName = this.model.attributes.editingVar;
-        let column = this.model.attributes.columns[columnName];
+        let columnIndex = this.model.attributes.editingVar;
+        let column = this.model.attributes.columns[columnIndex];
         this.$main.attr('data-type', column.columnType);
         this.editorModel.setColumn(column.id);
     },
     _editingVarChanged(event) {
+
         let prev = this.model.previous('editingVar');
-        let now  = event.changed.editingVar;
+        let now  = this.model.get('editingVar');
 
         if ((prev === null || now === null) && prev !== now)
             this.trigger('visibility-changing', prev === null && now !== null);
@@ -233,6 +236,19 @@ const VariableEditor = Backbone.View.extend({
                 $old = this.$$editors[1];
             }
 
+            let columnName = this.model.attributes.editingVar;
+            let column = this.model.attributes.columns[columnName];
+            if (old.model.get('columnType') === 'filter' && column.columnType === 'filter') {
+                this.editors[0] = old;
+                this.editors[1] = editor;
+                this.$$editors[0] = $old;
+                this.$$editors[1] = $editor;
+                this._update();
+                old.attach();
+                return;
+            }
+
+
             old.detach();
 
             this._update();
@@ -252,10 +268,14 @@ const VariableEditor = Backbone.View.extend({
                     $old.css('left', '-100%');
                     $old.css('opacity', 0);
                 }
-                setTimeout(() => {
+                if (this._showId !== null)
+                    clearTimeout(this._showId);
+
+                this._showId = setTimeout(() => {
                     $editor.removeClass('inactive');
                     $editor.css('left', '0');
                     $editor.css('opacity', 1);
+                    this._showId = null;
                 }, 10);
             }
         }

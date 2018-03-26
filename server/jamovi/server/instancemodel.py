@@ -54,6 +54,10 @@ class InstanceModel:
         column.column_type = ColumnType.NONE
         column.id = self._next_id
         self._next_id += 1
+
+        new_column = Column(self, column)
+        new_column.index = self.total_column_count
+        self._columns.append(new_column)
         return column
 
     def set_row_count(self, count):
@@ -84,6 +88,7 @@ class InstanceModel:
             column.index = index
             index += 1
 
+
     def delete_columns(self, start, end):
 
         self._dataset.delete_columns(start, end)
@@ -91,6 +96,7 @@ class InstanceModel:
 
         for i in range(start, len(self._columns)):
             self._columns[i].index = i
+
 
     @property
     def title(self):
@@ -118,14 +124,17 @@ class InstanceModel:
 
     def setup(self):
 
-        self._columns = [ ]
         self._next_id = 0
 
         index = 0
         for child in self._dataset:
-            column = Column(self, child)
+            if index < len(self._columns):
+                column = self._columns[index]
+            else:
+                column = Column(self, child)
+                self._columns.append(column)
             column.index = index
-            self._columns.append(column)
+
             index += 1
 
             if column.id >= self._next_id:
@@ -138,14 +147,13 @@ class InstanceModel:
         self._add_virtual_columns()
 
     def _add_virtual_columns(self):
-        n_virtual = self.virtual_column_count - self.column_count
+        n_virtual = self.total_column_count - self.column_count
         for i in range(n_virtual, InstanceModel.N_VIRTUAL_COLS):
-            index = self.virtual_column_count
+            index = self.total_column_count
             column = Column(self)
             column.id = self._next_id
             column.index = index
             self._columns.append(column)
-            index += 1
             self._next_id += 1
 
     @property
@@ -186,6 +194,28 @@ class InstanceModel:
 
     @property
     def virtual_column_count(self):
+        return self.total_column_count - self.column_count
+
+    @property
+    def visible_column_count(self):
+        count = 0
+        for column in self._columns:
+            if column.hidden == False:
+                count += 1
+        return count
+
+    @property
+    def filter_column_count(self):
+        count = 0
+        for column in self._columns:
+            if column.type == 'filter':
+                count += 1
+            else:
+                break
+        return count
+
+    @property
+    def total_column_count(self):
         return len(self._columns)
 
     @property

@@ -73,12 +73,30 @@
 .jmv-column {
     position: absolute ;
     background-color: white ;
+    height: 100%;
+}
+
+.jmv-column[data-active=false] {
+    background-color: #eeeeee ;
 }
 
 .jmv-column,
 .jmv-column-header {
-    transition: .2s left ;
+    transition: .2s left, .2s background-color ease-out;
 }
+
+.jmv-column-header[data-active=false] {
+    color: #b5b6b6;
+}
+
+.jmv-column-header[data-active=false].highlighted {
+    color: #979797;
+}
+
+.jmv-column-header[data-active=false]:hover {
+    color: #e5e5e5;
+}
+
 
 .jmv-column-row-header {
     position: absolute ;

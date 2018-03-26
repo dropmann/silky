@@ -12,8 +12,198 @@ Backbone.$ = $;
 const ByteBuffer = require('bytebuffer');
 
 const DataSetModel = Backbone.Model.extend({
-
     initialize() {
+        this.initializeDataSetModel();
+    },
+    initializeDataSetModel() {
+        this._changeBundles = [];
+        this._nextChangeId = 0;
+    },
+    _createChangeAction(changeBundle) {
+        if (changeBundle.type === 'remove') {
+            changeBundle.action = () => {
+                let prom = Promise.resolve();
+                if ( ! changeBundle._cancelled) {
+                    let action = (promise, m) => {
+                        let mod = changeBundle.mods[m];
+                        return promise.then(() => {
+                            if (m > 0) {
+                                for (let i = m; i < changeBundle.mods.length; i++)
+                                    this._updatePendingChange({ type: changeBundle.type, mods: [ changeBundle.mods[m - 1] ] }, { type: changeBundle.type, mods: [ changeBundle.mods[i] ] }, 0);
+                            }
+
+                            if (changeBundle.category === 'columns')
+                                return this.deleteColumns(mod.columns.index, mod.columns.index + mod.columns.count - 1, false, true);
+                            else if (changeBundle.category === 'rows')
+                                return this.deleteRows(mod.rows.index, mod.rows.index + mod.rows.count - 1, true);
+                        });
+                    };
+
+                    for (let m = 0; m < changeBundle.mods.length; m++)
+                        prom = action(prom, m);
+                }
+                return prom;
+            };
+        }
+        else if (changeBundle.type === 'insert') {
+            changeBundle.action = () => {
+                let prom = Promise.resolve();
+                if ( ! changeBundle._cancelled) {
+                    let mod = changeBundle.mods[0]; //should only be one per bundle
+                    if (changeBundle.category === 'columns')
+                        return this.insertColumn(mod.columns.index, mod.params, false, true);
+                    else if (changeBundle.category === 'rows')
+                        return this.insertRows(mod.rows.index, mod.rows.index + mod.rows.count - 1, true);
+                }
+                return prom;
+            };
+        }
+        else if (changeBundle.type === 'modify') {
+            changeBundle.action = () => {
+                if ( ! changeBundle._cancelled) {
+                    if (changeBundle.category === 'columns') {
+                        let list = [];
+                        for (let mod of changeBundle.mods)
+                            list.push({ id: mod.id, values: mod.values });
+                        return this.changeColumns(list, true);
+                    }
+                    else if (changeBundle.category === 'cells') {
+                        // there will never be more then one in a bundle
+                        let mod = changeBundle.mods[0];
+                        return this.changeCells( { top: mod.rows.index, left: mod.columns.index, bottom: mod.rows.index + mod.rows.count - 1, right: mod.columns.index + mod.columns.count - 1 }, mod.cells, mod.cbHtml, true);
+                    }
+                }
+                return Promise.resolve();
+            };
+        }
+        return changeBundle.action;
+    },
+    _beginChanges(category, type, changes) {
+        let _todoId = this._nextChangeId++;
+        let changeBundle = { id: _todoId, category: category, type: type, mods: [] };
+        for (let params of changes) {
+            let mod = { };
+            if (type === 'remove')
+                mod = { _category: { index: params.start, count: params.end - params.start + 1 } };
+            else if (type === 'insert')
+                mod = { _category: { index: params.start, count: params.end - params.start + 1 }, params: params.params };
+            else if (type === 'modify') {
+                if (category === 'cells')
+                    mod = { rows: { index: params.rowStart, count: params.rowEnd - params.rowStart + 1} , columns: { index: params.columnStart, count: params.columnEnd - params.columnStart + 1 }, cells: params.cells, cbHtml: params.cbHtml  };
+                else
+                    mod = { _category: { index: params.index, count: 1 }, id: params.id, values: params.values };
+            }
+
+            if (mod._category !== undefined) {
+                mod[category] = mod._category;
+                delete mod._category;
+            }
+
+            changeBundle.mods.push(mod);
+        }
+
+        if (changeBundle === null)
+            return Promise.resolve();
+
+        this._changeBundles.push(changeBundle);
+
+        let changeAction = this._createChangeAction(changeBundle);
+
+        if (this._changeReady === undefined)
+            this._changeReady = changeAction();
+        else {
+            this._changeReady = this._changeReady.then(() => {
+                return changeAction();
+            },
+            () => {
+                return changeAction();
+            });
+        }
+
+        this._changeReady = this._changeReady.then((value) => {
+            this._endChanges(_todoId);
+            return value;
+        });
+
+        return this._changeReady;
+    },
+    _endChanges(id) {
+        for (let bundle of this._changeBundles) {
+            if (bundle.id === id) {
+                let cbundle = bundle;
+                for (let i = 0; i < this._changeBundles.length; i++) {
+                    let pbundle = this._changeBundles[i];
+                    if (pbundle.id !== id) {
+                        for (let p = 0; p < pbundle.mods.length; p++) {
+                            if ( ! this._updatePendingChange(cbundle, pbundle, p))
+                                pbundle.mods.splice(p, 1);
+                        }
+                    }
+                    if (pbundle.id === id || pbundle.mods.length === 0)
+                        this._changeBundles.splice(i, 1);
+                }
+                break;
+            }
+        }
+    },
+    _updatePendingChange(cbundle, pbundle, index) {
+        let pending = pbundle.mods[index];
+        if (pending[cbundle.category] === undefined)
+            return true;
+
+        let pRange = pending[cbundle.category];
+        let pEnd = pRange.index + pRange.count - 1;
+        for (let c = 0; c < cbundle.mods.length; c++) {
+            let completed = cbundle.mods[c];
+            let cRange = completed[cbundle.category];
+            let cEnd = cRange.index + cRange.count - 1;
+            if (cbundle.type === "remove") {
+                if (cEnd < pRange.index)
+                    pRange.index -= cRange.count;
+                else if (cRange.index <= pRange.index && cEnd >= pEnd) {
+                    if (pbundle.type !== "insert") {
+                        pending._cancelled = true;
+                        return false;
+                    }
+                    else
+                        pRange.index = cRange.index;
+                }
+                else if (cRange.index <= pRange.index && cEnd < pEnd)
+                    pRange.index += cEnd - pRange.index + 1;
+                else if (cRange.index > pRange.index && cEnd >= pEnd)
+                    pRange.count -= pEnd - cRange.index + 1;
+                else if (cRange.index > pRange.index && cEnd < pEnd)
+                    pRange.count -= cRange.count;
+            }
+            else if (cbundle.type === "insert") {
+                if (cRange.index <= pRange.index)
+                    pRange.index += cRange.count;
+                else if (cRange.index > pRange.index && cEnd <= pEnd) {
+                    if (pbundle.type === 'remove') {
+                        let newMod = { };
+                        newMod[cbundle.category] = { index: pRange.index, count: cRange.index - 1 - pRange.index };
+                        pbundle.mods.push(newMod);
+                        pRange.index = cRange.index + cRange.count;
+                        pRange.count -= newMod[cbundle.category].count;
+                    }
+                }
+            }
+        }
+        return true;
+    },
+    filtersHidden() {
+        let firstColumn = this.getColumn(0, true);
+        if (firstColumn)
+            return firstColumn.columnType === 'filter' && firstColumn.hidden;
+
+        return false;
+    },
+    visibleRealColumnCount() {
+        let vCount = this.get('vColumnCount');
+        let tCount = this.get('tColumnCount');
+        let rCount = this.get('columnCount');
+
+        return vCount - (tCount - rCount);
     },
     defaults : {
         hasDataSet : false,
@@ -22,13 +212,15 @@ const DataSetModel = Backbone.Model.extend({
         vRowCount : 0,
         columnCount : 0,
         vColumnCount : 0,
+        tColumnCount : 0,
         coms : null,
         instanceId : null,
         editingVar : null,
         varEdited : false,
+        filtersVisible: false,
         edited : false,
         formula : '',
-        formulaMessage : '',
+        formulaMessage : ''
     },
     setup(infoPB) {
 
@@ -39,10 +231,18 @@ const DataSetModel = Backbone.Model.extend({
             let schemaPB = infoPB.schema;
             let columns = Array(schemaPB.columns.length);
 
+            let dIndex = 0;
             for (let i = 0; i < schemaPB.columns.length; i++) {
                 let columnPB = schemaPB.columns[i];
                 let column = { };
                 this._readColumnPB(column, columnPB);
+                if (column.hidden)
+                    column.dIndex = -1;
+                else {
+                    column.dIndex = dIndex;
+                    dIndex += 1;
+                }
+
                 columns[i] = column;
             }
 
@@ -51,6 +251,13 @@ const DataSetModel = Backbone.Model.extend({
             this.attributes.vRowCount = infoPB.schema.vRowCount;
             this.attributes.columnCount = infoPB.schema.columnCount;
             this.attributes.vColumnCount = infoPB.schema.vColumnCount;
+            this.attributes.tColumnCount = infoPB.schema.tColumnCount;
+
+            if (columns.length > 0) {
+                let firstColumn = columns[0];
+                this.attributes.filtersVisible = firstColumn.columnType === 'filter' && firstColumn.hidden === false;
+            }
+
 
             this.set('hasDataSet', true);
             this.trigger('dataSetLoaded');
@@ -58,15 +265,21 @@ const DataSetModel = Backbone.Model.extend({
     },
     getColumnById(id) {
         for (let column of this.attributes.columns) {
-            if (column === undefined)
-                continue;
             if (column.id === id)
                 return column;
         }
     },
-    getColumn(indexOrName) {
+    getColumn(indexOrName, isDisplayIndex) {
         if (typeof(indexOrName) === 'number') {
-            return this.attributes.columns[indexOrName];
+            if (isDisplayIndex) {
+                for (let column of this.attributes.columns) {
+                    if (column.dIndex === indexOrName)
+                        return column;
+                }
+                return null;
+            }
+            else
+                return this.attributes.columns[indexOrName];
         }
         else {
             for (let column of this.attributes.columns) {
@@ -76,7 +289,10 @@ const DataSetModel = Backbone.Model.extend({
         }
         return undefined;
     },
-    insertRows(rowStart, rowEnd) {
+    insertRows(rowStart, rowEnd, _force) {
+
+        if ( ! _force)
+            return this._beginChanges('rows', 'insert', [ { start: rowStart, end: rowEnd } ]);
 
         let coms = this.attributes.coms;
 
@@ -99,6 +315,7 @@ const DataSetModel = Backbone.Model.extend({
                 this.set('vRowCount', datasetPB.schema.vRowCount);
                 this.set('columnCount', datasetPB.schema.columnCount);
                 this.set('vColumnCount', datasetPB.schema.vColumnCount);
+                this.set('tColumnCount', datasetPB.schema.tColumnCount);
 
                 let changed = Array(datasetPB.schema.columns.length);
                 let changes = Array(datasetPB.schema.columns.length);
@@ -112,7 +329,7 @@ const DataSetModel = Backbone.Model.extend({
                     this._readColumnPB(column, columnPB);
 
                     changed[i] = columnPB.name;
-                    changes[i] = { id: id, dataChanged: true };
+                    changes[i] = { id: id, columnType: columnPB.columnType, dataChanged: true };
                 }
 
                 this.trigger('columnsChanged', { changed, changes });
@@ -120,7 +337,10 @@ const DataSetModel = Backbone.Model.extend({
 
         });
     },
-    deleteRows(rowStart, rowEnd) {
+    deleteRows(rowStart, rowEnd, _force) {
+
+        if ( ! _force)
+            return this._beginChanges('rows', 'remove', [ { start: rowStart, end: rowEnd } ]);
 
         let coms = this.attributes.coms;
 
@@ -143,6 +363,7 @@ const DataSetModel = Backbone.Model.extend({
                 this.set('vRowCount', datasetPB.schema.vRowCount);
                 this.set('columnCount', datasetPB.schema.columnCount);
                 this.set('vColumnCount', datasetPB.schema.vColumnCount);
+                this.set('tColumnCount', datasetPB.schema.tColumnCount);
 
                 let changed = Array(datasetPB.schema.columns.length);
                 let changes = Array(datasetPB.schema.columns.length);
@@ -156,6 +377,7 @@ const DataSetModel = Backbone.Model.extend({
                     changed[i] = columnPB.name;
                     changes[i] = {
                         id: id,
+                        columnType: columnPB.columnType,
                         columnTypeChanged: false,
                         measureTypeChanged: true,
                         levelsChanged: true,
@@ -170,11 +392,70 @@ const DataSetModel = Backbone.Model.extend({
             }
         });
     },
-    insertColumn(index, columnType) {
+    indexToDisplayIndex(index) {
+        let columns = this.attributes.columns;
+        return columns[index].dIndex;
+    },
+    indexFromDisplayIndex(dIndex) {
+        let columns = this.attributes.columns;
+        for (let column of columns) {
+            if (column.dIndex === dIndex)
+                return column.index;
+        }
+        throw 'Column display index out of range.';
+    },
+    insertColumn(index, params, isDisplayIndex, _force) {
+
+        if ( ! _force && ! isDisplayIndex)
+            return this._beginChanges('columns', 'insert',  [ { start: index, end: index, params: params } ]);
+
+        let dIndex = index;
+        if (isDisplayIndex)
+            index = this.indexFromDisplayIndex(index);
+        else if (params && ! params.hidden){
+            dIndex = -1;
+            let nI = index;
+            while (dIndex === -1 && nI > 0)
+                dIndex = this.indexToDisplayIndex(nI--);
+            if (dIndex === -1)
+                dIndex = 0;
+        }
+        else
+            dIndex = -1;
+
+        if (index === -1)
+            throw "Column index out of bounds.";
+
+        if ( ! _force && isDisplayIndex)
+            return this._beginChanges('columns', 'insert',  [ { start: index, end: index, params: params } ]);
+
+        if (params === undefined)
+            params = { };
+
+        if (params.childOf === undefined)
+            params.childOf = -1;
+
+        if (params.active === undefined)
+            params.active = true;
+
+        let columnType = params.columnType;
+        if (columnType === undefined)
+            throw 'Column type not specified';
 
         columnType = columnType || 'none';
-        let measureType = (columnType === 'computed' ? 'continuous' : 'nominal');
-        let autoMeasure = (columnType !== 'computed');
+        delete params.columnType;
+
+        let measureType = params.measureType;
+        if (params.measureType === undefined) {
+            measureType = (columnType === 'computed' ? 'continuous' : 'nominal');
+            delete params.measureType;
+        }
+
+        let autoMeasure = params.autoMeasure;
+        if (params.autoMeasure === undefined) {
+            autoMeasure = (columnType !== 'computed');
+            delete params.measureType;
+        }
 
         let coms = this.attributes.coms;
 
@@ -189,6 +470,8 @@ const DataSetModel = Backbone.Model.extend({
         columnPB.columnType  = DataSetModel.parseColumnType(columnType);
         columnPB.measureType = DataSetModel.parseMeasureType(measureType);
         columnPB.autoMeasure = autoMeasure;
+        for (let prop in params)
+            columnPB[prop] = params[prop];
         datasetPB.schema.columns.push(columnPB);
 
         let request = new coms.Messages.ComsMessage();
@@ -205,11 +488,8 @@ const DataSetModel = Backbone.Model.extend({
                 this.set('vRowCount', datasetPB.schema.vRowCount);
                 this.set('columnCount', datasetPB.schema.columnCount);
                 this.set('vColumnCount', datasetPB.schema.vColumnCount);
+                this.set('tColumnCount', datasetPB.schema.tColumnCount);
 
-                let viewport = this.attributes.viewport;
-
-                if (viewport.left <= index && viewport.right >= index)
-                    viewport.right++;
 
                 let columns = this.attributes.columns;
                 let column = { };
@@ -220,10 +500,14 @@ const DataSetModel = Backbone.Model.extend({
                     columns[i].index = i;
 
                 // add the cells, this should be in DataSetViewModel
-                let cells = new Array(viewport.bottom - viewport.top + 1).fill(null);
-                this.attributes.cells.splice(column.index - viewport.left, 0, cells);
+                if (column.hidden === false) {
+                    let viewport = this.attributes.viewport;
+                    if (viewport.left <= dIndex && viewport.right >= dIndex)
+                        viewport.right++;
 
-                this.trigger('columnsInserted', { index: index });
+                    let cells = new Array(viewport.bottom - viewport.top + 1).fill(null);
+                    this.attributes.cells.splice(dIndex - viewport.left, 0, cells);
+                }
 
                 let changed = Array(datasetPB.schema.columns.length);
                 let changes = Array(datasetPB.schema.columns.length);
@@ -238,17 +522,81 @@ const DataSetModel = Backbone.Model.extend({
                     changes[i] = {
                         id: id,
                         name: columnPB.name,
-                        index: index,
+                        columnType: columnPB.columnType,
+                        index: columnPB.index,
                         created: true,
                         dataChanged: true };
                 }
+
+                this._updateDisplayIndices();
+
+                this.trigger('columnsInserted', { index: index });
 
                 this.trigger('columnsChanged', { changed, changes });
             }
 
         });
     },
-    deleteColumns(start, end) {
+    _updateDisplayIndices() {
+        let _dIndex = 0;
+        let columns = this.attributes.columns;
+        for (let i = 0; i < columns.length; i++) {
+            if (columns[i].hidden === false) {
+                columns[i].dIndex = _dIndex;
+                _dIndex += 1;
+            }
+            else
+                columns[i].dIndex = -1;
+        }
+    },
+    toggleFilterVisibility() {
+
+        let setTo = ! this.get('filtersVisible');
+        this.set('filtersVisible', setTo);
+        let i = 0;
+        let column = this.getColumn(i);
+        let pairs = [];
+        while(column.columnType === 'filter' && i < this.attributes.columns.length) {
+            pairs.push( { id: column.id, values: { hidden: ! setTo } } );
+            i += 1;
+            column = this.getColumn(i);
+        }
+        return this.changeColumns(pairs);
+    },
+    deleteColumn(id) {
+        let columns = this.get('columns');
+        for (let i = 0; i < columns.length; i++) {
+            if (columns[i].id === id)
+                return this.deleteColumns(i, i);
+        }
+    },
+    deleteColumns(start, end, isDisplayIndex, _force) {
+
+        if ( ! _force && ! isDisplayIndex)
+            return this._beginChanges('columns', 'remove', [ { start: start, end: end } ]);
+
+        let dStart = start;
+        let dEnd = end;
+        if (isDisplayIndex) {
+            start = this.indexFromDisplayIndex(start);
+            end = this.indexFromDisplayIndex(end);
+        }
+        else {
+            dStart = -1;
+            dEnd = -1;
+            for (let i = start; i <= end; i++) {
+                let column = this.getColumn(i);
+                if (column.hidden === false) {
+                    let dIndex = this.indexToDisplayIndex(i);
+                    if (dStart === -1)
+                        dStart = dIndex;
+                    dEnd = dIndex;
+                }
+            }
+        }
+
+        if ( ! _force && isDisplayIndex)
+            return this._beginChanges('columns', 'remove', [ { start: start, end: end } ]);
 
         let coms = this.attributes.coms;
 
@@ -271,7 +619,7 @@ const DataSetModel = Backbone.Model.extend({
             for (let i = 0; i < nDeleted; i++) {
                 let column = this.attributes.columns[start + i];
                 changed[i] = column.name;
-                changes[i] = { id: column.id, name: column.name, index: column.index, deleted: true };
+                changes[i] = { id: column.id, name: column.name, columnType: column.columnType, index: column.index, deleted: true };
             }
 
             let before = this.attributes.columns.slice(0, start);
@@ -283,30 +631,32 @@ const DataSetModel = Backbone.Model.extend({
 
             let viewport = this.attributes.viewport;
 
-            if (start > viewport.right) {  // to the right of the view
-                // do nothing
-            }
-            else if (end < viewport.left) {  // to the left of the view
-                viewport.left  -= nDeleted;
-                viewport.right -= nDeleted;
-            }
-            else if (start >= viewport.left && end >= viewport.right) {
-                // overlapping the left side of the view
-                viewport.right = start - 1;
-            }
-            else if (start <= viewport.left && end <= viewport.right) {
-                // overlapping the right side of the view
-                viewport.left = end + 1 - nDeleted;
-                viewport.right -= nDeleted;
-            }
-            else if (start >= viewport.left && end <= viewport.right) {
-                // contained in the view
-                viewport.right -= nDeleted;
-            }
-            else {
-                // starting before the view, extending after
-                viewport.right -= nDeleted;
-                viewport.left = viewport.right + 1;
+            if (dStart !== -1) {
+                if (dStart > viewport.right) {  // to the right of the view
+                    // do nothing
+                }
+                else if (dEnd < viewport.left) {  // to the left of the view
+                    viewport.left  -= nDeleted;
+                    viewport.right -= nDeleted;
+                }
+                else if (dStart >= viewport.left && dEnd >= viewport.right) {
+                    // overlapping the left side of the view
+                    viewport.right = dStart - 1;
+                }
+                else if (dStart <= viewport.left && dEnd <= viewport.right) {
+                    // overlapping the right side of the view
+                    viewport.left = dEnd + 1 - nDeleted;
+                    viewport.right -= nDeleted;
+                }
+                else if (dStart >= viewport.left && dEnd <= viewport.right) {
+                    // contained in the view
+                    viewport.right -= nDeleted;
+                }
+                else {
+                    // starting before the view, extending after
+                    viewport.right -= nDeleted;
+                    viewport.left = viewport.right + 1;
+                }
             }
 
             this.set('edited', true);
@@ -318,6 +668,7 @@ const DataSetModel = Backbone.Model.extend({
                 this.set('vRowCount', datasetPB.schema.vRowCount);
                 this.set('columnCount', datasetPB.schema.columnCount);
                 this.set('vColumnCount', datasetPB.schema.vColumnCount);
+                this.set('tColumnCount', datasetPB.schema.tColumnCount);
 
                 for (let columnPB of datasetPB.schema.columns) {
                     let id = columnPB.id;
@@ -328,87 +679,132 @@ const DataSetModel = Backbone.Model.extend({
                     changes.push({
                         id: id,
                         name: columnPB.name,
+                        index: columnPB.index,
+                        columnType: columnPB.columnType,
                         dataChanged: true });
                 }
             }
 
-            this.trigger('columnsDeleted', { start: start, end: end });
+            this._updateDisplayIndices();
+
+            this.trigger('columnsDeleted', { start: start, end: end, dStart: dStart,  dEnd: dEnd });
             this.trigger('columnsChanged', { changed, changes });
         });
     },
     changeColumn(id, values) {
-
         let column = this.getColumnById(id);
+        return this._beginChanges('columns', 'modify', [{ index: column.index, id: id, values: values }]);
+    },
+    changeColumns(pairs, _force) {
+
+        if ( ! _force) {
+            let mods = [];
+            for (let mod of pairs) {
+                let column = this.getColumnById(mod.id);
+                mods.push({ index: mod.index, id: mod.id, values: mod.values });
+            }
+            return this._beginChanges('columns', 'modify', mods);
+        }
 
         let coms = this.attributes.coms;
-
-        let columnPB = new coms.Messages.DataSetSchema.ColumnSchema();
-        columnPB.id = id;
-        columnPB.measureType = DataSetModel.parseMeasureType(values.measureType);
-
-        if (values.name === '')
-            values.name = genColName(column.index);
-
-        let nameChanged = (values.name !== column.name);
-        let oldName = column.name;
-
-        let testName = values.name;
-
-        if (nameChanged) {
-            let names = this.attributes.columns.map((column) => { return column.name; } );
-            let i = 2;
-            while (names.includes(testName) && testName !== oldName)
-                testName = values.name + ' (' + i++ + ')';
-        }
-        let newName = testName;
-
-        columnPB.name = newName;
-
-        if ('columnType' in values)
-            columnPB.columnType = DataSetModel.parseColumnType(values.columnType);
-        else
-            columnPB.columnType = DataSetModel.parseColumnType(column.columnType);
-
-        if ('autoMeasure' in values)
-            columnPB.autoMeasure = values.autoMeasure;
-        else
-            columnPB.autoMeasure = column.autoMeasure;
-
-        if ('dps' in values)
-            columnPB.dps = values.dps;
-        else
-            columnPB.dps = column.dps;
-
-        if ('formula' in values)
-            columnPB.formula = values.formula;
-        else
-            columnPB.formula = column.formula;
-
-        if (values.measureType !== 'continuous' && values.levels) {
-            columnPB.hasLevels = true;
-            for (let i = 0; i < values.levels.length; i++) {
-                let level = values.levels[i];
-                let levelPB = new coms.Messages.VariableLevel();
-                if (values.measureType === 'nominal' || values.measureType === 'ordinal') {
-                    levelPB.value = level.value;
-                    levelPB.label = level.label;
-                    levelPB.importValue = '';
-                    columnPB.levels.push(levelPB);
-                }
-                else {
-                    levelPB.value = i;
-                    levelPB.label = level.label;
-                    levelPB.importValue = level.importValue;
-                    columnPB.levels.push(levelPB);
-                }
-            }
-        }
-
         let datasetPB = new coms.Messages.DataSetRR();
         datasetPB.op = coms.Messages.GetSet.SET;
         datasetPB.incSchema = true;
         datasetPB.schema = new coms.Messages.DataSetSchema();
-        datasetPB.schema.columns.push(columnPB);
+
+        for (let pair of pairs) {
+            let id = pair.id;
+            let values = pair.values;
+
+            let column = this.getColumnById(id);
+
+            let columnPB = new coms.Messages.DataSetSchema.ColumnSchema();
+            columnPB.id = id;
+            columnPB.measureType = DataSetModel.parseMeasureType(values.measureType);
+
+            if ( ! ('name' in values))
+                values.name = column.name;
+
+            if (values.name === '')
+                values.name = genColName(column.index);
+
+            let nameChanged = (values.name !== column.name);
+            let oldName = column.name;
+
+            let testName = values.name;
+
+            if (nameChanged) {
+                let names = this.attributes.columns.map((column) => { return column.name; } );
+                let i = 2;
+                while (names.includes(testName) && testName !== oldName)
+                    testName = values.name + ' (' + i++ + ')';
+            }
+            let newName = testName;
+
+            columnPB.name = newName;
+
+            if ('description' in values)
+                columnPB.description = values.description;
+            else
+                columnPB.description = column.description;
+
+            if ('hidden' in values)
+                columnPB.hidden = values.hidden;
+            else
+                columnPB.hidden = column.hidden;
+
+            if ('active' in values)
+                columnPB.active = values.active;
+            else
+                columnPB.active = column.active;
+
+            if ('childOf' in values)
+                columnPB.childOf = values.childOf;
+            else
+                columnPB.childOf = column.childOf;
+
+            if ('columnType' in values)
+                columnPB.columnType = DataSetModel.parseColumnType(values.columnType);
+            else
+                columnPB.columnType = DataSetModel.parseColumnType(column.columnType);
+
+            if ('autoMeasure' in values)
+                columnPB.autoMeasure = values.autoMeasure;
+            else
+                columnPB.autoMeasure = column.autoMeasure;
+
+            if ('dps' in values)
+                columnPB.dps = values.dps;
+            else
+                columnPB.dps = column.dps;
+
+            if ('formula' in values)
+                columnPB.formula = values.formula;
+            else
+                columnPB.formula = column.formula;
+
+            if (values.measureType !== 'continuous' && values.levels) {
+                columnPB.hasLevels = true;
+                for (let i = 0; i < values.levels.length; i++) {
+                    let level = values.levels[i];
+                    let levelPB = new coms.Messages.VariableLevel();
+                    if (values.measureType === 'nominal' || values.measureType === 'ordinal') {
+                        levelPB.value = level.value;
+                        levelPB.label = level.label;
+                        levelPB.importValue = '';
+                        columnPB.levels.push(levelPB);
+                    }
+                    else {
+                        levelPB.value = i;
+                        levelPB.label = level.label;
+                        levelPB.importValue = level.importValue;
+                        columnPB.levels.push(levelPB);
+                    }
+                }
+            }
+
+            datasetPB.schema.columns.push(columnPB);
+        }
 
         let request = new coms.Messages.ComsMessage();
         request.payload = datasetPB.toArrayBuffer();
@@ -422,6 +818,8 @@ const DataSetModel = Backbone.Model.extend({
                 let changed = Array(datasetPB.schema.columns.length);
                 let changes = Array(datasetPB.schema.columns.length);
                 let nCreated = 0;
+                let nHidden = 0;
+                let nVisible = 0;
 
                 for (let i = 0; i < datasetPB.schema.columns.length; i++) {
                     let columnPB = datasetPB.schema.columns[i];
@@ -435,12 +833,20 @@ const DataSetModel = Backbone.Model.extend({
                     let created;
                     let oldName;
                     let oldColumnType;
+                    let hiddenChanged = false;
+                    let activeChanged = false;
+                    let oldDIndex = -1;
 
                     if (column !== undefined) {
                         created = false;
                         oldName = column.name;
                         oldColumnType = column.columnType;
+                        oldDIndex = column.dIndex;
+                        let oldHidden = column.hidden;
+                        let oldActive = column.active;
                         this._readColumnPB(column, columnPB);
+                        hiddenChanged = oldHidden !== column.hidden;
+                        activeChanged = oldActive !== column.active;
                     }
                     else {
                         created = true;
@@ -451,13 +857,18 @@ const DataSetModel = Backbone.Model.extend({
                         this._readColumnPB(column, columnPB);
                         this.attributes.columns[column.index] = column;
                     }
+                    let nameChanged = (oldName !== columnPB.name);
 
                     changed[i] = columnPB.name;
                     changes[i] = {
                         id: id,
                         name: column.name,
+                        columnType: oldColumnType,
                         index: column.index,
+                        dIndex: oldDIndex,
                         oldName: oldName,
+                        hiddenChanged: hiddenChanged,
+                        activeChanged: activeChanged,
                         columnTypeChanged: column.columnType !== oldColumnType,
                         measureTypeChanged: true,
                         levelsChanged: true,
@@ -466,16 +877,74 @@ const DataSetModel = Backbone.Model.extend({
                         dataChanged: true,
                         created: created,
                     };
+
+                    if (hiddenChanged) {
+                        if (column.hidden) {
+                            nHidden += 1;
+                        }
+                        else {
+                            nVisible += 1;
+                        }
+                    }
                 }
 
-                if (nCreated > 0) {
-                    this.set('columnCount', this.attributes.columnCount + nCreated);
-                    this.set('vColumnCount', this.attributes.vColumnCount + nCreated);
+                if (nCreated > 0 || nVisible > 0 || nHidden > 0) {
+                    if (nCreated > 0) {
+                        this.set('columnCount', this.attributes.columnCount + nCreated);
+                        this.set('tColumnCount', this.attributes.tColumnCount + nCreated);
+                    }
+
+                    this.set('vColumnCount', this.attributes.vColumnCount + nCreated + nVisible - nHidden);
+                }
+
+
+                for (let change of changes) {
+                    if (change.hiddenChanged) {
+                        let viewport = this.attributes.viewport;
+                        let column = this.getColumn(change.index);
+                        if (column.hidden) {
+                            if (change.dIndex > viewport.right) {  // to the right of the view
+                                // do nothing
+                            }
+                            else if (change.dIndex < viewport.left) {  // to the left of the view
+                                viewport.left  -= 1;
+                                viewport.right -= 1;
+                            }
+                            else
+                                viewport.right -= 1;
+                        }
+                        else if (viewport.left <= change.dIndex && viewport.right >= change.dIndex)
+                            viewport.right++;
+                    }
+                }
+
+                if (nCreated > 0 || nVisible > 0 || nHidden > 0)
+                    this._updateDisplayIndices();
+
+                let hiddenRanges = this._clumpPropertyChanges(changes, 'hidden', true);
+
+                let activeChangeRanges = this._clumpPropertyChanges(changes, 'active', true);
+                activeChangeRanges = activeChangeRanges.concat(this._clumpPropertyChanges(changes, 'active', false));
+
+                if (hiddenRanges.length > 0) {
+                    for (let hRange of hiddenRanges)
+                        this.trigger('columnsHidden', { start: hRange.start, end: hRange.end, dStart: hRange.dStart, dEnd: hRange.dEnd });
+                }
+
+                for (let change of changes) {
+                    if (change.hiddenChanged && this.attributes.columns[change.index].hidden === false) {
+                        this.trigger('columnsVisible', { index: change.index });
+                    }
                 }
 
                 for (let change of changes) {
                     if (change.created)
                         this.trigger('columnsInserted', { index: change.index });
+                }
+
+                if (activeChangeRanges.length > 0) {
+                    for (let range of activeChangeRanges)
+                        this.trigger('columnsActiveChanged', { start: range.start, end: range.end, dStart: range.dStart, dEnd: range.dEnd, value: range.value });
                 }
 
                 this.trigger('columnsChanged', { changed, changes });
@@ -485,6 +954,24 @@ const DataSetModel = Backbone.Model.extend({
             throw error;
         });
     },
+    _clumpPropertyChanges(changes, property, value) {
+        let valueRanges = [];
+        let hIndex = -1;
+        for (let change of changes) {
+            if (change[property + 'Changed'] && this.attributes.columns[change.index][property] === value) {
+                if (hIndex === -1 || change.index > valueRanges[hIndex].end + 1) {
+                    valueRanges.push( { start: change.index, end: change.index, dStart: change.dIndex, dEnd: change.dIndex, value: value });
+                    hIndex += 1;
+                }
+                else if (change.index === valueRanges[hIndex].end + 1) {
+                    valueRanges[hIndex].end = change.index;
+                    valueRanges[hIndex].dEnd = change.dIndex;
+                }
+            }
+        }
+        return valueRanges;
+    },
+
     _determineLevelLabelChanges(column, columnPB) {
         let levelNameChanges = [];
         if (column && column.levels && Array.isArray(column.levels)) {
@@ -513,6 +1000,10 @@ const DataSetModel = Backbone.Model.extend({
         column.width = columnPB.width;
         column.formula = columnPB.formula;
         column.formulaMessage = columnPB.formulaMessage;
+        column.description = columnPB.description;
+        column.hidden = columnPB.hidden;
+        column.active = columnPB.active;
+        column.childOf = columnPB.childOf;
 
         let levels = null;
         if (columnPB.hasLevels) {
@@ -578,6 +1069,8 @@ DataSetModel.stringifyColumnType = function(type) {
             return 'computed';
         case 3:
             return 'recoded';
+        case 4:
+            return 'filter';
         case 0:
             return 'none';
         default:
@@ -593,6 +1086,8 @@ DataSetModel.parseColumnType = function(str) {
             return 2;
         case 'recoded':
             return 3;
+        case 'filter':
+            return 4;
         case 'none':
             return 0;
         default:
@@ -603,6 +1098,7 @@ DataSetModel.parseColumnType = function(str) {
 const DataSetViewModel = DataSetModel.extend({
 
     initialize() {
+        this.initializeDataSetModel();
         this.on('columnsChanged', event => this._columnsChanged(event));
     },
     defaults() {
@@ -777,6 +1273,7 @@ const DataSetViewModel = DataSetModel.extend({
         cellsRequest.columnStart = viewport.left;
         cellsRequest.rowEnd      = viewport.bottom;
         cellsRequest.columnEnd   = viewport.right;
+        cellsRequest.excHiddenCols = true;
 
         let request = new coms.Messages.ComsMessage();
         request.payload = cellsRequest.toArrayBuffer();
@@ -789,7 +1286,10 @@ const DataSetViewModel = DataSetModel.extend({
             return cells;
         });
     },
-    changeCells(viewport, cells, cbHtml) {
+    changeCells(viewport, cells, cbHtml, _force) {
+
+        if ( ! _force)
+            return this._beginChanges('cells', 'modify', [ { rowStart: viewport.top, rowEnd: viewport.bottom, columnStart: viewport.left, columnEnd: viewport.right, cells: cells, cbHtml: cbHtml } ]);
 
         let nRows = viewport.bottom - viewport.top + 1;
         let nCols = viewport.right - viewport.left + 1;
@@ -802,6 +1302,7 @@ const DataSetViewModel = DataSetModel.extend({
         cellsRequest.columnStart = viewport.left;
         cellsRequest.rowEnd      = viewport.bottom;
         cellsRequest.columnEnd   = viewport.right;
+        cellsRequest.excHiddenCols = true;
 
         if (typeof(cells) === 'string') {
             // send serialized data
@@ -846,7 +1347,7 @@ const DataSetViewModel = DataSetModel.extend({
             for (let i = 0; i < nCols; i++) {
 
                 let inCells = cells[i];
-                let columnType = this.attributes.columns[viewport.left + i].measureType;
+                let columnType = this.getColumn(viewport.left + i, true).measureType;
                 let columnPB = new coms.Messages.DataSetRR.ColumnData();
 
                 for (let j = 0; j < nRows; j++) {
@@ -931,6 +1432,7 @@ const DataSetViewModel = DataSetModel.extend({
                         oldName: oldName,
                         name: newName,
                         index: column.index,
+                        columnType: oldColumnType,
                         columnTypeChanged: oldColumnType !== column.columnType,
                         measureTypeChanged: true,
                         levelsChanged: true,
@@ -943,17 +1445,20 @@ const DataSetViewModel = DataSetModel.extend({
             }
 
             for (let i = 0; i < nCols; i++) {
-                let column = this.attributes.columns[viewport.left + i];
+                let column = this.getColumn(viewport.left + i, true);
                 let name = column.name;
                 if ( ! changed.includes(name)) {
                     changed.push(name);
-                    changes.push({ id: column.id, oldName: name, dataChanged: true });
+                    changes.push({ id: column.id, columnType: column.columnType, index: column.index, oldName: name, dataChanged: true });
                 }
             }
 
             if (nCreated > 0) {
                 this.set('columnCount', this.attributes.columnCount + nCreated);
                 this.set('vColumnCount', this.attributes.vColumnCount + nCreated);
+                this.set('tColumnCount', this.attributes.tColumnCount + nCreated);
+
+                this._updateDisplayIndices();
             }
 
             if (datasetPB.schema) {
@@ -996,7 +1501,7 @@ const DataSetViewModel = DataSetModel.extend({
 
             let inCol  = cells[inColOffset + i];
             let outCol = this.attributes.cells[outColOffset + i];
-            let columnInfo = this.attributes.columns[outColOffset + i];
+            let columnInfo = this.getColumn(outColOffset + i, true);
             for (let j = 0; j < nRows; j++) {
                 outCol[outRowOffset + j] = inCol[inRowOffset + j];
             }
@@ -1010,7 +1515,11 @@ const DataSetViewModel = DataSetModel.extend({
             if ( ! changes.dataChanged)
                 continue;
 
-            let index = this.getColumnById(changes.id).index;
+            let column = this.getColumnById(changes.id);
+            if (column.hidden)
+                continue;
+
+            let index = column.dIndex;
             let viewport = {
                 left: index,
                 top: this.attributes.viewport.top,
