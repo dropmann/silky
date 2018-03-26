@@ -1439,9 +1439,17 @@ const TableView = SilkyView.extend({
     },
     _toggleFilterEditor() {
         let editingIndex = this.model.get('editingVar');
-        if (editingIndex === null || this.model.getColumn(editingIndex).columnType !== 'filter') {
-            let column = this.model.getColumn(0);
-            if (column.columnType === 'filter')
+        let startIndex = editingIndex;
+        if (startIndex === null)
+            startIndex = this.model.indexFromDisplayIndex(this.selection.colNo);
+
+        let column = this.model.getColumn(startIndex);
+        if (column.columnType !== 'filter')
+            column = this.model.getColumn(0);
+
+        let isFilter = column.columnType === 'filter';
+        if (editingIndex === null || isFilter === false) {
+            if (isFilter)
                 this.model.set('editingVar', column.index);
             else
                 this.model.insertColumn(0, { columnType: 'filter', hidden: this.model.get('filtersVisible') === false }).then(() => this.model.set('editingVar', 0));

@@ -214,6 +214,17 @@ const VariableEditor = Backbone.View.extend({
             this._previousKeyboardContext = keyboardJS.getContext();
             keyboardJS.setContext('spreadsheet');
 
+            if (prev !== null && now !== null) {
+                let prevColumn = this.model.getColumn(prev);
+                let nowColumn = this.model.getColumn(now);
+                if (prevColumn.columnType === 'filter' && nowColumn.columnType === 'filter') {
+                    this.editors[0].detach();
+                    this._update();
+                    this.editors[0].attach();
+                    return;
+                }
+            }
+
             let editor;
             let $editor;
             let old;
@@ -235,19 +246,6 @@ const VariableEditor = Backbone.View.extend({
                 old = this.editors[1];
                 $old = this.$$editors[1];
             }
-
-            let columnName = this.model.attributes.editingVar;
-            let column = this.model.attributes.columns[columnName];
-            if (old.model.get('columnType') === 'filter' && column.columnType === 'filter') {
-                this.editors[0] = old;
-                this.editors[1] = editor;
-                this.$$editors[0] = $old;
-                this.$$editors[1] = $editor;
-                this._update();
-                old.attach();
-                return;
-            }
-
 
             old.detach();
 

@@ -464,8 +464,7 @@ const FilterWidget = Backbone.View.extend({
         this.model.apply();
 
         this.$filterList.find('[contenteditable=true]').attr('contenteditable', 'false');
-        //this.$addFilter[0]._tippy.disable();
-        //this.$removeFilter[0]._tippy.disable();
+
         this.attached = false;
     },
     columnsOf(id) {
@@ -491,6 +490,8 @@ const FilterWidget = Backbone.View.extend({
         this.attached = true;
 
         let dataset = this.model.dataset;
+
+        this.$filterList = this.$el.find('.jmv-filter-list-box');
 
         this.$filters = this.$filterList.find('.jmv-filter-options');
 
