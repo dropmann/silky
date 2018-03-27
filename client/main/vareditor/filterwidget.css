@@ -134,7 +134,7 @@
     position: relative;
     width: 12px;
     height: 10px;
-    left: 0px;
+    left: 9px;
     /* border: 1px solid #74b574; */
     background-color: #ffffff;
     /* float: left; */
@@ -163,7 +163,7 @@
     /*border: 1px solid #b57474;
     background-color: #c18c8c;*/
     /*float: right;*/
-    left: 9px;
+    left: 0px;
 }
 
 
@@ -299,6 +299,7 @@
     padding-left: 10px;
     height: 3em;
     overflow-y: auto;
+    cursor: text;
 }
 
 .show-filter-columns {
