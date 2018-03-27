@@ -857,7 +857,7 @@ const TableView = SilkyView.extend({
         let colNo = this.selection.colNo;
         let column = this.model.getColumn(colNo, true);
 
-        if (column.columnType === 'computed' || column.columnType === 'recoded') {
+        if (column.columnType === 'computed' || column.columnType === 'recoded' || column.columnType === 'filter') {
 
             let columnType = column.columnType;
             columnType = columnType[0].toUpperCase() + columnType.substring(1);
