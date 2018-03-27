@@ -1444,11 +1444,13 @@ const TableView = SilkyView.extend({
             startIndex = this.model.indexFromDisplayIndex(this.selection.colNo);
 
         let column = this.model.getColumn(startIndex);
-        if (column.columnType !== 'filter')
-            column = this.model.getColumn(0);
+        if (column.columnType !== 'filter') {
+            startIndex = 0;
+            column = this.model.getColumn(startIndex);
+        }
 
         let isFilter = column.columnType === 'filter';
-        if (editingIndex === null || isFilter === false) {
+        if (editingIndex === null || isFilter === false || startIndex !== editingIndex) {
             if (isFilter)
                 this.model.set('editingVar', column.index);
             else

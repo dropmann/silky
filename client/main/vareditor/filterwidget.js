@@ -46,16 +46,7 @@ const FilterWidget = Backbone.View.extend({
 
             let dataset = this.model.dataset;
             dataset.toggleFilterVisibility().then(() => {
-                if (dataset.get('filtersVisible')) {
-                    this.$showFilter.removeClass('show-filter-columns');
-                    this.$showFilter.addClass('hide-filter-columns');
-                    this.$showFilter.attr('title', 'Hide filter columns');
-                }
-                else {
-                    this.$showFilter.removeClass('hide-filter-columns');
-                    this.$showFilter.addClass('show-filter-columns');
-                    this.$showFilter.attr('title', 'Show filter columns');
-                }
+                this._updateEyeButton();
             });
 
         });
@@ -76,6 +67,19 @@ const FilterWidget = Backbone.View.extend({
         this.model.on('change:formulaMessage', (event) => this._setFormulaMessage(event.changed.formulaMessage));
         this.model.on('change:description', (event) => this._setDescription(event.changed.description));
         this.model.on('change:active', (event) => this._setActive(event.changed.active));
+    },
+    _updateEyeButton() {
+        let dataset = this.model.dataset;
+        if (dataset.get('filtersVisible')) {
+            this.$showFilter.removeClass('show-filter-columns');
+            this.$showFilter.addClass('hide-filter-columns');
+            this.$showFilter.attr('title', 'Hide filter columns');
+        }
+        else {
+            this.$showFilter.removeClass('hide-filter-columns');
+            this.$showFilter.addClass('show-filter-columns');
+            this.$showFilter.attr('title', 'Show filter columns');
+        }
     },
     _addFilter() {
         let dataset = this.model.dataset;
@@ -490,6 +494,8 @@ const FilterWidget = Backbone.View.extend({
         this.attached = true;
 
         let dataset = this.model.dataset;
+
+        this._updateEyeButton();
 
         this.$filterList = this.$el.find('.jmv-filter-list-box');
 
