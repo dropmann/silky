@@ -1126,6 +1126,15 @@ const TableView = SilkyView.extend({
             event.preventDefault();
             break;
         case 'Enter':
+            let editingIndex = this.model.get('editingVar');
+            if (editingIndex !== null) {
+                let column = this.model.getColumn(editingIndex);
+                if (column.hidden && column.columnType === 'filter') {
+                    event.preventDefault();
+                    break;
+                }
+            }
+
             if (this.model.get('varEdited') === false)
                 this._moveCursor('down');
             event.preventDefault();
