@@ -187,8 +187,9 @@ const FilterWidget = Backbone.View.extend({
             $filter = $('<div class="jmv-filter-options filter-hidden"></div>').appendTo(this.$filterList);
             let $titleBox = $('<div class="title-box"></div>').appendTo($filter);
             $('<div class="label-parent"><div class="label">Filter ' + (index + 1) + '</div></div>').appendTo($titleBox);
-            let $status = $('<div class="status">active</div>').appendTo($titleBox);
-            $('<div class="active" title="Filter is active"><div class="switch"></div></div>').appendTo($titleBox);
+            let $middle = $('<div class="middle-box"></div>').appendTo($titleBox);
+            $('<div class="active" title="Filter is active"><div class="switch"></div></div>').appendTo($middle);
+            let $status = $('<div class="status">active</div>').appendTo($middle);
             $('<div class="header-splitter"></div>').appendTo($titleBox);
 
 
@@ -319,8 +320,8 @@ const FilterWidget = Backbone.View.extend({
         if ( ! column.active)
             $active.addClass('filter-disabled');
 
-        $active.off();
-        $active.on('click', (event) => {
+
+        let activeChanged = (event) => {
             this.model.setColumnForEdit(column.id).then(() => {
                 let active = this.model.get('active');
                 let related = this.columnsOf(column.id);
@@ -332,7 +333,13 @@ const FilterWidget = Backbone.View.extend({
             });
             event.stopPropagation();
             event.preventDefault();
-        });
+        };
+
+        $active.off();
+        $active.on('click', activeChanged);
+
+        $status.off();
+        $status.on('click', activeChanged);
 
         $description[0].textContent = column.description;
 

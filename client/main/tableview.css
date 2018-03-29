@@ -60,6 +60,10 @@
     transition: none ;
 }
 
+.jmv-column-header[data-columntype='filter'] .jmv-column-header-icon {
+    display: none;
+}
+
 .jmv-table-container {
     position: relative ;
     overflow: auto ;
@@ -223,11 +227,16 @@
     box-shadow: 0 0 0 2px #5E8BC4 ;
     padding: 2px 4px ;
     white-space: no-wrap;
-    background-color: rgba(94, 139, 196, .1);;
+    background-color: rgba(94, 139, 196, .1);
     font-size: 12.8px ;
 
     left: -100px ; /* overridden by code */
     top: -100px ;
+}
+
+.jmv-table-cell-selected.not-editable {
+    box-shadow: 0 0 0 2px #9f9f9f ;
+    background-color: rgba(110, 110, 110, 0.1)
 }
 
 input.jmv-table-cell-selected.copying {

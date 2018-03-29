@@ -840,9 +840,21 @@ const TableView = SilkyView.extend({
             oldSel.bottom === range.bottom)
                 return Promise.resolve();
 
+        this.$selection.removeClass('not-editable');
+        for (let c = this.selection.left; c <= this.selection.right; c++) {
+            let column = this.model.getColumn(c, true);
+            if (this._isColumnEditable(column) === false) {
+                this.$selection.addClass('not-editable');
+                break;
+            }
+        }
+
         return new Promise((resolve, reject) => {
             this.$selection.one('transitionend', resolve);
         });
+    },
+    _isColumnEditable(column) {
+        return ! (column.columnType === 'computed' || column.columnType === 'recoded' || column.columnType === 'filter');
     },
     _beginEditing(ch) {
 
@@ -857,7 +869,7 @@ const TableView = SilkyView.extend({
         let colNo = this.selection.colNo;
         let column = this.model.getColumn(colNo, true);
 
-        if (column.columnType === 'computed' || column.columnType === 'recoded' || column.columnType === 'filter') {
+        if ( ! this._isColumnEditable(column)) {
 
             let columnType = column.columnType;
             columnType = columnType[0].toUpperCase() + columnType.substring(1);

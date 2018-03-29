@@ -1220,7 +1220,10 @@ class Instance:
 
         column_schema.measureType = column.measure_type.value
         column_schema.autoMeasure = column.auto_measure
-        column_schema.width = 100
+        if column.column_type is ColumnType.FILTER:
+            column_schema.width = 65
+        else:
+            column_schema.width = 100
         column_schema.dps = column.dps
 
         column_schema.hasLevels = True
