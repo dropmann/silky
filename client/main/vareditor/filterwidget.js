@@ -12,6 +12,19 @@ const FilterWidget = Backbone.View.extend({
     initialize(args) {
 
         this.attached = false;
+        this._inited = false;
+
+        this._exampleFormulas = [
+            "gender == 'female'",
+            "score == 10",
+            "consent == 'no'",
+            "Q1 != 'don't know'",
+            "ROW() <= 100",
+            "ROW() % 2",
+            "-1.5 < Z(score) < 1.5",
+            "ROW() != 33 and ROW() != 37",
+            "score <= 0.5"
+        ];
 
         this.$el.empty();
         this.$el.addClass('jmv-filter-widget');
@@ -39,6 +52,12 @@ const FilterWidget = Backbone.View.extend({
             theme: 'jmv-filter'
         });
 
+        this.model.dataset.on('dataSetLoaded', this._dataSetLoaded, this);
+        this.model.dataset.on('columnsDeleted', event => this._columnsDeleted(event));
+        this.model.dataset.on('columnsInserted', event => this._columnsInserted(event));
+        this.model.dataset.on('columnsActiveChanged', event => this._columnsActiveChanged(event));
+        this.model.dataset.on('columnsChanged', event => this._columnsChanged(event));
+
         this.$showFilter = $('<div class="filter-button filter-button-tooltip show-filter-columns" title="Show filter columns" data-tippy-placement="left" data-tippy-dynamictitle="true"></div>').appendTo(this.$filterListButtons);
         this.$showFilter.on('click', (event) => {
             this.$showFilter[0]._tippy.hide();
@@ -63,10 +82,6 @@ const FilterWidget = Backbone.View.extend({
             theme: 'jmv-filter'
         });
 
-        this.model.on('change:formula', (event) => this._setFormula(event.changed.formula));
-        this.model.on('change:formulaMessage', (event) => this._setFormulaMessage(event.changed.formulaMessage));
-        this.model.on('change:description', (event) => this._setDescription(event.changed.description));
-        this.model.on('change:active', (event) => this._setActive(event.changed.active));
     },
     _updateEyeButton() {
         let dataset = this.model.dataset;
@@ -93,6 +108,186 @@ const FilterWidget = Backbone.View.extend({
             column = dataset.getColumn(i);
             this.model.setColumnForEdit(column.id);
         });
+    },
+    _columnsActiveChanged(event) {
+        for (let c = event.start; c <= event.end; c++) {
+            let column = this.model.dataset.getColumn(c);
+            if (column.columnType === 'filter' && column.childOf === -1) {
+                let $filter = this.$filterList.find('.jmv-filter-options[data-columnid=' + column.id + ']:not(.remove)');
+
+                this._setActive($filter, event.value);
+            }
+        }
+    },
+    _getFilterDetails($filters, c) {
+        let $filter = null;
+        let x = 0;
+        let y1 = 0;
+        let y2 = 0;
+        if ($filters.length === 0)
+            return null;
+
+        for (x = 0; x < $filters.length; x++) {
+            $filter = $($filters[x]);
+            let $formulaBoxes = $filter.find('.formula-box:not(.remove)');
+            y1 = y2
+            y2 += $formulaBoxes.length;
+            if (c >= y1 && c < y2)
+                break;
+        }
+
+        let details = { $filter: $filter, isBase: c === y1 };
+
+        let $splitters = this.$filterList.find('.jmv-filter-splitter:not(.remove)');
+
+        let sc = y1;
+        if (y1 >= $splitters.length)
+            sc = y1 - 1;
+
+        details.$splitter = $($splitters[sc]);
+
+        let g = c - y1;
+        let $formulaBoxes = $filter.find('.formula-box:not(.remove)');
+        details.$formulaBox = $($formulaBoxes[g]);
+
+        return details;
+    },
+    _dataSetLoaded() {
+        let columns = this.model.dataset.attributes.columns;
+        let index = 0;
+        for (let i = 0; i < columns.length; i++) {
+            let column = columns[i];
+            if (column.columnType !== 'filter')
+                break;
+
+            if (column.childOf === -1)
+                this._createFilter(column, index++);
+        }
+    },
+    _columnsDeleted(event) {
+        let dataset = this.model.dataset;
+        let removed = false;
+        let $filters = this.$filterList.find('.jmv-filter-options:not(.remove)');
+        for (let c = event.start; c <= event.end; c++) {
+
+            let details = this._getFilterDetails($filters, c);
+            if (details === null)
+                break;
+
+            removed = true;
+
+            if (details.isBase) {
+                details.$filter.one("webkitTransitionEnd otransitionend oTransitionEnd msTransitionEnd transitionend",
+                (event) => {
+                    details.$filter.remove();
+                    details.$splitter.remove();
+                });
+
+                details.$filter.addClass('remove');
+                details.$splitter.addClass('remove');
+
+
+            }
+            else {
+                details.$formulaBox.one("webkitTransitionEnd otransitionend oTransitionEnd msTransitionEnd transitionend",
+                (event) => {
+                    details.$formulaBox.remove();
+                });
+                details.$formulaBox.addClass('remove');
+            }
+        }
+
+        if (removed) {
+            let columns = this.model.dataset.attributes.columns;
+            let $filters = this.$filterList.find('.jmv-filter-options:not(.remove)');
+            let data = [];
+            let pIndex = 0;
+            let nIndex = 2;
+            for (let i = 0; i < columns.length; i++) {
+                let column = columns[i];
+                if (column.columnType !== 'filter')
+                    break;
+
+                if (column.childOf === -1) {
+                    pIndex += 1;
+                    nIndex = 2;
+                    data.push({ id: column.id, values: { name: 'Filter ' + pIndex } } );
+                }
+                else {
+                    data.push({ id: column.id, values: { name: 'F' + pIndex + '(' + nIndex + ')' } } );
+                    nIndex += 1;
+                }
+            }
+            if (data.length > 0)
+                this.setColumnProperties($($filters[0]), data);
+        }
+    },
+    _columnsInserted(event) {
+        let column = this.model.dataset.getColumn(event.index);
+        if (column.columnType === 'filter') {
+            if (column.childOf === -1) {
+                let columns = this.model.dataset.attributes.columns;
+                let index = 0;
+                for (let i = 0; i < columns.length; i++) {
+                    let existingColumn = columns[i];
+                    if (i >= event.index)
+                        break;
+                    if (existingColumn.columnType === 'filter') {
+                        if (existingColumn.childOf === -1)
+                            index += 1;
+                    }
+                    else
+                        break;
+                }
+                this._createFilter(column, index);
+            }
+            else {
+                let pColumn = this.model.dataset.getColumnById(column.childOf);
+                let $filter = this.$filterList.find('.jmv-filter-options[data-columnid=' + pColumn.id + ']:not(.remove)');
+                let $formulaList = $filter.find('.formula-list');
+                let columns = this.model.dataset.attributes.columns;
+                let index = 0;
+                for (let i = 0; i < columns.length; i++) {
+                    let existingColumn = columns[i];
+                    if (i >= pColumn.index)
+                        break;
+                    if (existingColumn.columnType === 'filter') {
+                        if (existingColumn.childOf === -1)
+                            index += 1;
+                    }
+                    else
+                        break;
+                }
+                this._createFormulaBox(pColumn, index, column, column.index - pColumn.index, $filter, $formulaList);
+            }
+            setTimeout(() => {
+                this.$filterList.find('[contenteditable=false]').attr('contenteditable', 'true');
+            }, 0);
+        }
+    },
+    _columnsChanged(event) {
+
+        for (let changes of event.changes) {
+
+            if (changes.created || changes.deleted)
+                continue;
+
+            let column = this.model.dataset.getColumnById(changes.id);
+            if (column.columnType !== 'filter')
+                continue;
+
+            let $formulaBox = this.$filterList.find('.formula-box[data-columnid=' + column.id + ']:not(.remove)');
+            this._setFormula($formulaBox, column.formula, column.formulaMessage)
+
+            if (column.childOf === -1) {
+                let $filter = this.$filterList.find('.jmv-filter-options[data-columnid=' + column.id + ']:not(.remove)');
+
+                let $label = $filter.find('.label');
+                $label.text(column.name);
+
+                this._setDescription($filter, column.description);
+            }
+        }
     },
     _removeFilter(id) {
         if (id === -1 && id !== null)
@@ -135,222 +330,167 @@ const FilterWidget = Backbone.View.extend({
                 });
             }
         };
+
         return this.model.setColumnForEdit(id).then(() => {
             return deleteFunction(deleteFunction, id);
         });
     },
-    _setFormula(formula) {
-        if ( ! this.attached)
-            return;
-        this.$formula[0].textContent = formula;
-    },
-    _setDescription(description) {
-        if ( ! this.attached)
-            return;
-        this.$description[0].textContent = description;
-    },
-    _setActive(active) {
-        if ( ! this.attached)
-            return;
-        if (active) {
-            this.$status[0].textContent = 'active';
-            this.$active.removeClass('filter-disabled');
-            this.$active.attr('title', 'Filter is active');
-        }
-        else {
-            this.$status[0].textContent = 'inactive';
-            this.$active.addClass('filter-disabled');
-            this.$active.attr('title', 'Filter is inactive');
-        }
 
+    _setFormula($formulaBox, formula, formulaMessage) {
+        let $formula = $formulaBox.find('.formula');
+        let $formulaMessage = $formulaBox.find('.formulaMessage');
 
-    },
-    _setFormulaMessage(formulaMessage) {
-        if ( ! this.attached)
-            return;
+        if ($formula.length === 0)
+            $formula = $formula;
+        $formula[0].textContent = formula;
 
         if (formulaMessage === '')
-            this.$formula.removeClass('in-errror');
+            $formula.removeClass('in-errror');
         else
-            this.$formula.addClass('in-errror');
-        this.$formulaMessage.text(formulaMessage);
+            $formula.addClass('in-errror');
+        $formulaMessage.text(formulaMessage);
+    },
+    _setDescription($filter, description) {
+        let $description = $filter.find('.description');
+        $description[0].textContent = description;
+    },
+    _setActive($filter, active) {
+        let $status = $filter.find('.status');
+        let $active = $filter.find('.active');
+        if (active) {
+            $status[0].textContent = 'active';
+            $active.removeClass('filter-disabled');
+            $active.attr('title', 'Filter is active');
+        }
+        else {
+            $status[0].textContent = 'inactive';
+            $active.addClass('filter-disabled');
+            $active.attr('title', 'Filter is inactive');
+        }
+
+
     },
 
-    _createFilter(column, index, columnIndex) {
-        let edittingId = this.model.get("id");
-        let $filter = null;
-        let $removeButton = null;
+    _createFormulaBox(parentColumn, pIndex, relatedColumn, rIndex, $filter, $formulaList) {
+        let $formulaBox = $('<div class="formula-box" data-columnid="' + relatedColumn.id + '" data-parentid="' + parentColumn.id + '"></div>');
 
-        if (index >= this.$filters.length) {
-            if (index !== 0)
-                $('<div class="jmv-filter-splitter"></div>').appendTo(this.$filterList);
-            $filter = $('<div class="jmv-filter-options filter-hidden"></div>').appendTo(this.$filterList);
-            let $titleBox = $('<div class="title-box"></div>').appendTo($filter);
-            $('<div class="label-parent"><div class="label">Filter ' + (index + 1) + '</div></div>').appendTo($titleBox);
-            let $middle = $('<div class="middle-box"></div>').appendTo($titleBox);
-            $('<div class="active" title="Filter is active"><div class="switch"></div></div>').appendTo($middle);
-            let $status = $('<div class="status">active</div>').appendTo($middle);
-            $('<div class="header-splitter"></div>').appendTo($titleBox);
-
-
-            $removeButton = $('<div class="remove-filter-btn" title="Remove filter"><span class="mif-cross"></span></div>');
-            $removeButton.appendTo($titleBox);
-
-
-            //$('<div class="title" type="text" placeholder="Name"></div>').appendTo($titleBox);
-            $('<div class="formula-list"></div>').appendTo($filter);
-            $('<div class="description" type="text" placeholder="Description"></div>').appendTo($filter);
-        }
+        let $list = $formulaList.find('.formula-box:not(.remove)');
+        if (rIndex >= $list.length)
+            $formulaBox.appendTo($formulaList);
         else
-            $filter = $(this.$filters[index]);
+            $formulaBox.insertBefore($($list[rIndex]));
 
-        if ($removeButton === null)
-            $removeButton = $filter.find('.remove-filter-btn');
-        $removeButton.off();
+        $('<div class="equal">=</div>').appendTo($formulaBox);
+
+        if (rIndex > 0) {
+            let $removeNested = $('<div class="remove-nested" title="Remove nested filter"><span class="mif-cross"></span></div>').appendTo($formulaBox);
+            this.removeNestedEvents($removeNested, relatedColumn.id);
+        }
+        else {
+            let $addNested = $('<div class="add-nested" title="Add another nested filter"><span class="mif-plus"></span></div>').appendTo($formulaBox);
+            this.addNestedEvents($addNested, parentColumn.id, $formulaBox);
+        }
+
+        let _example = this._exampleFormulas[Math.floor(Math.random() * Math.floor(this._exampleFormulas.length - 1))];
+        let $formula = $('<div class="formula" type="text" placeholder="eg: ' + _example + '" contenteditable="true"></div>').appendTo($formulaBox);
+        let $formulaMessageBox = $('<div class="formulaMessageBox""></div>').appendTo($formulaBox);
+        let $formulaMessage = $('<div class="formulaMessage""></div>').appendTo($formulaMessageBox);
+
+        if (rIndex > 0) {
+            let subName = "F" + (pIndex + 1) + ' (' + (rIndex + 1) + ')';
+            if (relatedColumn.name !== subName)
+                this.setColumnProperties($filter, [{ id: relatedColumn.id, values: {  name: subName } }]);
+        }
+
+        $formula[0].textContent = relatedColumn.formula;
+        $formulaMessage.text(relatedColumn.formulaMessage);
+        if (relatedColumn.formulaMessage === '')
+            $formula.removeClass('in-errror');
+        else
+            $formula.addClass('in-errror');
+
+        $formula.addClass('selected');
+
+        this.addEvents($filter, $formula, 'formula', relatedColumn.id);
+    },
+
+    _createFilter(column, index) {
+        let edittingId = this.model.get("id");
+
+        let $filters = this.$filterList.find('.jmv-filter-options:not(.remove)');
+
+        let insertBefore = -1;
+        if ($filters.length > 0 && index < $filters.length)
+            insertBefore = index;
+
+        let $filter = $('<div class="jmv-filter-options filter-hidden" data-columnid="' + column.id + '"></div>');
+        if (insertBefore !== -1) {
+            $filter.insertBefore($filters[insertBefore]);
+            $('<div class="jmv-filter-splitter"></div>').insertAfter($filter);
+        }
+        else {
+            $filter.appendTo(this.$filterList);
+            if (index !== 0)
+                $('<div class="jmv-filter-splitter"></div>').insertBefore($filter);
+        }
+
+        let $titleBox = $('<div class="title-box"></div>').appendTo($filter);
+        $('<div class="label-parent"><div class="label">Filter ' + (index + 1) + '</div></div>').appendTo($titleBox);
+        let $middle = $('<div class="middle-box"></div>').appendTo($titleBox);
+        let $active = $('<div class="active" title="Filter is active"><div class="switch"></div></div>').appendTo($middle);
+        let $status = $('<div class="status">active</div>').appendTo($middle);
+        $('<div class="header-splitter"></div>').appendTo($titleBox);
+
+
+        let $removeButton = $('<div class="remove-filter-btn" title="Remove filter"><span class="mif-cross"></span></div>');
+        $removeButton.appendTo($titleBox);
+
+
+        let $formulaList = $('<div class="formula-list"></div>').appendTo($filter);
+        let $description = $('<div class="description" type="text" placeholder="Description"></div>').appendTo($filter);
+
         $removeButton.on('click', (event) => {
             this._removeFilter(column.id);
         });
 
-        $filter.data('columnIndex', columnIndex);
-        $filter.data('columnId', column.id);
-        $filter.removeClass('selected');
-
-        $filter.off();
         $filter.on('click', (event) => {
-            this.model.apply().then(() => {
-                this.model.setColumnForEdit(column.id);
-            });
-
+            this.model.dataset.set('editingVar', column.index);
         });
 
-
-        let $formulaList = $filter.find('.formula-list');
-
         let relatedColumns = this.columnsOf(column.id);
-        let $formulas = $filter.find('.formula-box');
-        if (relatedColumns.length < $formulas.length) {
-            for (let i = relatedColumns.length; i < $formulas.length; i++)
-                $($formulas[i]).remove();
-        }
-        for (let i = 0; i < relatedColumns.length; i++) {
-            let relatedColumn = relatedColumns[i].column;
-            let $formulaBox = null;
+        for (let i = 0; i < relatedColumns.length; i++)
+            this._createFormulaBox(column, index, relatedColumns[i].column, i, $filter, $formulaList);
 
-            if (i >= $formulas.length) {
-                $formulaBox = $('<div class="formula-box"></div>').appendTo($formulaList);
-                $('<div class="equal">=</div>').appendTo($formulaBox);
-
-                if (i > 0)
-                    $('<div class="remove-nested" title="Remove nested filter"><span class="mif-cross"></span></div>').appendTo($formulaBox);
-                else
-                    $('<div class="add-nested" title="Add another nested filter"><span class="mif-plus"></span></div>').appendTo($formulaBox);
-
-                $('<div class="formula" type="text" placeholder="Example formula: A > 4\u2026"></div>').appendTo($formulaBox);
-                let $formulaMessageBox = $('<div class="formulaMessageBox""></div>').appendTo($formulaBox);
-                $('<div class="formulaMessage""></div>').appendTo($formulaMessageBox);
-            }
-            else
-                $formulaBox = $($formulas[i]);
-
-
-            if (i > 0) {
-                let subName = "F" + (index + 1) + ' - ' + i;
-                if (relatedColumn.name !== subName)
-                    this.setColumnProperties($filter, [{ id: relatedColumn.id, values: {  name: subName } }]);
-            }
-
-            let $addNested = $formulaBox.find('.add-nested');
-            if ($addNested.length > 0) {
-                $addNested.off();
-                this.addNestedEvents($addNested, column.id, $formulaBox);
-            }
-
-            let $removeNested = $formulaBox.find('.remove-nested');
-            if ($removeNested.length > 0) {
-                $removeNested.off();
-                this.removeNestedEvents($removeNested, relatedColumn.id);
-            }
-
-            let $formula = $formulaBox.find('.formula');
-            if (this._internalCreate && edittingId === relatedColumn.id) {
-                this.focusOn($formula);
-            }
-
-
-            let $formulaMessage = $formulaBox.find('.formulaMessage');
-
-            this.removeEvents($formula);
-
-
-            $formula[0].textContent = relatedColumn.formula;
-            $formulaMessage.text(relatedColumn.formulaMessage);
-            if (relatedColumn.formulaMessage === '')
-                $formula.removeClass('in-errror');
-            else
-                $formula.addClass('in-errror');
-
-            $formula.removeClass('selected');
-
-            if (edittingId === relatedColumn.id) {
-                this.$formulaMessage = $formulaMessage;
-                this.$formula = $formula;
-
-                $formula.addClass('selected');
-                $filter.addClass('selected');
-            }
-
-            this.addEvents($formula, 'formula', edittingId === relatedColumn.id, relatedColumn.id);
-
-            $formula.attr('contenteditable', 'true');
-        }
-
-
-        let $description = $filter.find('.description');
-        let $status = $filter.find('.status');
-        let $active = $filter.find('.active');
 
         let name = $filter.find('.label')[0].textContent;
         if (column.name !== name)
             this.setColumnProperties($filter, [{ id: column.id, values: {  name: name } }]);
-
-        this.removeEvents($description);
 
         $active.removeClass('filter-disabled');
         $status[0].textContent = column.active ? 'active' : 'inactive';
         if ( ! column.active)
             $active.addClass('filter-disabled');
 
-
         let activeChanged = (event) => {
-            this.model.setColumnForEdit(column.id).then(() => {
-                let active = this.model.get('active');
-                let related = this.columnsOf(column.id);
-                let pairs = [];
-                for (let colInfo of related)
-                    pairs.push({id: colInfo.column.id, values: { active: !active } });
 
-                this.setColumnProperties($filter, pairs);
-            });
+            let active = column.active;
+            let related = this.columnsOf(column.id);
+            let pairs = [];
+            for (let colInfo of related)
+                pairs.push({id: colInfo.column.id, values: { active: !active } });
+
+            this.setColumnProperties($filter, pairs);
             event.stopPropagation();
             event.preventDefault();
         };
 
-        $active.off();
-        $active.on('click', activeChanged);
 
-        $status.off();
+        $active.on('click', activeChanged);
         $status.on('click', activeChanged);
 
         $description[0].textContent = column.description;
 
-        if (edittingId === column.id) {
-            this.$description = $description;
-            this.$status = $status;
-            this.$active = $active;
-            this.$filter = $filter;
-        }
-
-        this.addEvents($description, 'description', edittingId === column.id, column.id);
+        this.addEvents($filter, $description, 'description', column.id);
 
         $description.attr('contenteditable', 'true');
 
@@ -373,7 +513,7 @@ const FilterWidget = Backbone.View.extend({
         let timeoutId = setTimeout(function () {
             $title.addClass('think');
         }, 400);
-        this.model.dataset.changeColumns(pairs).then(() => {
+        return this.model.dataset.changeColumns(pairs).then(() => {
             clearTimeout(timeoutId);
             $title.removeClass("think");
         });
@@ -401,7 +541,7 @@ const FilterWidget = Backbone.View.extend({
             event.preventDefault();
         });
     },
-    addEvents($element, name, editting, columnId) {
+    addEvents($filter, $element, name, columnId) {
         $element.data('id', columnId);
 
         $element.on('click', (event) => {
@@ -409,42 +549,31 @@ const FilterWidget = Backbone.View.extend({
             event.preventDefault();
         });
 
-        if (editting) {
-            $element.focus(() => {
-                keyboardJS.pause();
-            });
-            $element.blur((event) => {
-                keyboardJS.resume();
-                this.model.apply();
-            });
-            $element.on('keydown', (event) => {
-                if (event.keyCode === 13 && event.shiftKey === false) {    //enter
-                    this.model.apply().then(() => {
-                        $element.blur();
-                    });
-                    event.preventDefault();
-                }
-
-                if (event.keyCode === 9) {    //tab
-                    event.preventDefault();
-                }
-            });
-            $element.on('input', (event) => {
-                this.model.set(name, $element[0].textContent);
-            });
-        }
-        else {
-            $element.on('focus', (event) => {
-                keyboardJS.pause();
-                let colId = $element.data('id');
-                if (colId === this.model.get("id"))
-                    return;
-
-                this.model.apply().then(() => {
-                    this.model.setColumnForEdit(colId);
+        $element.focus(() => {
+            keyboardJS.pause();
+            let column = this.model.dataset.getColumnById(columnId);
+            this.model.dataset.set('editingVar', column.index);
+        });
+        $element.blur((event) => {
+            keyboardJS.resume();
+            let data = { };
+            data[name] = $element[0].textContent;
+            this.setColumnProperties($filter, [{ id: columnId, values: data }]);
+        });
+        $element.on('keydown', (event) => {
+            if (event.keyCode === 13 && event.shiftKey === false) {    //enter
+                let data = { };
+                data[name] = $element[0].textContent;
+                this.setColumnProperties($filter, [{ id: columnId, values: data }]).then(() => {
+                    $element.blur();
                 });
-            });
-        }
+                event.preventDefault();
+            }
+
+            if (event.keyCode === 9) {    //tab
+                event.preventDefault();
+            }
+        });
     },
     _moveRight() {
         let dataset = this.model.dataset;
@@ -466,14 +595,9 @@ const FilterWidget = Backbone.View.extend({
                 dataset.set('editingVar', colNo);
         }
     },
-    removeEvents($element) {
-        $element.off();
-    },
     detach() {
         if ( ! this.attached)
             return;
-        this.model.apply();
-
         this.$filterList.find('[contenteditable=true]').attr('contenteditable', 'false');
 
         this.attached = false;
@@ -500,47 +624,40 @@ const FilterWidget = Backbone.View.extend({
 
         this.attached = true;
 
-        let dataset = this.model.dataset;
-
-        this._updateEyeButton();
-
-        this.$filterList = this.$el.find('.jmv-filter-list-box');
-
-        this.$filters = this.$filterList.find('.jmv-filter-options');
-
-        let $splitters =  this.$filterList.find('.jmv-filter-splitter');
-
-        let columns = dataset.get("columns");
-        let filterColumns = [];
-        for (let i = 0; i < columns.length; i++) {
-            let col = columns[i];
-            if (col.columnType === 'filter') {
-                if (col.childOf === -1)
-                    filterColumns.push({ column: col, index: i });
-            }
-        }
-
-        let $widgets = this.$filterList.find('.jmv-filter-options');
-
-        if (filterColumns.length < $widgets.length) {
-            for (let i = filterColumns.length; i < $widgets.length; i++) {
-                $($widgets[i]).remove();
-                if (i !== 0)
-                    $($splitters[i-1]).remove();
-            }
-        }
-        for (let i = 0; i < filterColumns.length; i++) {
-                this._createFilter(filterColumns[i].column, i, filterColumns[i].index);
-        }
-
-        this.$filters = this.$filterList.find('.jmv-filter-options');
+        this.update();
 
         setTimeout(() => {
             this.$filterList.find('[contenteditable=false]').attr('contenteditable', 'true');
         }, 0);
 
-        //this.$addFilter[0]._tippy.enable();
-        //this.$removeFilter[0]._tippy.enable();
+    },
+    update() {
+        this._updateEyeButton();
+
+        let $filters = this.$filterList.find('.jmv-filter-options:not(.remove)');
+
+        let edittingIndex = this.model.dataset.get('editingVar');
+        for (let i = 0; i < $filters.length; i++) {
+            let $filter = $($filters[i]);
+
+            let columnId = parseInt($filter.data('columnid'));
+            $filter.removeClass('selected');
+
+            let relatedColumns = this.columnsOf(columnId);
+            for (let rc = 0; rc < relatedColumns.length; rc++) {
+                let relatedColumn = relatedColumns[rc];
+                if (relatedColumn.index === edittingIndex) {
+                    $filter.addClass('selected');
+                    if (edittingIndex === relatedColumn.index) {
+                        let $formula = $($filter.find('.formula')[rc]);
+                        $formula.addClass('selected');
+                        if (this._internalCreate) {
+                            this.focusOn($formula);
+                        }
+                    }
+                }
+            }
+        }
     }
 });
 

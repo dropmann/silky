@@ -49,7 +49,15 @@ class InstanceModel:
         else:
             raise KeyError('No such column: ' + str(id))
 
-    def append_column(self, name, import_name=None):
+    def append_column(self, name, import_name=None, id=-1):
+
+        if id != -1:
+            if id < self._next_id:
+                for existing_column in self:
+                    if existing_column.id == id:
+                        raise KeyError('Column id already exists: ' + str(id))
+            self._next_id = id
+
         column = self._dataset.append_column(name, import_name)
         column.column_type = ColumnType.NONE
         column.id = self._next_id
@@ -71,7 +79,14 @@ class InstanceModel:
         self._dataset.insert_rows(start, end)
         self._recalc_all()
 
-    def insert_column(self, index):
+    def insert_column(self, index, id=-1):
+        if id != -1:
+            if id < self._next_id:
+                for existing_column in self:
+                    if existing_column.id == id:
+                        raise KeyError('Column id already exists: ' + str(id))
+            self._next_id = id
+
         name = self._gen_column_name(index)
         ins = self._dataset.insert_column(index, name)
         ins.auto_measure = True

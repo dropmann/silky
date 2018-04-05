@@ -22,7 +22,7 @@ def write(data, path, html=None):
         content = io.StringIO()
         content.write('Manifest-Version: 1.0\n')
         content.write('Data-Archive-Version: 1.0.2\n')
-        content.write('jamovi-Archive-Version: 2.0\n')
+        content.write('jamovi-Archive-Version: 3.0\n')
         content.write('Created-By: ' + str(app_info) + '\n')
         zip.writestr('META-INF/MANIFEST.MF', bytes(content.getvalue(), 'utf-8'), zipfile.ZIP_DEFLATED)
 
@@ -42,6 +42,7 @@ def write(data, path, html=None):
             field['measureType'] = MeasureType.stringify(column.measure_type)
             field['formula'] = column.formula
             field['formulaMessage'] = column.formula_message
+            field['id'] = column.id
             if column.measure_type == MeasureType.CONTINUOUS:
                 field['type'] = 'number'
             else:
@@ -149,7 +150,7 @@ def read(data, path):
             raise Exception('File is corrupt (no JAV)')
 
         jav = (int(jav.group(1)), int(jav.group(2)))
-        if jav[0] > 2:
+        if jav[0] > 3:
             raise Exception('A newer version of jamovi is required')
 
         meta_content = zip.read('metadata.json').decode('utf-8')
@@ -177,7 +178,8 @@ def read(data, path):
         for meta_column in meta_dataset['fields']:
             name = meta_column['name']
             import_name = meta_column.get('importName', name)
-            data.append_column(name, import_name)
+
+            data.append_column(name, import_name, meta_column.get('id', -1))
             column = data[data.column_count - 1]
 
             column_type = ColumnType.parse(meta_column.get('columnType', 'Data'))

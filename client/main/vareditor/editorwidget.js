@@ -134,6 +134,11 @@ const EditorWidget = Backbone.View.extend({
             this._show(this.$newVarWidget);
             this.newVarWidget.attach();
         }
+    },
+    update() {
+        let type = this.model.get('columnType');
+        if (type === 'filter')
+            this.filterWidget.update();
     }
 });
 
