@@ -35,6 +35,7 @@ const FilterWidget = Backbone.View.extend({
         this.$addFilter.on('click', (event) => {
             this.$addFilter[0]._tippy.hide();
             this.$addFilter[0]._tippy.disable();
+            this._internalCreate = true;
             this._addFilter();
 
         });
@@ -412,6 +413,12 @@ const FilterWidget = Backbone.View.extend({
         $formula.addClass('selected');
 
         this.addEvents($filter, $formula, 'formula', relatedColumn.id);
+
+        if (this._internalCreate) {
+            setTimeout(() => {
+                this.focusOn($formula);
+            }, 0);
+        }
     },
 
     _createFilter(column, index) {
@@ -502,7 +509,6 @@ const FilterWidget = Backbone.View.extend({
         setTimeout(() => {
             this._internalCreate = false;
             $element.focus();
-            $element.select();
         }, 0);
     },
     setColumnProperties($filter, pairs) {
@@ -525,7 +531,7 @@ const FilterWidget = Backbone.View.extend({
             let index =relatedColumns[relatedColumns.length - 1].index + 1;
             dataset.insertColumn(index, { columnType: 'filter', childOf: id, hidden: dataset.get('filtersVisible') === false, active: relatedColumns[0].column.active }).then(() => {
                 let column = dataset.getColumn(index);
-                this._internalCreate = true;
+            this._internalCreate = true;
                 this.model.setColumnForEdit(column.id);
             });
             event.stopPropagation();
@@ -548,6 +554,8 @@ const FilterWidget = Backbone.View.extend({
             event.stopPropagation();
             event.preventDefault();
         });
+
+        $element.on('focus', function() { $element.select(); });
 
         $element.focus(() => {
             keyboardJS.pause();
@@ -651,9 +659,6 @@ const FilterWidget = Backbone.View.extend({
                     if (edittingIndex === relatedColumn.index) {
                         let $formula = $($filter.find('.formula')[rc]);
                         $formula.addClass('selected');
-                        if (this._internalCreate) {
-                            this.focusOn($formula);
-                        }
                     }
                 }
             }

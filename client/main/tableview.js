@@ -219,20 +219,17 @@ const TableView = SilkyView.extend({
         });
 
         this.model.on('change:editingVar', event => {
-            if ('editingVar' in event.changed) {
-                let prev = this.model.previous('editingVar');
-                let now  = event.changed.editingVar;
-                if (now !== null) {
-                    let column = this.model.getColumn(now);
-                    now = this.model.indexToDisplayIndex(now);
-                    if (this.selection !== null && now !== this.selection.colNo) {
-                        this._endEditing().then(() => {
-                            if (column.hidden === false) {
-                                let rowNo = this.selection === null ? 0 : this.selection.rowNo;
-                                this._setSelection(rowNo, now);
-                            }
-                        }, () => {});
-                    }
+            let now  = this.model.get('editingVar');
+            if (now !== null) {
+                let column = this.model.getColumn(now);
+                now = this.model.indexToDisplayIndex(now);
+                if (this.selection !== null && now !== this.selection.colNo) {
+                    this._endEditing().then(() => {
+                        if (column.hidden === false) {
+                            let rowNo = this.selection === null ? 0 : this.selection.rowNo;
+                            this._setSelection(rowNo, now);
+                        }
+                    }, () => {});
                 }
             }
         });
@@ -242,6 +239,34 @@ const TableView = SilkyView.extend({
         });
 
         this._setSelection(0, 0);
+    },
+    _refreshColumnSelection() {
+        let visibleColumns = this.model.get('vColumnCount');
+        let sel = Object.assign({}, this.selection);
+
+        let changed = false;
+
+        let editingVar = this.model.get('editingVar');
+        if (editingVar !== null) {
+            let y = this.model.indexToDisplayIndex(editingVar);
+            if (y !== -1) {
+                sel.colNo = y;
+                sel.left = y;
+                sel.right = y;
+            }
+        }
+
+        if (sel.left >= visibleColumns) {
+            sel.left = visibleColumns - 1;
+        }
+        if (sel.right >= visibleColumns) {
+            sel.right = visibleColumns - 1;
+        }
+        if (sel.colNo >= visibleColumns) {
+            sel.colNo = visibleColumns - 1;
+        }
+
+        this._setSelectedRange(sel, true);
     },
     _addResizeListeners($element) {
         let $resizers = $element.find('.jmv-column-header-resizer');
@@ -320,6 +345,7 @@ const TableView = SilkyView.extend({
 
         let editingVar = this.model.get('editingVar');
         let editingVarCleared = false;
+        let refresh = false;
 
         for (let changes of event.changes) {
 
@@ -348,6 +374,9 @@ const TableView = SilkyView.extend({
                 this.model.set('editingVar', changes.index);
             }
 
+            if (changes.hiddenChanged)
+                refresh = true;
+
             let column = this.model.getColumnById(changes.id);
             if (column.hidden)
                 continue;
@@ -367,6 +396,9 @@ const TableView = SilkyView.extend({
                 $label.text(column.name);
             }
         }
+
+        if (refresh)
+            this._refreshColumnSelection();
 
         this._enableDisableActions();
         this._updateViewRange();
@@ -770,7 +802,7 @@ const TableView = SilkyView.extend({
             left:  colNo,
             right: colNo });
     },
-    _setSelectedRange(range) {
+    _setSelectedRange(range, silent) {
 
         let rowNo = range.rowNo;
         let colNo = range.colNo;
@@ -802,7 +834,7 @@ const TableView = SilkyView.extend({
         this._enableDisableActions();
 
         this.currentColumn = this.model.getColumn(colNo, true);
-        if (this.model.get('editingVar') !== null)
+        if ( !silent && this.model.get('editingVar') !== null)
             this.model.set('editingVar', this.model.indexFromDisplayIndex(colNo));
 
         // add column header highlight
@@ -1343,7 +1375,7 @@ const TableView = SilkyView.extend({
                 this.selection.colNo++;
                 this.selection.left++;
                 this.selection.right++;
-                this._setSelectedRange(selection);
+                this._setSelectedRange(selection, true);
             }
         }
 

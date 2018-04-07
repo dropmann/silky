@@ -898,25 +898,31 @@ const DataSetModel = Backbone.Model.extend({
                 }
 
 
+                let old = this.attributes.viewport;
+                let viewport = Object.assign({}, this.attributes.viewport);
+
                 for (let change of changes) {
                     if (change.hiddenChanged) {
-                        let viewport = this.attributes.viewport;
                         let column = this.getColumn(change.index);
                         if (column.hidden) {
-                            if (change.dIndex > viewport.right) {  // to the right of the view
+                            if (change.dIndex > old.right) {  // to the right of the view
                                 // do nothing
                             }
-                            else if (change.dIndex < viewport.left) {  // to the left of the view
+                            else if (change.dIndex < old.left) {  // to the left of the view
                                 viewport.left  -= 1;
                                 viewport.right -= 1;
                             }
-                            else
+                            else {
                                 viewport.right -= 1;
+                            }
                         }
-                        else if (viewport.left <= change.dIndex && viewport.right >= change.dIndex)
+                        else if (old.left <= change.dIndex && old.right >= change.dIndex) {
                             viewport.right++;
+                        }
                     }
                 }
+
+                this.attributes.viewport = viewport;
 
                 if (nCreated > 0 || nVisible > 0 || nHidden > 0)
                     this._updateDisplayIndices();
