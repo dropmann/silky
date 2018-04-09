@@ -31,7 +31,7 @@ const FilterWidget = Backbone.View.extend({
         this.$filterListButtons = $('<div class="jmv-filter-list-buttons"></div>').appendTo(this.$el);
         this.$filterList = $('<div class="jmv-filter-list-box"></div>').appendTo(this.$el);
 
-        this.$addFilter = $('<div class="filter-button filter-button-tooltip add-filter" title="Add new filter" data-tippy-placement="left"><span class="mif-plus"></span></div>').appendTo(this.$filterListButtons);
+        this.$addFilter = $('<div class="filter-button filter-button-tooltip add-filter" title="Add new filter" data-tippy-placement="left"></div>').appendTo(this.$filterListButtons);
         this.$addFilter.on('click', (event) => {
             this.$addFilter[0]._tippy.hide();
             this.$addFilter[0]._tippy.disable();

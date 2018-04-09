@@ -42,11 +42,7 @@
 .filter-button {
     width: 25px;
     height: 25px;
-    font-size: 20px;
-    color: #658ec2;
-    text-align: center;
-    line-height: 20px;
-    margin: 5px 5px 0px 5px;
+    margin: 2px 5px 2px 5px;
     background-repeat: no-repeat;
     background-position: center;
 }
@@ -319,6 +315,11 @@
     cursor: text;
     flex-grow: 1;
     flex-shrink: 1;
+}
+
+.filter-button.add-filter {
+    background-size: 80%;
+    background-image: url('assets/filters-add.svg');
 }
 
 .show-filter-columns {
