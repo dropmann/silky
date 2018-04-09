@@ -385,7 +385,7 @@ class Column:
 
     @property
     def needs_recalc(self):
-        if self.column_type is not (ColumnType.COMPUTED or ColumnType.FILTER):
+        if self.column_type is not ColumnType.COMPUTED and self.column_type is not ColumnType.FILTER:
             return False
         else:
             return self._needs_recalc
@@ -394,7 +394,7 @@ class Column:
     def needs_recalc(self, needs_recalc: bool):
         for parent in self._node_parents:
             parent.needs_recalc = needs_recalc
-        if self.column_type is (ColumnType.COMPUTED or ColumnType.FILTER):
+        if self.column_type is ColumnType.COMPUTED or self.column_type is ColumnType.FILTER:
             self._needs_recalc = needs_recalc
 
     def recalc(self, start=None, end=None):

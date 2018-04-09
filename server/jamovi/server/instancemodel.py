@@ -171,7 +171,7 @@ class InstanceModel:
                 self._next_id = column.id + 1
 
         for column in self:
-            if column.column_type is (ColumnType.COMPUTED or ColumnType.FILTER):
+            if column.column_type is ColumnType.COMPUTED or column.column_type is ColumnType.FILTER:
                 column.parse_formula()
 
         self._add_virtual_columns()
