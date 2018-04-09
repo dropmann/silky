@@ -603,8 +603,6 @@ const FilterWidget = Backbone.View.extend({
     detach() {
         if ( ! this.attached)
             return;
-        this.$filterList.find('[contenteditable=true]').attr('contenteditable', 'false');
-
         this.attached = false;
     },
     columnsOf(id) {
