@@ -47,6 +47,8 @@
     text-align: center;
     line-height: 20px;
     margin: 5px 5px 0px 5px;
+    background-repeat: no-repeat;
+    background-position: center;
 }
 
 .filter-button:hover {
