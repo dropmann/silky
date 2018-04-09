@@ -569,6 +569,7 @@ const DataSetModel = Backbone.Model.extend({
             if (columns[i].id === id)
                 return this.deleteColumns(i, i);
         }
+        return Promise.resolve();
     },
     deleteColumns(start, end, isDisplayIndex, _force) {
 
@@ -673,6 +674,7 @@ const DataSetModel = Backbone.Model.extend({
                 for (let columnPB of datasetPB.schema.columns) {
                     let id = columnPB.id;
                     let column = this.getColumnById(id);
+                    let oldName = column.name;
                     this._readColumnPB(column, columnPB);
 
                     changed.push(columnPB.name);
@@ -680,8 +682,10 @@ const DataSetModel = Backbone.Model.extend({
                         id: id,
                         name: columnPB.name,
                         index: columnPB.index,
+                        oldName: oldName,
                         columnType: columnPB.columnType,
-                        dataChanged: true });
+                        dataChanged: true,
+                        nameChanged: oldName !== columnPB.name });
                 }
             }
 

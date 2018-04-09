@@ -60,10 +60,6 @@
     transition: none ;
 }
 
-.jmv-column-header[data-columntype='filter'] .jmv-column-header-icon {
-    display: none;
-}
-
 .jmv-table-container {
     position: relative ;
     overflow: auto ;
@@ -80,13 +76,25 @@
     height: 100%;
 }
 
-.jmv-column[data-active=false] {
-    background-color: #eeeeee ;
+.jmv-column[data-formula-check=false] {
+    background-color: #d5aeab ;
 }
 
-.jmv-column,
-.jmv-column-header {
-    transition: .2s left, .2s background-color ease-out;
+.jmv-column-header[data-formula-check=false] {
+    color: #b5b6b6;
+}
+
+.jmv-column-header[data-formula-check=false].highlighted {
+    color: #979797;
+}
+
+.jmv-column-header[data-formula-check=false]:hover {
+    color: #e5e5e5;
+}
+
+
+.jmv-column[data-active=false] {
+    background-color: #eeeeee ;
 }
 
 .jmv-column-header[data-active=false] {
@@ -101,6 +109,10 @@
     color: #e5e5e5;
 }
 
+.jmv-column,
+.jmv-column-header {
+    transition: .2s left, .2s background-color ease-out;
+}
 
 .jmv-column-row-header {
     position: absolute ;
@@ -179,6 +191,7 @@
 .jmv-column-header-icon {
     background-size: 100% 100%;
     background-repeat: no-repeat;
+    background-position: center;
     height: 16px;
     flex: 0 0 16px;
 }
@@ -303,6 +316,17 @@ input.jmv-table-cell-selected.copying {
 .jmv-column-header[data-columntype="data"][data-measuretype="continuous"] > .jmv-column-header-icon {
     background-image: url('assets/variable-continuous.svg');
 }
+
+.jmv-column-header[data-columntype='filter'] .jmv-column-header-icon {
+    display: none;
+}
+
+.jmv-column-header[data-formula-check=false][data-active=true] > .jmv-column-header-icon {
+    display: block;
+    cursor: default;
+    background-image: url('assets/column-error.svg');
+}
+
 
 .jmv-table-body {
     position: absolute ;

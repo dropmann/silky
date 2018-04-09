@@ -128,16 +128,17 @@ const FilterWidget = Backbone.View.extend({
         if ($filters.length === 0)
             return null;
 
+        let $formulaBoxes = null;
         for (x = 0; x < $filters.length; x++) {
             $filter = $($filters[x]);
-            let $formulaBoxes = $filter.find('.formula-box:not(.remove)');
+            $formulaBoxes = $filter.find('.formula-box:not(.remove)');
             y1 = y2
             y2 += $formulaBoxes.length;
             if (c >= y1 && c < y2)
                 break;
         }
 
-        let details = { $filter: $filter, isBase: c === y1 };
+        let details = { $filter: $filter, isBase: c === y1, fcount: $formulaBoxes.length };
 
         let $splitters = this.$filterList.find('.jmv-filter-splitter:not(.remove)');
 
@@ -148,7 +149,6 @@ const FilterWidget = Backbone.View.extend({
         details.$splitter = $($splitters[sc]);
 
         let g = c - y1;
-        let $formulaBoxes = $filter.find('.formula-box:not(.remove)');
         details.$formulaBox = $($formulaBoxes[g]);
 
         return details;
@@ -186,8 +186,7 @@ const FilterWidget = Backbone.View.extend({
 
                 details.$filter.addClass('remove');
                 details.$splitter.addClass('remove');
-
-
+                c += details.fcount - 1;
             }
             else {
                 details.$formulaBox.one("webkitTransitionEnd otransitionend oTransitionEnd msTransitionEnd transitionend",
@@ -196,31 +195,6 @@ const FilterWidget = Backbone.View.extend({
                 });
                 details.$formulaBox.addClass('remove');
             }
-        }
-
-        if (removed) {
-            let columns = this.model.dataset.attributes.columns;
-            let $filters = this.$filterList.find('.jmv-filter-options:not(.remove)');
-            let data = [];
-            let pIndex = 0;
-            let nIndex = 2;
-            for (let i = 0; i < columns.length; i++) {
-                let column = columns[i];
-                if (column.columnType !== 'filter')
-                    break;
-
-                if (column.childOf === -1) {
-                    pIndex += 1;
-                    nIndex = 2;
-                    data.push({ id: column.id, values: { name: 'Filter ' + pIndex } } );
-                }
-                else {
-                    data.push({ id: column.id, values: { name: 'F' + pIndex + '(' + nIndex + ')' } } );
-                    nIndex += 1;
-                }
-            }
-            if (data.length > 0)
-                this.setColumnProperties($($filters[0]), data);
         }
     },
     _columnsInserted(event) {
@@ -296,7 +270,7 @@ const FilterWidget = Backbone.View.extend({
 
         let dataset = this.model.dataset;
         let column = dataset.getColumnById(id);
-        if (column.columnType !== 'filter')
+        if (column === undefined || column.columnType !== 'filter')
             return Promise.resolve();
 
         let deleteFunction = (dF, id) => {
@@ -457,10 +431,19 @@ const FilterWidget = Backbone.View.extend({
         let $description = $('<div class="description" type="text" placeholder="Description"></div>').appendTo($filter);
 
         $removeButton.on('click', (event) => {
-            this._removeFilter(column.id);
+            if (this._removingFilter)
+                return;
+
+            this._removingFilter = true;
+            this._removeFilter(column.id).then(() => {
+                this._removingFilter = false;
+            });
         });
 
         $filter.on('click', (event) => {
+            if ($filter.hasClass('remove'))
+                return;
+
             this.model.dataset.set('editingVar', column.index);
         });
 
@@ -528,10 +511,10 @@ const FilterWidget = Backbone.View.extend({
         $element.on('click', (event) => {
             let dataset = this.model.dataset;
             let relatedColumns = this.columnsOf(id);
-            let index =relatedColumns[relatedColumns.length - 1].index + 1;
+            let index = relatedColumns[relatedColumns.length - 1].index + 1;
+            this._internalCreate = true;
             dataset.insertColumn(index, { columnType: 'filter', childOf: id, hidden: dataset.get('filtersVisible') === false, active: relatedColumns[0].column.active }).then(() => {
                 let column = dataset.getColumn(index);
-            this._internalCreate = true;
                 this.model.setColumnForEdit(column.id);
             });
             event.stopPropagation();
@@ -540,8 +523,16 @@ const FilterWidget = Backbone.View.extend({
     },
     removeNestedEvents($element, id) {
         $element.on('click', (event) => {
+
+            if (this._removingFilter)
+                return;
+
+            this._removingFilter = true;
+
             let dataset = this.model.dataset;
-            dataset.deleteColumn(id);
+            dataset.deleteColumn(id).then(() => {
+                this._removingFilter = false;
+            });
 
             event.stopPropagation();
             event.preventDefault();
@@ -558,9 +549,15 @@ const FilterWidget = Backbone.View.extend({
         $element.on('focus', function() { $element.select(); });
 
         $element.focus(() => {
+            if (this._removingFilter) {
+                $element.blur();
+                return;
+            }
+
             keyboardJS.pause();
             let column = this.model.dataset.getColumnById(columnId);
-            this.model.dataset.set('editingVar', column.index);
+            if (column !== undefined)
+                this.model.dataset.set('editingVar', column.index);
         });
         $element.blur((event) => {
             keyboardJS.resume();

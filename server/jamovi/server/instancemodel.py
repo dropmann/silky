@@ -103,6 +103,19 @@ class InstanceModel:
             column.index = index
             index += 1
 
+    def update_filter_names(self):
+        filter_index = 0;
+        subfilter_index = 0;
+        for column in self._columns:
+            if column.column_type == ColumnType.FILTER:
+                if column.child_of == -1:
+                    column.name = 'Filter ' + str(filter_index + 1)
+                    filter_index += 1
+                    subfilter_index = 0
+                else:
+                    column.name = 'F' + str(filter_index) + ' (' + str(subfilter_index + 1) + ')'
+                    subfilter_index += 1
+
 
     def delete_columns(self, start, end):
 
@@ -111,6 +124,8 @@ class InstanceModel:
 
         for i in range(start, len(self._columns)):
             self._columns[i].index = i
+
+        self.update_filter_names()
 
 
     @property
@@ -156,7 +171,7 @@ class InstanceModel:
                 self._next_id = column.id + 1
 
         for column in self:
-            if column.column_type is ColumnType.COMPUTED:
+            if column.column_type is (ColumnType.COMPUTED or ColumnType.FILTER):
                 column.parse_formula()
 
         self._add_virtual_columns()

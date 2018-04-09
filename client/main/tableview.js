@@ -144,7 +144,7 @@ const TableView = SilkyView.extend({
 
         this._addResizeListeners($header);
 
-        let $column = $('<div data-active="' + column.active + '" data-columntype="' + column.columnType + '" data-measuretype="' + column.measureType + '" class="jmv-column" style="left: ' + left + 'px ; width: ' + column.width + 'px ; "></div>');
+        let $column = $('<div data-formula-check="' + (column.formulaMessage === "") + '" data-active="' + column.active + '" data-columntype="' + column.columnType + '" data-measuretype="' + column.measureType + '" class="jmv-column" style="left: ' + left + 'px ; width: ' + column.width + 'px ; "></div>');
         this.$body.append($column);
         this.$columns.push($column);
 
@@ -223,7 +223,7 @@ const TableView = SilkyView.extend({
             if (now !== null) {
                 let column = this.model.getColumn(now);
                 now = this.model.indexToDisplayIndex(now);
-                if (this.selection !== null && now !== this.selection.colNo) {
+                if (this.selection !== null) {
                     this._endEditing().then(() => {
                         if (column.hidden === false) {
                             let rowNo = this.selection === null ? 0 : this.selection.rowNo;
@@ -382,12 +382,19 @@ const TableView = SilkyView.extend({
                 continue;
 
             if (changes.levelsChanged || changes.measureTypeChanged || changes.columnTypeChanged) {
+                let inError = column.formulaMessage !== '';
                 let $header = $(this.$headers[column.dIndex]);
                 $header.attr('data-measuretype', column.measureType);
                 $header.attr('data-columntype', column.columnType);
+                $header.attr('data-formula-check', ! inError);
+                if (inError)
+                    $header.find('.jmv-column-header-icon').attr('title', 'Issue with formula');
+                else
+                    $header.find('.jmv-column-header-icon').removeAttr('title');
                 let $column = $(this.$columns[column.dIndex]);
                 $column.attr('data-measuretype', column.measureType);
                 $column.attr('data-columntype', column.columnType);
+                $column.attr('data-formula-check', ! inError)
             }
 
             if (changes.nameChanged) {
@@ -1340,7 +1347,7 @@ const TableView = SilkyView.extend({
         this._addResizeListeners($header);
 
         $after = $(this.$columns[column.dIndex]);
-        let $column = $('<div data-active="' + column.active + '" data-columntype="' + column.columnType + '" data-measuretype="' + column.measureType + '" class="jmv-column" style="left: ' + left + 'px ; width: ' + column.width + 'px ; "></div>');
+        let $column = $('<div data-formula-check="' + (column.formulaMessage === "") + '" data-active="' + column.active + '" data-columntype="' + column.columnType + '" data-measuretype="' + column.measureType + '" class="jmv-column" style="left: ' + left + 'px ; width: ' + column.width + 'px ; "></div>');
         $column.insertBefore($after);
         this.$columns.splice(column.dIndex, 0, $column);
 
@@ -1815,7 +1822,7 @@ const TableView = SilkyView.extend({
 
         let html = '';
 
-        html += '<div data-active="' + column.active + '" data-id="' + column.id + '" data-index="' + column.dIndex + '" data-columntype="' + column.columnType + '" data-measuretype="' + column.measureType + '" class="jmv-column-header jmv-column-header-' + column.id + '" style="left: ' + left + 'px ; width: ' + column.width + 'px ; height: ' + this._rowHeight + 'px">';
+        html += '<div data-formula-check="' + (column.formulaMessage === "") + '" data-active="' + column.active + '" data-id="' + column.id + '" data-index="' + column.dIndex + '" data-columntype="' + column.columnType + '" data-measuretype="' + column.measureType + '" class="jmv-column-header jmv-column-header-' + column.id + '" style="left: ' + left + 'px ; width: ' + column.width + 'px ; height: ' + this._rowHeight + 'px">';
         html +=     '<div class="jmv-column-header-icon"></div>';
         html +=     '<div class="jmv-column-header-label">' + column.name + '</div>';
         html +=     '<div class="jmv-column-header-resizer" data-index="' + column.dIndex + '" draggable="true"></div>';

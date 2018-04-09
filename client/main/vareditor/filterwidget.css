@@ -36,6 +36,7 @@
 
 .jmv-filter-options.filter-hidden {
     opacity: 0;
+    height: 0px;
 }
 
 .filter-button {
@@ -63,7 +64,7 @@
     flex-direction: column;
     flex-grow: 1;
     flex-shrink: 1;
-    flex-basis: 100px;
+    min-height: 100px;
     flex: 2;
     border: 2px solid #e7e7e7;
     border-left: 4px solid #c1c1c1;
@@ -214,7 +215,7 @@
     flex-direction: row;
     position: relative;
     margin-bottom: 5px;
-    transition: 0.2s opacity, 0.2s height, 0.2s margin, 0.2s padding, 0.2s border-width;
+    transition: 0.4s opacity, 0.2s height, 0.2s margin, 0.2s padding, 0.2s border-width;
 }
 
 .jmv-filter-options > .formula-list > .formula-box > .equal {
@@ -283,7 +284,7 @@
     cursor: text;
     overflow-y: auto;
     line-height: 1em;
-    /*max-width: 366px;*/
+    min-height: 1em;
 }
 
 .jmv-filter-options > .formula-list > .formula-box > .in-errror {
@@ -332,8 +333,4 @@
     margin: 0px;
     padding: 0px;
     border-width: 0px;
-}
-
-.jmv-filter-options.deleted, .jmv-filter-splitter.deleted, .jmv-filter-options > .formula-list > .formula-box.deleted {
-    display: none;
 }
