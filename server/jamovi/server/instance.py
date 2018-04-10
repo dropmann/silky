@@ -682,6 +682,9 @@ class Instance:
             column.hidden = column_pb.hidden
             column.active = column_pb.active
 
+            if column.column_type is ColumnType.FILTER:
+                self._data.update_filter_names()
+
         response.schema.rowCount = self._data.row_count
         response.schema.vRowCount = self._data.virtual_row_count
         response.schema.columnCount = self._data.column_count

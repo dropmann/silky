@@ -115,6 +115,8 @@ class InstanceModel:
                 else:
                     column.name = 'F' + str(filter_index) + ' (' + str(subfilter_index + 1) + ')'
                     subfilter_index += 1
+            else:
+                break
 
 
     def delete_columns(self, start, end):

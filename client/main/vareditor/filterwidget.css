@@ -172,27 +172,11 @@
 }
 
 .jmv-filter-options > .title-box .active.filter-disabled .switch {
-    /*border: 1px solid #b57474;
-    background-color: #c18c8c;*/
-    /*float: right;*/
     left: 0px;
 }
 
-
-.jmv-filter-options > .title-box .active .switch:hover {
-/*    background-color: rgba(114, 179, 114, 0.38);
-    box-shadow: unset;*/
-}
-
 .jmv-filter-options > .title-box .active.filter-disabled {
-    /* border: 1px solid #b57474; */
     background-color: #c18c8c;
-    /* box-shadow: 0px 0px 5px #d26363; */
-}
-
-.jmv-filter-options > .title-box .active.filter-disabled .switch:hover {
-/*    background-color: rgba(179, 114, 114, 0.38);
-    box-shadow: unset;*/
 }
 
 .jmv-filter-options > .title-box > .label-parent > .label {
@@ -336,4 +320,5 @@
     margin: 0px;
     padding: 0px;
     border-width: 0px;
+    min-height: unset;
 }

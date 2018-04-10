@@ -371,12 +371,6 @@ const FilterWidget = Backbone.View.extend({
         let $formulaMessageBox = $('<div class="formulaMessageBox""></div>').appendTo($formulaBox);
         let $formulaMessage = $('<div class="formulaMessage""></div>').appendTo($formulaMessageBox);
 
-        if (rIndex > 0) {
-            let subName = "F" + (pIndex + 1) + ' (' + (rIndex + 1) + ')';
-            if (relatedColumn.name !== subName)
-                this.setColumnProperties($filter, [{ id: relatedColumn.id, values: {  name: subName } }]);
-        }
-
         $formula[0].textContent = relatedColumn.formula;
         $formulaMessage.text(relatedColumn.formulaMessage);
         if (relatedColumn.formulaMessage === '')
@@ -450,11 +444,6 @@ const FilterWidget = Backbone.View.extend({
         let relatedColumns = this.columnsOf(column.id);
         for (let i = 0; i < relatedColumns.length; i++)
             this._createFormulaBox(column, index, relatedColumns[i].column, i, $filter, $formulaList);
-
-
-        let name = $filter.find('.label')[0].textContent;
-        if (column.name !== name)
-            this.setColumnProperties($filter, [{ id: column.id, values: {  name: name } }]);
 
         $active.removeClass('filter-disabled');
         $status[0].textContent = column.active ? 'active' : 'inactive';
@@ -603,6 +592,9 @@ const FilterWidget = Backbone.View.extend({
     detach() {
         if ( ! this.attached)
             return;
+
+        this.$el.find('.remove').remove(); //clean up any removes that exist because the transistionend was not called.
+
         this.attached = false;
     },
     columnsOf(id) {
