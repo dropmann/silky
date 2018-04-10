@@ -120,36 +120,36 @@ const FilterWidget = Backbone.View.extend({
             }
         }
     },
-    _getFilterDetails($filters, c) {
+    _getFilterDetails($filters, columnIndex) {
         let $filter = null;
-        let x = 0;
-        let y1 = 0;
-        let y2 = 0;
+        let widgetIndex = 0;
+        let widgetColumnIndex = 0;
+        let nextWidgetColumnIndex = 0;
         if ($filters.length === 0)
             return null;
 
         let $formulaBoxes = null;
-        for (x = 0; x < $filters.length; x++) {
-            $filter = $($filters[x]);
+        for (widgetIndex = 0; widgetIndex < $filters.length; widgetIndex++) {
+            $filter = $($filters[widgetIndex]);
             $formulaBoxes = $filter.find('.formula-box:not(.remove)');
-            y1 = y2
-            y2 += $formulaBoxes.length;
-            if (c >= y1 && c < y2)
+            widgetColumnIndex = nextWidgetColumnIndex
+            nextWidgetColumnIndex += $formulaBoxes.length;
+            if (columnIndex >= widgetColumnIndex && columnIndex < nextWidgetColumnIndex)
                 break;
         }
 
-        let details = { $filter: $filter, isBase: c === y1, fcount: $formulaBoxes.length };
+        let details = { $filter: $filter, isBase: columnIndex === widgetColumnIndex, fcount: $formulaBoxes.length };
 
         let $splitters = this.$filterList.find('.jmv-filter-splitter:not(.remove)');
 
-        let sc = y1;
-        if (y1 >= $splitters.length)
-            sc = y1 - 1;
+        let splitterIndex = widgetIndex;
+        if (widgetIndex >= $splitters.length)
+            splitterIndex = widgetIndex - 1;
 
-        details.$splitter = $($splitters[sc]);
+        details.$splitter = $($splitters[splitterIndex]);
 
-        let g = c - y1;
-        details.$formulaBox = $($formulaBoxes[g]);
+        let formulaIndex = columnIndex - widgetColumnIndex;
+        details.$formulaBox = $($formulaBoxes[formulaIndex]);
 
         return details;
     },
