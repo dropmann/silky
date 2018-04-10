@@ -291,8 +291,6 @@ const DataSetModel = Backbone.Model.extend({
     },
     insertRows(rowStart, rowEnd, _force) {
 
-        if ( ! _force)
-            return this._beginChanges('rows', 'insert', [ { start: rowStart, end: rowEnd } ]);
 
         let coms = this.attributes.coms;
 
@@ -339,8 +337,6 @@ const DataSetModel = Backbone.Model.extend({
     },
     deleteRows(rowStart, rowEnd, _force) {
 
-        if ( ! _force)
-            return this._beginChanges('rows', 'remove', [ { start: rowStart, end: rowEnd } ]);
 
         let coms = this.attributes.coms;
 
@@ -406,8 +402,6 @@ const DataSetModel = Backbone.Model.extend({
     },
     insertColumn(index, params, isDisplayIndex, _force) {
 
-        if ( ! _force && ! isDisplayIndex)
-            return this._beginChanges('columns', 'insert',  [ { start: index, end: index, params: params } ]);
 
         let dIndex = index;
         if (isDisplayIndex)
@@ -426,8 +420,6 @@ const DataSetModel = Backbone.Model.extend({
         if (index === -1)
             throw "Column index out of bounds.";
 
-        if ( ! _force && isDisplayIndex)
-            return this._beginChanges('columns', 'insert',  [ { start: index, end: index, params: params } ]);
 
         if (params === undefined)
             params = { };
@@ -573,8 +565,6 @@ const DataSetModel = Backbone.Model.extend({
     },
     deleteColumns(start, end, isDisplayIndex, _force) {
 
-        if ( ! _force && ! isDisplayIndex)
-            return this._beginChanges('columns', 'remove', [ { start: start, end: end } ]);
 
         let dStart = start;
         let dEnd = end;
@@ -596,8 +586,6 @@ const DataSetModel = Backbone.Model.extend({
             }
         }
 
-        if ( ! _force && isDisplayIndex)
-            return this._beginChanges('columns', 'remove', [ { start: start, end: end } ]);
 
         let coms = this.attributes.coms;
 
@@ -697,18 +685,18 @@ const DataSetModel = Backbone.Model.extend({
     },
     changeColumn(id, values) {
         let column = this.getColumnById(id);
-        return this._beginChanges('columns', 'modify', [{ index: column.index, id: id, values: values }]);
+        return this.changeColumns([{ index: column.index, id: id, values: values }]);
     },
     changeColumns(pairs, _force) {
 
-        if ( ! _force) {
+        /*if ( ! _force) {
             let mods = [];
             for (let mod of pairs) {
                 let column = this.getColumnById(mod.id);
                 mods.push({ index: mod.index, id: mod.id, values: mod.values });
             }
             return this._beginChanges('columns', 'modify', mods);
-        }
+        }*/
 
         let coms = this.attributes.coms;
         let datasetPB = new coms.Messages.DataSetRR();
@@ -1298,8 +1286,6 @@ const DataSetViewModel = DataSetModel.extend({
     },
     changeCells(viewport, cells, cbHtml, _force) {
 
-        if ( ! _force)
-            return this._beginChanges('cells', 'modify', [ { rowStart: viewport.top, rowEnd: viewport.bottom, columnStart: viewport.left, columnEnd: viewport.right, cells: cells, cbHtml: cbHtml } ]);
 
         let nRows = viewport.bottom - viewport.top + 1;
         let nCols = viewport.right - viewport.left + 1;
