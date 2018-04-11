@@ -19,178 +19,6 @@ const DataSetModel = Backbone.Model.extend({
         this._changeBundles = [];
         this._nextChangeId = 0;
     },
-    _createChangeAction(changeBundle) {
-        if (changeBundle.type === 'remove') {
-            changeBundle.action = () => {
-                let prom = Promise.resolve();
-                if ( ! changeBundle._cancelled) {
-                    let action = (promise, m) => {
-                        let mod = changeBundle.mods[m];
-                        return promise.then(() => {
-                            if (m > 0) {
-                                for (let i = m; i < changeBundle.mods.length; i++)
-                                    this._updatePendingChange({ type: changeBundle.type, mods: [ changeBundle.mods[m - 1] ] }, { type: changeBundle.type, mods: [ changeBundle.mods[i] ] }, 0);
-                            }
-
-                            if (changeBundle.category === 'columns')
-                                return this.deleteColumns(mod.columns.index, mod.columns.index + mod.columns.count - 1, false, true);
-                            else if (changeBundle.category === 'rows')
-                                return this.deleteRows(mod.rows.index, mod.rows.index + mod.rows.count - 1, true);
-                        });
-                    };
-
-                    for (let m = 0; m < changeBundle.mods.length; m++)
-                        prom = action(prom, m);
-                }
-                return prom;
-            };
-        }
-        else if (changeBundle.type === 'insert') {
-            changeBundle.action = () => {
-                let prom = Promise.resolve();
-                if ( ! changeBundle._cancelled) {
-                    let mod = changeBundle.mods[0]; //should only be one per bundle
-                    if (changeBundle.category === 'columns')
-                        return this.insertColumn(mod.columns.index, mod.params, false, true);
-                    else if (changeBundle.category === 'rows')
-                        return this.insertRows(mod.rows.index, mod.rows.index + mod.rows.count - 1, true);
-                }
-                return prom;
-            };
-        }
-        else if (changeBundle.type === 'modify') {
-            changeBundle.action = () => {
-                if ( ! changeBundle._cancelled) {
-                    if (changeBundle.category === 'columns') {
-                        let list = [];
-                        for (let mod of changeBundle.mods)
-                            list.push({ id: mod.id, values: mod.values });
-                        return this.changeColumns(list, true);
-                    }
-                    else if (changeBundle.category === 'cells') {
-                        // there will never be more then one in a bundle
-                        let mod = changeBundle.mods[0];
-                        return this.changeCells( { top: mod.rows.index, left: mod.columns.index, bottom: mod.rows.index + mod.rows.count - 1, right: mod.columns.index + mod.columns.count - 1 }, mod.cells, mod.cbHtml, true);
-                    }
-                }
-                return Promise.resolve();
-            };
-        }
-        return changeBundle.action;
-    },
-    _beginChanges(category, type, changes) {
-        let _todoId = this._nextChangeId++;
-        let changeBundle = { id: _todoId, category: category, type: type, mods: [] };
-        for (let params of changes) {
-            let mod = { };
-            if (type === 'remove')
-                mod = { _category: { index: params.start, count: params.end - params.start + 1 } };
-            else if (type === 'insert')
-                mod = { _category: { index: params.start, count: params.end - params.start + 1 }, params: params.params };
-            else if (type === 'modify') {
-                if (category === 'cells')
-                    mod = { rows: { index: params.rowStart, count: params.rowEnd - params.rowStart + 1} , columns: { index: params.columnStart, count: params.columnEnd - params.columnStart + 1 }, cells: params.cells, cbHtml: params.cbHtml  };
-                else
-                    mod = { _category: { index: params.index, count: 1 }, id: params.id, values: params.values };
-            }
-
-            if (mod._category !== undefined) {
-                mod[category] = mod._category;
-                delete mod._category;
-            }
-
-            changeBundle.mods.push(mod);
-        }
-
-        if (changeBundle === null)
-            return Promise.resolve();
-
-        this._changeBundles.push(changeBundle);
-
-        let changeAction = this._createChangeAction(changeBundle);
-
-        if (this._changeReady === undefined)
-            this._changeReady = changeAction();
-        else {
-            this._changeReady = this._changeReady.then(() => {
-                return changeAction();
-            },
-            () => {
-                return changeAction();
-            });
-        }
-
-        this._changeReady = this._changeReady.then((value) => {
-            this._endChanges(_todoId);
-            return value;
-        });
-
-        return this._changeReady;
-    },
-    _endChanges(id) {
-        for (let bundle of this._changeBundles) {
-            if (bundle.id === id) {
-                let cbundle = bundle;
-                for (let i = 0; i < this._changeBundles.length; i++) {
-                    let pbundle = this._changeBundles[i];
-                    if (pbundle.id !== id) {
-                        for (let p = 0; p < pbundle.mods.length; p++) {
-                            if ( ! this._updatePendingChange(cbundle, pbundle, p))
-                                pbundle.mods.splice(p, 1);
-                        }
-                    }
-                    if (pbundle.id === id || pbundle.mods.length === 0)
-                        this._changeBundles.splice(i, 1);
-                }
-                break;
-            }
-        }
-    },
-    _updatePendingChange(cbundle, pbundle, index) {
-        let pending = pbundle.mods[index];
-        if (pending[cbundle.category] === undefined)
-            return true;
-
-        let pRange = pending[cbundle.category];
-        let pEnd = pRange.index + pRange.count - 1;
-        for (let c = 0; c < cbundle.mods.length; c++) {
-            let completed = cbundle.mods[c];
-            let cRange = completed[cbundle.category];
-            let cEnd = cRange.index + cRange.count - 1;
-            if (cbundle.type === "remove") {
-                if (cEnd < pRange.index)
-                    pRange.index -= cRange.count;
-                else if (cRange.index <= pRange.index && cEnd >= pEnd) {
-                    if (pbundle.type !== "insert") {
-                        pending._cancelled = true;
-                        return false;
-                    }
-                    else
-                        pRange.index = cRange.index;
-                }
-                else if (cRange.index <= pRange.index && cEnd < pEnd)
-                    pRange.index += cEnd - pRange.index + 1;
-                else if (cRange.index > pRange.index && cEnd >= pEnd)
-                    pRange.count -= pEnd - cRange.index + 1;
-                else if (cRange.index > pRange.index && cEnd < pEnd)
-                    pRange.count -= cRange.count;
-            }
-            else if (cbundle.type === "insert") {
-                if (cRange.index <= pRange.index)
-                    pRange.index += cRange.count;
-                else if (cRange.index > pRange.index && cEnd <= pEnd) {
-                    if (pbundle.type === 'remove') {
-                        let newMod = { };
-                        newMod[cbundle.category] = { index: pRange.index, count: cRange.index - 1 - pRange.index };
-                        pbundle.mods.push(newMod);
-                        pRange.index = cRange.index + cRange.count;
-                        pRange.count -= newMod[cbundle.category].count;
-                    }
-                }
-            }
-        }
-        return true;
-    },
     filtersHidden() {
         let firstColumn = this.getColumn(0, true);
         if (firstColumn)
@@ -290,7 +118,6 @@ const DataSetModel = Backbone.Model.extend({
         return undefined;
     },
     insertRows(rowStart, rowEnd, _force) {
-
 
         let coms = this.attributes.coms;
 
@@ -402,7 +229,6 @@ const DataSetModel = Backbone.Model.extend({
     },
     insertColumn(index, params, isDisplayIndex, _force) {
 
-
         let dIndex = index;
         if (isDisplayIndex)
             index = this.indexFromDisplayIndex(index);
@@ -419,7 +245,6 @@ const DataSetModel = Backbone.Model.extend({
 
         if (index === -1)
             throw "Column index out of bounds.";
-
 
         if (params === undefined)
             params = { };
@@ -565,7 +390,6 @@ const DataSetModel = Backbone.Model.extend({
     },
     deleteColumns(start, end, isDisplayIndex, _force) {
 
-
         let dStart = start;
         let dEnd = end;
         if (isDisplayIndex) {
@@ -585,7 +409,6 @@ const DataSetModel = Backbone.Model.extend({
                 }
             }
         }
-
 
         let coms = this.attributes.coms;
 
@@ -688,15 +511,6 @@ const DataSetModel = Backbone.Model.extend({
         return this.changeColumns([{ index: column.index, id: id, values: values }]);
     },
     changeColumns(pairs, _force) {
-
-        /*if ( ! _force) {
-            let mods = [];
-            for (let mod of pairs) {
-                let column = this.getColumnById(mod.id);
-                mods.push({ index: mod.index, id: mod.id, values: mod.values });
-            }
-            return this._beginChanges('columns', 'modify', mods);
-        }*/
 
         let coms = this.attributes.coms;
         let datasetPB = new coms.Messages.DataSetRR();
@@ -1285,7 +1099,6 @@ const DataSetViewModel = DataSetModel.extend({
         });
     },
     changeCells(viewport, cells, cbHtml, _force) {
-
 
         let nRows = viewport.bottom - viewport.top + 1;
         let nCols = viewport.right - viewport.left + 1;

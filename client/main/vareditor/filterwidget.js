@@ -186,6 +186,11 @@ const FilterWidget = Backbone.View.extend({
 
                 details.$filter.addClass('remove');
                 details.$splitter.addClass('remove');
+
+                this._collapseSection(details.$filter[0]);
+                if (details.$splitter.length > 0)
+                    this._collapseSection(details.$splitter[0]);
+
                 c += details.fcount - 1;
             }
             else {
@@ -194,6 +199,8 @@ const FilterWidget = Backbone.View.extend({
                     details.$formulaBox.remove();
                 });
                 details.$formulaBox.addClass('remove');
+
+                this._collapseSection(details.$formulaBox[0]);
             }
         }
     },
@@ -347,7 +354,7 @@ const FilterWidget = Backbone.View.extend({
     },
 
     _createFormulaBox(parentColumn, pIndex, relatedColumn, rIndex, $filter, $formulaList) {
-        let $formulaBox = $('<div class="formula-box" data-columnid="' + relatedColumn.id + '" data-parentid="' + parentColumn.id + '"></div>');
+        let $formulaBox = $('<div class="formula-box filter-hidden" data-columnid="' + relatedColumn.id + '" data-parentid="' + parentColumn.id + '"></div>');
 
         let $list = $formulaList.find('.formula-box:not(.remove)');
         if (rIndex >= $list.length)
@@ -382,11 +389,17 @@ const FilterWidget = Backbone.View.extend({
 
         this.addEvents($filter, $formula, 'formula', relatedColumn.id);
 
-        if (this._internalCreate) {
-            setTimeout(() => {
-                this.focusOn($formula);
-            }, 0);
-        }
+        setTimeout(() => {
+            this._expandSection($formulaBox[0]);
+            $formulaBox.removeClass('filter-hidden');
+
+            if (this._internalCreate) {
+                setTimeout(() => {
+                    this.focusOn($formula);
+                }, 0);
+            }
+        }, 10);
+
     },
 
     _createFilter(column, index) {
@@ -474,8 +487,57 @@ const FilterWidget = Backbone.View.extend({
         $description.attr('contenteditable', 'true');
 
         setTimeout(() => {
+            this._expandSection($filter[0], '100px');
+            this._stickyBottom(this.$filterList);
             $filter.removeClass('filter-hidden');
         }, 10);
+    },
+    _collapseSection(element) {
+        let sectionHeight = element.scrollHeight;
+
+        let elementTransition = element.style.transition;
+        element.style.transition = '';
+
+        requestAnimationFrame(() => {
+            element.style.height = sectionHeight + 'px';
+            element.style.transition = elementTransition;
+            requestAnimationFrame(() => {
+                element.style.height = 0 + 'px';
+            });
+        });
+    },
+
+    _expandSection(element, value) {
+
+        let sectionHeight = element.scrollHeight;
+
+        element.style.height = value === undefined ? sectionHeight : value;
+
+        element.addEventListener('transitionend', (e) => {
+            element.removeEventListener('transitionend', e.callee);
+            element.style.height = null;
+        });
+    },
+    _stickyBottom($element) {
+        if (this._stickyBottomCount === undefined)
+            this._stickyBottomCount = 0;
+
+        if (this._stickyBottomCount < 3) {
+            let height = $element[0].scrollHeight;
+            if (height !== this._stickyBottomHeight) {
+                this._stickyBottomCount = 0;
+                this._stickyBottomHeight = height;
+                $element.scrollTop(height);
+            }
+            else
+                this._stickyBottomCount += 1;
+
+            setTimeout(() => {
+                this._stickyBottom($element);
+            }, 10);
+        }
+        else
+            this._stickyBottomCount = 0;
     },
     focusOn($element) {
         setTimeout(() => {
