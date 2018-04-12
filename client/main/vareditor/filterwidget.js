@@ -129,14 +129,20 @@ const FilterWidget = Backbone.View.extend({
             return null;
 
         let $formulaBoxes = null;
+        let found = false;
         for (widgetIndex = 0; widgetIndex < $filters.length; widgetIndex++) {
             $filter = $($filters[widgetIndex]);
             $formulaBoxes = $filter.find('.formula-box:not(.remove)');
             widgetColumnIndex = nextWidgetColumnIndex
             nextWidgetColumnIndex += $formulaBoxes.length;
-            if (columnIndex >= widgetColumnIndex && columnIndex < nextWidgetColumnIndex)
+            if (columnIndex >= widgetColumnIndex && columnIndex < nextWidgetColumnIndex) {
+                found = true;
                 break;
+            }
         }
+
+        if (!found)
+            return null;
 
         let details = { $filter: $filter, isBase: columnIndex === widgetColumnIndex, fcount: $formulaBoxes.length };
 
