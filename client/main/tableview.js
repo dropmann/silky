@@ -1321,72 +1321,75 @@ const TableView = SilkyView.extend({
         });
     },
     _insertColumn(columnType) {
-        return this.model.insertColumn(this.selection.colNo, { columnType: columnType }, true);
+        return this.model.insertColumn(this.selection.colNo, this.selection.colNo, { columnType: columnType }, true);
     },
     _columnsInserted(event, ignoreSelection) {
 
-        let column = this.model.getColumn(event.index);
-        if (column.hidden)
-            return;
+        for (let index = event.start; index <= event.end; index++) {
 
-        event.dIndex = this.model.indexToDisplayIndex(event.index);
+            let column = this.model.getColumn(index);
+            if (column.hidden)
+                return;
 
-        if (event.dIndex >= this._lefts.length) {  // append
-            this._addColumnToView(column);
-            return;
-        }
+            let dIndex = this.model.indexToDisplayIndex(index);
 
-        let left = this._lefts[event.dIndex];
-        let html = this._createHeaderHTML(event.dIndex, left);
-
-        let $after = $(this.$headers[column.dIndex]);
-        let $header = $(html);
-        $header.insertBefore($after);
-        this.$headers.splice(column.dIndex, 0, $header);
-
-        this._addResizeListeners($header);
-
-        $after = $(this.$columns[column.dIndex]);
-        let $column = $('<div data-formula-check="' + (column.formulaMessage === "") + '" data-active="' + column.active + '" data-columntype="' + column.columnType + '" data-measuretype="' + column.measureType + '" class="jmv-column" style="left: ' + left + 'px ; width: ' + column.width + 'px ; "></div>');
-        $column.insertBefore($after);
-        this.$columns.splice(column.dIndex, 0, $column);
-
-        this.viewport = this.model.attributes.viewport;
-        for (let rowNo = this.viewport.top; rowNo <= this.viewport.bottom; rowNo++) {
-            let top   = rowNo * this._rowHeight;
-            let $cell = this._createCell(top, this._rowHeight, rowNo, column.dIndex);
-            $column.append($cell);
-        }
-
-        this._lefts.splice(column.dIndex, 0, this._lefts[column.dIndex]);
-        this._widths.splice(column.dIndex, 0, column.width);
-
-        let widthIncrease = column.width;
-
-        for (let i = column.dIndex + 1; i < this._lefts.length; i++) {
-            this._lefts[i] += widthIncrease;
-            let $header = $(this.$headers[i]);
-            let $column = $(this.$columns[i]);
-            $header.attr('data-index', i);
-            $header.children().attr('data-index', i);
-            $header.css('left', '' + this._lefts[i] + 'px');
-            $column.css('left', '' + this._lefts[i] + 'px');
-        }
-
-        this._bodyWidth += widthIncrease;
-        this.$body.css('width', this._bodyWidth);
-
-        if ( ! ignoreSelection) {
-            let selection = Object.assign({}, this.selection);
-            if (column.dIndex <= this.selection.colNo) {
-                this.selection.colNo++;
-                this.selection.left++;
-                this.selection.right++;
-                this._setSelectedRange(selection, true);
+            if (dIndex >= this._lefts.length) {  // append
+                this._addColumnToView(column);
+                return;
             }
-        }
 
-        this._updateViewRange();
+            let left = this._lefts[dIndex];
+            let html = this._createHeaderHTML(dIndex, left);
+
+            let $after = $(this.$headers[column.dIndex]);
+            let $header = $(html);
+            $header.insertBefore($after);
+            this.$headers.splice(column.dIndex, 0, $header);
+
+            this._addResizeListeners($header);
+
+            $after = $(this.$columns[column.dIndex]);
+            let $column = $('<div data-formula-check="' + (column.formulaMessage === "") + '" data-active="' + column.active + '" data-columntype="' + column.columnType + '" data-measuretype="' + column.measureType + '" class="jmv-column" style="left: ' + left + 'px ; width: ' + column.width + 'px ; "></div>');
+            $column.insertBefore($after);
+            this.$columns.splice(column.dIndex, 0, $column);
+
+            this.viewport = this.model.attributes.viewport;
+            for (let rowNo = this.viewport.top; rowNo <= this.viewport.bottom; rowNo++) {
+                let top   = rowNo * this._rowHeight;
+                let $cell = this._createCell(top, this._rowHeight, rowNo, column.dIndex);
+                $column.append($cell);
+            }
+
+            this._lefts.splice(column.dIndex, 0, this._lefts[column.dIndex]);
+            this._widths.splice(column.dIndex, 0, column.width);
+
+            let widthIncrease = column.width;
+
+            for (let i = column.dIndex + 1; i < this._lefts.length; i++) {
+                this._lefts[i] += widthIncrease;
+                let $header = $(this.$headers[i]);
+                let $column = $(this.$columns[i]);
+                $header.attr('data-index', i);
+                $header.children().attr('data-index', i);
+                $header.css('left', '' + this._lefts[i] + 'px');
+                $column.css('left', '' + this._lefts[i] + 'px');
+            }
+
+            this._bodyWidth += widthIncrease;
+            this.$body.css('width', this._bodyWidth);
+
+            if ( ! ignoreSelection) {
+                let selection = Object.assign({}, this.selection);
+                if (column.dIndex <= this.selection.colNo) {
+                    this.selection.colNo++;
+                    this.selection.left++;
+                    this.selection.right++;
+                    this._setSelectedRange(selection, true);
+                }
+            }
+
+            this._updateViewRange();
+        }
     },
     _insertRows() {
 
@@ -1514,7 +1517,7 @@ const TableView = SilkyView.extend({
             if (isFilter)
                 this.model.set('editingVar', column.index);
             else
-                this.model.insertColumn(0, { columnType: 'filter', hidden: this.model.get('filtersVisible') === false }).then(() => this.model.set('editingVar', 0));
+                this.model.insertColumn(0, 0, { columnType: 'filter', hidden: this.model.get('filtersVisible') === false }).then(() => this.model.set('editingVar', 0));
         }
         else
             this.model.set('editingVar', null);

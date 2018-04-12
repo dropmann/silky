@@ -670,30 +670,39 @@ class Instance:
         self._populate_schema(request, response)
 
     def _on_dataset_ins_cols(self, request, response):
-        self._data.insert_column(request.columnStart)
-        column = self._data[request.columnStart]
 
-        if request.incSchema and len(request.schema.columns) == 1:
-            column_pb = request.schema.columns[0]
-            column.change(measure_type=column_pb.measureType)
-            column.column_type = column_pb.columnType
-            column.auto_measure = column_pb.autoMeasure
-            column.child_of = column_pb.childOf
-            column.hidden = column_pb.hidden
-            column.active = column_pb.active
+        contains_filter = False
+        for i in range(request.columnStart, request.columnEnd + 1):
+            self._data.insert_column(i)
+            column = self._data[i]
 
-            if column.column_type is ColumnType.FILTER:
-                self._data.update_filter_names()
+            if request.incSchema:
+                column_pb = request.schema.columns[i - request.columnStart]
+                column.change(measure_type=column_pb.measureType)
+                column.column_type = column_pb.columnType
+                column.auto_measure = column_pb.autoMeasure
+                column.child_of = column_pb.childOf
+                column.hidden = column_pb.hidden
+                column.active = column_pb.active
 
+                if column.column_type is ColumnType.FILTER:
+                    contains_filter = True
+
+        response.incSchema = True
         response.schema.rowCount = self._data.row_count
         response.schema.vRowCount = self._data.virtual_row_count
         response.schema.columnCount = self._data.column_count
         response.schema.vColumnCount = self._data.visible_column_count
         response.schema.tColumnCount = self._data.total_column_count
 
-        response.incSchema = True
-        column_pb = response.schema.columns.add()
-        self._populate_column_schema(column, column_pb)
+        if contains_filter == True:
+            self._data.update_filter_names()
+
+        # has to be after the filter names are renamed
+        for i in range(request.columnStart, request.columnEnd + 1):
+            column = self._data[i]
+            column_pb = response.schema.columns.add()
+            self._populate_column_schema(column, column_pb)
 
     def _on_dataset_del_rows(self, request, response):
         self._data.delete_rows(request.rowStart, request.rowEnd)

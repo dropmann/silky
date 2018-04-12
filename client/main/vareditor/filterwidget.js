@@ -105,7 +105,7 @@ const FilterWidget = Backbone.View.extend({
             i += 1;
             column = dataset.getColumn(i);
         } while(column.columnType === 'filter');
-        dataset.insertColumn(i, { columnType: 'filter', hidden: dataset.get('filtersVisible') === false }).then(() => {
+        dataset.insertColumn(i, i, { columnType: 'filter', hidden: dataset.get('filtersVisible') === false }).then(() => {
             column = dataset.getColumn(i);
             this.model.setColumnForEdit(column.id);
         });
@@ -211,42 +211,45 @@ const FilterWidget = Backbone.View.extend({
         }
     },
     _columnsInserted(event) {
-        let column = this.model.dataset.getColumn(event.index);
-        if (column.columnType === 'filter') {
-            if (column.childOf === -1) {
-                let columns = this.model.dataset.attributes.columns;
-                let index = 0;
-                for (let i = 0; i < columns.length; i++) {
-                    let existingColumn = columns[i];
-                    if (i >= event.index)
-                        break;
-                    if (existingColumn.columnType === 'filter') {
-                        if (existingColumn.childOf === -1)
-                            index += 1;
+
+        for (let c = event.start; c<= event.start; c++) {
+            let column = this.model.dataset.getColumn(c);
+            if (column.columnType === 'filter') {
+                if (column.childOf === -1) {
+                    let columns = this.model.dataset.attributes.columns;
+                    let index = 0;
+                    for (let i = 0; i < columns.length; i++) {
+                        let existingColumn = columns[i];
+                        if (i >= c)
+                            break;
+                        if (existingColumn.columnType === 'filter') {
+                            if (existingColumn.childOf === -1)
+                                index += 1;
+                        }
+                        else
+                            break;
                     }
-                    else
-                        break;
+                    this._createFilter(column, index);
                 }
-                this._createFilter(column, index);
-            }
-            else {
-                let pColumn = this.model.dataset.getColumnById(column.childOf);
-                let $filter = this.$filterList.find('.jmv-filter-options[data-columnid=' + pColumn.id + ']:not(.remove)');
-                let $formulaList = $filter.find('.formula-list');
-                let columns = this.model.dataset.attributes.columns;
-                let index = 0;
-                for (let i = 0; i < columns.length; i++) {
-                    let existingColumn = columns[i];
-                    if (i >= pColumn.index)
-                        break;
-                    if (existingColumn.columnType === 'filter') {
-                        if (existingColumn.childOf === -1)
-                            index += 1;
+                else {
+                    let pColumn = this.model.dataset.getColumnById(column.childOf);
+                    let $filter = this.$filterList.find('.jmv-filter-options[data-columnid=' + pColumn.id + ']:not(.remove)');
+                    let $formulaList = $filter.find('.formula-list');
+                    let columns = this.model.dataset.attributes.columns;
+                    let index = 0;
+                    for (let i = 0; i < columns.length; i++) {
+                        let existingColumn = columns[i];
+                        if (i >= pColumn.index)
+                            break;
+                        if (existingColumn.columnType === 'filter') {
+                            if (existingColumn.childOf === -1)
+                                index += 1;
+                        }
+                        else
+                            break;
                     }
-                    else
-                        break;
+                    this._createFormulaBox(pColumn, index, column, column.index - pColumn.index, $filter, $formulaList);
                 }
-                this._createFormulaBox(pColumn, index, column, column.index - pColumn.index, $filter, $formulaList);
             }
             setTimeout(() => {
                 this.$filterList.find('[contenteditable=false]').attr('contenteditable', 'true');
@@ -570,7 +573,7 @@ const FilterWidget = Backbone.View.extend({
             let relatedColumns = this.columnsOf(id);
             let index = relatedColumns[relatedColumns.length - 1].index + 1;
             this._internalCreate = true;
-            dataset.insertColumn(index, { columnType: 'filter', childOf: id, hidden: dataset.get('filtersVisible') === false, active: relatedColumns[0].column.active }).then(() => {
+            dataset.insertColumn(index, index, { columnType: 'filter', childOf: id, hidden: dataset.get('filtersVisible') === false, active: relatedColumns[0].column.active }).then(() => {
                 let column = dataset.getColumn(index);
                 this.model.setColumnForEdit(column.id);
             });
