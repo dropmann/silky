@@ -1325,18 +1325,30 @@ const TableView = SilkyView.extend({
     },
     _columnsInserted(event, ignoreSelection) {
 
+        let index = event.start;
+        let column = this.model.getColumn(index);
+
+        // simplifying assumption (that may not be true in the future);
+        // if the first column is hidden, all are hidden
+        if (column.hidden)
+            return;
+
+        let dIndex = this.model.indexToDisplayIndex(index);
+        if (dIndex >= this._lefts.length) {
+            // append columns to end of data set
+            for (; index <= event.end; index++) {
+                column = this.model.getColumn(index);
+                this._addColumnToView(column);
+            }
+            return;
+        }
+
+        let widthIncrease = 0;
+
         for (let index = event.start; index <= event.end; index++) {
 
             let column = this.model.getColumn(index);
-            if (column.hidden)
-                return;
-
-            let dIndex = this.model.indexToDisplayIndex(index);
-
-            if (dIndex >= this._lefts.length) {  // append
-                this._addColumnToView(column);
-                return;
-            }
+            let dIndex = column.dIndex;
 
             let left = this._lefts[dIndex];
             let html = this._createHeaderHTML(dIndex, left);
@@ -1353,20 +1365,13 @@ const TableView = SilkyView.extend({
             $column.insertBefore($after);
             this.$columns.splice(column.dIndex, 0, $column);
 
-            this.viewport = this.model.attributes.viewport;
-            for (let rowNo = this.viewport.top; rowNo <= this.viewport.bottom; rowNo++) {
-                let top   = rowNo * this._rowHeight;
-                let $cell = this._createCell(top, this._rowHeight, rowNo, column.dIndex);
-                $column.append($cell);
-            }
-
             this._lefts.splice(column.dIndex, 0, this._lefts[column.dIndex]);
             this._widths.splice(column.dIndex, 0, column.width);
 
-            let widthIncrease = column.width;
+            widthIncrease += column.width;
 
             for (let i = column.dIndex + 1; i < this._lefts.length; i++) {
-                this._lefts[i] += widthIncrease;
+                this._lefts[i] += column.width;
                 let $header = $(this.$headers[i]);
                 let $column = $(this.$columns[i]);
                 $header.attr('data-index', i);
@@ -1374,22 +1379,69 @@ const TableView = SilkyView.extend({
                 $header.css('left', '' + this._lefts[i] + 'px');
                 $column.css('left', '' + this._lefts[i] + 'px');
             }
-
-            this._bodyWidth += widthIncrease;
-            this.$body.css('width', this._bodyWidth);
-
-            if ( ! ignoreSelection) {
-                let selection = Object.assign({}, this.selection);
-                if (column.dIndex <= this.selection.colNo) {
-                    this.selection.colNo++;
-                    this.selection.left++;
-                    this.selection.right++;
-                    this._setSelectedRange(selection, true);
-                }
-            }
-
-            this._updateViewRange();
         }
+
+        this._bodyWidth += widthIncrease;
+        this.$body.css('width', this._bodyWidth);
+
+        if ( ! ignoreSelection) {
+            let selection = Object.assign({}, this.selection);
+            if (column.dIndex <= this.selection.colNo) {
+                this.selection.colNo++;
+                this.selection.left++;
+                this.selection.right++;
+                this._setSelectedRange(selection, true);
+            }
+        }
+
+        let insertedAt = this.model.indexToDisplayIndex(event.start);
+        let nInserted = event.end - event.start + 1;
+        let nWereVisible = this.viewport.right - this.viewport.left + 1;
+        let wereVisible = new Array(nWereVisible);
+
+        for (let i = 0; i < nWereVisible; i++) {
+            let index = this.viewport.left + i;
+            if (index >= insertedAt)
+                index += nInserted;
+            wereVisible[i] = index;
+        }
+
+        let viewRange = this._getViewRange();
+
+        let nowVisible = [ ];
+        for (let i = 0; i < this._lefts.length; i++) {
+            let colLeft = this._lefts[i];
+            let colRight = colLeft + this._widths[i];
+            if (colLeft > viewRange.right)
+                break;
+            if (colLeft > viewRange.left && colLeft < viewRange.right)
+                nowVisible.push(i);
+            else if (colRight > viewRange.left && colRight < viewRange.right)
+                nowVisible.push(i);
+        }
+
+        let needsPopulation = nowVisible.filter((i) => ! wereVisible.includes(i));
+        let needsClear = wereVisible.filter((i) => ! nowVisible.includes(i));
+
+        for (let i of needsPopulation) {
+            let index = this.model.indexFromDisplayIndex(i);
+            let column = this.model.attributes.columns[index];
+            let $column = this.$columns[i];
+            for (let rowNo = this.viewport.top; rowNo <= this.viewport.bottom; rowNo++) {
+                let top   = rowNo * this._rowHeight;
+                let $cell = this._createCell(top, this._rowHeight, rowNo, column.dIndex);
+                $column.append($cell);
+            }
+        }
+
+        for (let i of needsClear)
+            this.$columns[i].empty();
+
+        this.viewport.left = nowVisible[0];
+        this.viewport.right = nowVisible[nowVisible.length - 1];
+        this.model.attributes.viewport = Object.assign({}, this.viewport);
+
+        this._updateViewRange();
     },
     _insertRows() {
 
