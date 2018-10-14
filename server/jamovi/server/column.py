@@ -35,6 +35,7 @@ class Column:
         self._filter_no = -1
         self._transform = 0  # zero mean 'none'
         self._parent_id = 0  # zero means 'none'
+        self._output_from = 0  # zero means 'none'
 
         self._node = None
         self._fields = ('name',)  # for AST compatibility
@@ -137,6 +138,14 @@ class Column:
     @hidden.setter
     def hidden(self, hidden):
         self._hidden = hidden
+
+    @property
+    def output_from(self):
+        return self._output_from
+
+    @hidden.setter
+    def output_from(self, analysis_id):
+        self._output_from = analysis_id
 
     @property
     def active(self):

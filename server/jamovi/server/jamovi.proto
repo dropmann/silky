@@ -365,6 +365,7 @@ enum ColumnType {
     COMPUTED = 2;
     RECODED = 3;
     FILTER = 4;
+    OUTPUT = 5;
 }
 
 message DataSetSchema {
@@ -406,6 +407,7 @@ message DataSetSchema {
         bool trimLevels = 19;
         int32 transform = 20;
         int32 parentId = 21;
+        bool outputFrom = 22;
     }
 
     message TransformSchema {

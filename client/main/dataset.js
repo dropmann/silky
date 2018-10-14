@@ -301,6 +301,9 @@ const DataSetModel = Backbone.Model.extend({
             if (params.trimLevels === undefined)
                 params.trimLevels = true;
 
+            if (params.outputFrom === undefined)
+                params.outputFrom = 0;
+
 
             let columnType = params.columnType;
             if (columnType === undefined)
@@ -350,7 +353,7 @@ const DataSetModel = Backbone.Model.extend({
 
                 let columns = this.attributes.columns;
                 datasetPB.schema.columns.sort((a,b) => a.index - b.index );
-                
+
                 for (let i = 0; i < datasetPB.schema.columns.length; i++) {
                     let columnPB = datasetPB.schema.columns[i];
                     let id = columnPB.id;
@@ -618,6 +621,11 @@ const DataSetModel = Backbone.Model.extend({
             else
                 columnPB.description = column.description;
 
+            if ('outputFrom' in values)
+                columnPB.outputFrom = values.outputFrom;
+            else
+                columnPB.outputFrom = column.outputFrom;
+
             if ('hidden' in values)
                 columnPB.hidden = values.hidden;
             else
@@ -794,6 +802,7 @@ const DataSetModel = Backbone.Model.extend({
                 let oldTransform;
                 let oldParentId;
                 let hiddenChanged = false;
+                let outputFromChanged = false;
                 let activeChanged = false;
                 let oldDIndex = -1;
 
@@ -804,11 +813,13 @@ const DataSetModel = Backbone.Model.extend({
                     oldDIndex = column.dIndex;
                     let oldHidden = column.hidden;
                     let oldActive = column.active;
+                    let oldOutputFrom = column.outputFrom;
                     oldTransform = column.transform;
                     oldParentId = column.parentId;
                     this._readColumnPB(column, columnPB);
                     hiddenChanged = oldHidden !== column.hidden;
                     activeChanged = oldActive !== column.active;
+                    outputFromChanged = oldOutputFrom !== column.outputFrom;
                 }
                 else {
                     oldName = columnPB.name;
@@ -837,6 +848,7 @@ const DataSetModel = Backbone.Model.extend({
                     transformChanged: oldTransform !== column.transform,
                     parentIdChanged: oldParentId !== column.parentId,
                     hiddenChanged: hiddenChanged,
+                    outputFromChanged: outputFromChanged,
                     activeChanged: activeChanged,
                     columnTypeChanged: column.columnType !== oldColumnType,
                     measureTypeChanged: true,
@@ -1264,6 +1276,8 @@ DataSetModel.stringifyColumnType = function(type) {
             return 'recoded';
         case 4:
             return 'filter';
+        case 5:
+            return 'output';
         case 0:
             return 'none';
         default:
@@ -1281,6 +1295,8 @@ DataSetModel.parseColumnType = function(str) {
             return 3;
         case 'filter':
             return 4;
+        case 'output':
+            return 5;
         case 'none':
             return 0;
         default:

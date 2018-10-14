@@ -28,6 +28,10 @@
     margin: 0px;
 }
 
+.jmv-toolbar-button.jmv-variable-create-transfer > .jmv-toolbar-button-icon {
+    background-image: url('assets/menu-add.svg');
+}
+
 .jmv-toolbar-button.jmv-variable-interaction-transfer > .jmv-toolbar-button-icon {
     background-image: url('assets/variable-list-arrow-right.svg');
 }
@@ -40,7 +44,9 @@
     background-image: url('assets/variable-list-arrow-right.svg');
 }
 
-.jmv-toolbar-group-body .jmv-toolbar-button.jmv-variable-transfer, .jmv-toolbar-group-body  .jmv-toolbar-button.jmv-variable-interaction-transfer {
+.jmv-toolbar-group-body .jmv-toolbar-button.jmv-variable-transfer,
+.jmv-toolbar-group-body  .jmv-toolbar-button.jmv-variable-interaction-transfer,
+.jmv-toolbar-group-body  .jmv-toolbar-button.jmv-variable-create-transfer {
     width: 34px;
     height: 28px;
     border: 1px solid #aeaeae;
@@ -49,6 +55,14 @@
     margin-right: 10px;
     margin-bottom: 5px;
     padding: unset;
+}
+
+.jmv-toolbar-button[data-name=insertoutputvar] > .jmv-toolbar-button-icon {
+    background-image: url('assets/menu-computed-insert.svg');
+}
+
+.jmv-toolbar-button[data-name=appendoutputvar] > .jmv-toolbar-button-icon {
+    background-image: url('assets/menu-computed-append.svg');
 }
 
 .jmv-toolbar:not(.jmv-toolbar-disabled) .jmv-toolbar-button:not(.jmv-toolbar-disabled):hover {

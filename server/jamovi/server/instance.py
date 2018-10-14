@@ -745,6 +745,7 @@ class Instance:
             column.trim_levels = column_pb.trimLevels
             column.transform = column_pb.transform
             column.parent_id = column_pb.parentId
+            column._output_from = column_pb.outputFrom
 
             name = column_pb.name
             if has_name is False and column.column_type == ColumnType.RECODED:
@@ -1090,6 +1091,7 @@ class Instance:
                 old_trim = column.trim_levels
                 old_transform = column.transform
                 old_parent_id = column.parent_id
+                old_output_from = column.output_from
 
                 levels = None
                 if column_pb.hasLevels:
@@ -1120,6 +1122,7 @@ class Instance:
                 column.description = column_pb.description
                 column.transform = column_pb.transform
                 column.parent_id = column_pb.parentId
+                column.output_from = column_pb.outputFrom
 
                 if old_type == ColumnType.NONE and column.column_type == ColumnType.RECODED:
                     new_column_name = 'T' + str(self._data.get_column_count_by_type(ColumnType.RECODED))
@@ -1151,7 +1154,8 @@ class Instance:
                         column.active == old_active and
                         column.trim_levels == old_trim and
                         column.transform == old_transform and
-                        column.parent_id == old_parent_id):
+                        column.parent_id == old_parent_id and
+                        column.output_from == old_output_from):
                     # if these things haven't changed, no need
                     # to trigger recalcs
                     continue
@@ -1178,6 +1182,8 @@ class Instance:
                 elif old_d_type != column.data_type:
                     reparse.update(column.dependents)
                 elif old_m_type != column.measure_type:
+                    reparse.update(column.dependents)
+                elif old_output_from != column.output_from:
                     reparse.update(column.dependents)
 
             for i in range(n_cols_before, self._data.total_column_count):  # cols added
@@ -1744,6 +1750,7 @@ class Instance:
         column_schema.trimLevels = column.trim_levels
         column_schema.transform = column.transform
         column_schema.parentId = column.parent_id
+        column_schema.outputFrom = column.output_from
 
         column_schema.hasLevels = True
 

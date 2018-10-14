@@ -21,8 +21,6 @@ const LayoutVariablesView = function(params) {
 
     this._override("onContainerRendering", function(baseFunction, context) {
 
-        //this.resources = context.resources;
-
         baseFunction.call(this, context);
 
         let promise = this.requestData("columns", null);
@@ -30,8 +28,6 @@ const LayoutVariablesView = function(params) {
             this.resources = columnInfo;
             this.populateItemList();
         });
-
-        //this.populateItemList();
     });
 
     this._override("onDataChanged", (baseFunction, data) => {

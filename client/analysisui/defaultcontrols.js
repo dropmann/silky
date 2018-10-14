@@ -3,6 +3,7 @@
 const LayoutCollapseView = require('./layoutcollapseview');
 const LayoutGroupView = require('./layoutgroupview');
 const LayoutSupplierView = require('./layoutsupplierview');
+const OutputVariableSupplier = require('./outputvariablesupplier');
 const LayoutVariablesView = require('./layoutvariablesview');
 const GridCheckbox = require('./gridcheckbox');
 const GridRadioButton = require('./gridradiobutton');
@@ -31,6 +32,7 @@ const DefaultControls = {
     VariableTargetListBox: function() { return "VariableTargetListBox is no longer used."; },
     Supplier: LayoutSupplierView,
     VariableSupplier: LayoutVariablesView,
+    OutputSupplier: OutputVariableSupplier,
     CollapseBox: LayoutCollapseView,
     Label: LayoutGroupView,
     LayoutBox: ControlContainer,

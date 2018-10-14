@@ -956,6 +956,26 @@ const GridTargetContainer = function(params) {
         return this._normalAction;
     };
 
+    this.onAddingTransferButtons = function(buttons, transferAction) {
+        if (transferAction === 'interactions') {
+            buttons.push(
+                new ToolbarButton({ title: '', name: 'interactions', size: 'small', classes: 'jmv-variable-transfer-collection jmv-variable-interaction-transfer', items: [
+                    new ToolbarButton({ title: 'Interaction', name: 'interaction', hasIcon: false, resultFormat: FormatDef.term }),
+                    new ToolbarSeparator({ orientation: 'vertical' }),
+                    new ToolbarButton({ title: 'Main Effects', name: 'maineffects', hasIcon: false, resultFormat: FormatDef.term }),
+                    new ToolbarButton({ title: 'All 2 way', name: 'all2way', hasIcon: false, resultFormat: FormatDef.term }),
+                    new ToolbarButton({ title: 'All 3 way', name: 'all3way', hasIcon: false, resultFormat: FormatDef.term }),
+                    new ToolbarButton({ title: 'All 4 way', name: 'all4way', hasIcon: false, resultFormat: FormatDef.term }),
+                    new ToolbarButton({ title: 'All 5 way', name: 'all5way', hasIcon: false, resultFormat: FormatDef.term })
+                ]})
+            );
+        }
+
+        if (this._supplier && this._supplier.requestedTransferButtons) {
+            this._supplier.requestedTransferButtons(buttons, transferAction);
+        }
+    };
+
     this.onRenderToGrid = function(grid, row, column) {
 
         let label = this.getPropertyValue('label');
@@ -964,6 +984,8 @@ const GridTargetContainer = function(params) {
             grid.addCell(column, row, true, this.$label);
         }
 
+        this.setSupplier(grid);
+
         if (grid.addTarget) {
             let transferAction = this.getPropertyValue('transferAction');
 
@@ -971,7 +993,7 @@ const GridTargetContainer = function(params) {
                 new ToolbarButton({ title: '', name: 'normal', size: 'small', classes: 'jmv-variable-transfer' })
             ];
 
-            if (transferAction === 'interactions') {
+            /*if (transferAction === 'interactions') {
                 buttons.push(
                     new ToolbarButton({ title: '', name: 'interactions', size: 'small', classes: 'jmv-variable-transfer-collection jmv-variable-interaction-transfer', items: [
                         new ToolbarButton({ title: 'Interaction', name: 'interaction', hasIcon: false, resultFormat: FormatDef.term }),
@@ -983,7 +1005,9 @@ const GridTargetContainer = function(params) {
                         new ToolbarButton({ title: 'All 5 way', name: 'all5way', hasIcon: false, resultFormat: FormatDef.term })
                     ]})
                 );
-            }
+            }*/
+
+            this.onAddingTransferButtons(buttons, transferAction);
 
             this.toolbar = new Toolbar([
                 new ToolbarGroup({ orientation: 'vertical', items: buttons })
@@ -1013,7 +1037,7 @@ const GridTargetContainer = function(params) {
 
             grid.addCell('aux', row + 1, true, this.$buttons);
 
-            this.setSupplier(grid);
+
         }
 
         let info = this.container.renderToGrid(grid, row + 1, column);

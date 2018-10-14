@@ -10,13 +10,39 @@
     width: 100%;
     font-size: 70%;
     bottom: 0px;
-    position: absolute;
+    /*position: absolute;*/
 }
 
 .jmv-toolbar-group {
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .jmv-toolbar-group-body-vertical {
     flex-direction: column;
+}
+
+
+.jmv-toolbar-group-body-vertical > .jmv-toolbar-group[data-position="top"] {
+    margin: 5px;
+}
+
+.jmv-toolbar-group[data-position="top"] > .jmv-toolbar-group-label {
+    order: 0;
+
+    font-size: 80%;
+    text-align: left;
+    font-weight: bold;
+    padding: 0px 0px 2px 0px;
+}
+
+.jmv-toolbar-group[data-position="bottom"] > .jmv-toolbar-group-label {
+    order: 1;
+    font-size: 70%;
+    text-align: center;
+}
+
+.jmv-toolbar-group[data-position="top"] > .jmv-toolbar-group-body {
+    order: 1;
 }

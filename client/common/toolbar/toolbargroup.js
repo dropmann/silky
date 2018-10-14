@@ -13,6 +13,7 @@ const ToolbarGroup = function(params) {
     {
         title:          //Title to be displayed by the group. Make '' for not title but leave space or null for no title and no space.
         orientation:    //How are the contents displayed 'vertical' or 'horizontal' (default)
+        titlePosition:  //Title at the 'top' or 'bottom' (default)
         right:          //Is the button docked to the right? [default: false]
         $el:            //jquery element. Will create if missing.
         items:          //Array of menu items. Not needed, can use 'addItem'.
@@ -24,6 +25,7 @@ const ToolbarGroup = function(params) {
 
         let title = params.title === undefined ? null : params.title;
         let orientation = params.orientation === undefined ? 'horizontal' : params.orientation;
+        let titlePosition =  params.titlePosition === undefined ? 'bottom' : params.titlePosition;
         let right = params.right === undefined ? false : params.right;
         let $el = params.$el === undefined ? $('<div></div>') : params.$el;
 
@@ -32,6 +34,9 @@ const ToolbarGroup = function(params) {
 
         this.title = title;
         this.dock = right ? 'right' : 'left';
+
+        if (title !== null)
+            this.$el.attr('data-position', titlePosition);
 
         this.$el.attr('disabled');
         if (right)
