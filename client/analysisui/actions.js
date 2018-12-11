@@ -404,7 +404,7 @@ function View() {
                 flatList.push(value);
         }
         return flatList;
-    }
+    };
 
     this.getItemCombinations = function(items) {
         let values = this.itemsToValues(items);
