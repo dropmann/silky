@@ -20,6 +20,8 @@ const host = require('./host');
 const ActionHub = require('./actionhub');
 const { s6e } = require('../common/utils');
 
+const extras = require('../../../hydra/client/extras.js');
+
 
 function crc16(s) {
     if (s.length === 0)
@@ -1157,6 +1159,64 @@ const BackstageModel = Backbone.Model.extend({
             return { cancelled: true };
         }
     },
+    createWebOpenPlaces: function() {
+        let places = [
+            { name: 'examples', title: 'Data Library', model: this._examplesListModel, view: FSEntryBrowserView }
+        ];
+
+        if (extras) {
+            for (let provider of extras.fileProviders) {
+                let item = { name: provider.name, title: provider.title, action: () => { provider.open(); } };
+                places.push(item);
+            }
+        }
+
+        places.push({ name: 'thisdevice', title: 'This Device', action: () => { this.tryBrowse(this._pcListModel.fileExtensions, 'open'); } });
+
+        return places;
+    },
+    createWebSaveAsPlaces: function() {
+        let places = [];
+
+        if (extras) {
+            for (let provider of extras.fileProviders) {
+                if (provider.saveAs) {
+                    let item = { name: provider.name, title: provider.title, action: () => { provider.saveAs(); } };
+                    places.push(item);
+                }
+            }
+        }
+
+        places.push({
+            name: 'thisdevice', title: 'Download', model: this._deviceSaveListModel, view: FSEntryBrowserView,
+            action: () => {
+                this._deviceSaveListModel.suggestedPath = this.instance.get('title');
+            }
+        });
+
+        return places;
+    },
+    createWebExportPlaces: function() {
+        let places = [];
+
+        if (extras) {
+            for (let provider of extras.fileProviders) {
+                if (provider.export) {
+                    let item = { name: provider.name, title: provider.title, action: () => { provider.export(); } };
+                    places.push(item);
+                }
+            }
+        }
+
+        places.push({
+            name: 'thisdevice', title: 'Download', model: this._deviceExportListModel, view: FSEntryBrowserView,
+            action: () => {
+                this._deviceExportListModel.suggestedPath = this.instance.get('title');
+            }
+        });
+
+        return places;
+    },
     createOps: function() {
         let mode = this.instance.settings().getSetting('mode', 'normal');
 
@@ -1186,11 +1246,7 @@ const BackstageModel = Backbone.Model.extend({
                         else
                             this.attributes.place = place;*/
                     },
-                    places: [
-                        /*{ name: 'thispc', title: 'jamovi Cloud', model: this._pcListModel, view: FSEntryBrowserView },*/
-                        { name: 'examples', title: 'Data Library', model: this._examplesListModel, view: FSEntryBrowserView },
-                        { name: 'thisdevice', title: 'This Device', action: () => { this.tryBrowse(this._pcListModel.fileExtensions, 'open'); } }
-                    ]
+                    places: this.createWebOpenPlaces()
                 },
                 // {
                 //     name: 'import',
@@ -1212,33 +1268,12 @@ const BackstageModel = Backbone.Model.extend({
                             });
                         }
                     },
-                    places: [
-                        /*{ name: 'thispc', title: 'jamovi Cloud', separator: true, model: this._pcSaveListModel, view: FSEntryBrowserView },*/
-                        {
-                            name: 'thisdevice', title: 'Download', model: this._deviceSaveListModel, view: FSEntryBrowserView,
-                            action: () => {
-                                this._deviceSaveListModel.suggestedPath = this.instance.get('title');
-                            }
-                        }
-                    ]
+                    places: this.createWebSaveAsPlaces()
                 },
                 {
                     name: 'export',
                     title: 'Export',
-                    places: [
-                        /*{
-                            name: 'thispc', title: 'jamovi Cloud', separator: true, model: this._pcExportListModel, view: FSEntryBrowserView,
-                            action: () => {
-                                this._pcExportListModel.suggestedPath = this.instance.get('title');
-                            }
-                        },*/
-                        {
-                            name: 'thisdevice', title: 'Download', model: this._deviceExportListModel, view: FSEntryBrowserView,
-                            action: () => {
-                                this._deviceExportListModel.suggestedPath = this.instance.get('title');
-                            }
-                        },
-                    ]
+                    places: this.createWebExportPlaces()
                 }
             ];
         }
