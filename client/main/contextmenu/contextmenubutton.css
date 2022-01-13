@@ -47,3 +47,15 @@
 .jmv-context-menu-button:not([disabled]):active {
     background-color: #cccccc ;
 }
+
+.jmv-ribbon-button.jmv-context-menu-button.jmv-ribbon-button-size-medium {
+    border: none;
+    border-radius: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
+}
+
+.jmv-ribbon-button.jmv-context-menu-button.jmv-ribbon-button-size-medium:hover {
+    background-color: #dbe7f7;
+    border-color: #518fdd;
+}

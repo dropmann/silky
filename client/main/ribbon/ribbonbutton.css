@@ -3,6 +3,7 @@
     display: flex;
     flex-wrap: nowrap;
     margin-bottom: 0;
+    border-radius: 4px;
     flex-direction: column;
 }
 

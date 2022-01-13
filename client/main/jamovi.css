@@ -26,7 +26,7 @@ body {
     line-height: 1.1;
     font-weight: 400;
     font-style: normal;
-    background-color: #3E6DA9 ;
+    background-color: #f1f1f1 ;
     padding: 0 ;
     cursor: default ;
     display: flex ;
@@ -53,14 +53,17 @@ hr {
 
 #header {
     font-weight: normal ;
-    color: white ;
+    color: #333333 ;
     text-align: center ;
     min-height: 6px ;
 }
 
 body.windows.electron #header {
-    height: 32px ;
-    line-height: 32px ;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 42px;
+    line-height: 32px;
     flex-grow: 0;
     flex-shrink: 0;
 }
@@ -125,13 +128,15 @@ body[data-table-mode='spreadsheet'] #main-view #spreadsheet {
 }
 
 body.windows.electron #header-text {
-    display: block ;
-    margin-left: 80px ;
-    margin-right: 150px ;
     display: block;
+    margin-left: 15px;
+    margin-right: 150px;
+    display: block;
+    flex-grow: 1;
+    text-align: left;
 }
 
-.header-file-name:not(:empty)::before {
+.header-file-name:not(:empty)::after {
     content: " - ";
 }
 
@@ -156,7 +161,7 @@ body.windows.electron #header-buttons {
 }
 
 .header-button:hover {
-    background-color: #6E96CA ;
+    background-color: #f6f6f6 ;
 }
 
 .header-button .header-button-icon {
@@ -168,9 +173,9 @@ body.windows.electron #header-buttons {
     border-width: 0 ;
 }
 
-.header-button:hover .header-button-icon {
+/*.header-button:hover .header-button-icon {
     border-color: white ;
-}
+}*/
 
 #min-button .header-button-icon {
     margin-top: 15px ;
@@ -180,10 +185,53 @@ body.windows.electron #header-buttons {
 
 #max-button .header-button-icon {
     border-width: 1px ;
+    border-radius: 2px;
 }
 
 #close-button .header-button-icon {
     background-image: url('../assets/action-close.svg');
+    filter: invert(0.8);
+}
+
+body.windows.electron #header-icon {
+    display: block;
+    background-image: url(../assets/logo-v.svg);
+    width: 20px;
+    height: 20px;
+    background-repeat: no-repeat;
+    background-size: contain;
+    margin-left: 15px;
+}
+
+body.windows.electron #header-save {
+    border-radius: 4px;
+    border: 1px #f1f1f1 solid;
+    /* height: 30px; */
+    display: block;
+    background-image: url(../assets/action-save.svg);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 20px 20px;
+    width: 25px;
+    height: 25px;
+    margin-left: 10px;
+}
+
+body.windows.electron #header-save:hover {
+    border: 1px #c5c5c5 solid;
+    background-color: #fcfcfc;
+}
+
+#header-save {
+    display: none;
+}
+
+#header-icon {
+    display: none;
+}
+
+#close-button:hover .header-button-icon {
+    filter: unset;
 }
 
 #close-button:hover {
@@ -199,20 +247,18 @@ body.windows.electron #header-buttons {
 }
 
 #main-view {
-    padding-top: 6px ;
-    border-top: 1px solid #D0D0D0 ;
-    background-color: #E6E6E6 ;
+    background-color: #f1f1f1 ;
     flex-grow: 1;
     display: grid;
     grid-template-rows: minmax(0px, min-content) 1fr;
-    grid-template-columns: 599px auto 0px auto 1fr;
+    grid-template-columns: 569px auto 0px auto 1fr;
 }
 
 #main-options {
     background-color: inherit;
-    border: 1px solid #ACACAC ;
+    /*border: 1px solid #ACACAC ;*/
     grid-area: 2 / 3 / span 1 / span 1;
-    width: 587px;
+    width: 557px;
     opacity: 1;
     overflow: hidden;
     z-index: 40;
@@ -240,6 +286,8 @@ body.windows.electron #header-buttons {
     opacity: 1;
     transition: opacity 0.1s, width 0.2s;
     min-width: 0px;
+    border-right: none;
+    border-bottom: none;
 }
 
 #splitter {
@@ -260,13 +308,15 @@ body.windows.electron #header-buttons {
 
 .silky-options-control {
     height: 100%;
-    float: right;
+    /* float: right; */
     box-sizing: border-box;
-    width: 585px;
+    width: 556px;
     border: none;
     opacity: 1;
     transition: opacity 0.5s, visibility 0.5s;
     visibility: visible;
+    top: 0px;
+    position: absolute;
 }
 
 .silky-hidden-options-control {

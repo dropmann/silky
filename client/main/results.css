@@ -33,7 +33,7 @@
 }
 
 .jmv-results-panel[data-analysis-selected] {
-    background-color: #E8E8E8 ;
+    background-color: #f1f1f1;
 }
 
 .jmv-results-panel.all-selected {
@@ -56,7 +56,7 @@
 }
 
 .jmv-results-panel:not(.all-selected) .jmv-results-container.empty-analysis iframe.hover {
-    background-color: #f1f1f1 ;
+    background-color: #fafafa ;
 }
 
 .jmv-results-container[data-selected] .jmv-results-cover {

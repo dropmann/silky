@@ -89,40 +89,51 @@ h1 {
 .silky-options-content {
     border: none;
     overflow: auto;
-    padding-right: 15px;
-    padding-left: 15px;
-    padding-top: 15px;
     box-sizing: border-box;
     overflow-x: hidden;
+    padding-right: 3px;
+    padding-left: 3px;
 }
 
 .silky-sp-back-button {
-    font-size: 24px ;
-    width: 40px ;
-    height: 40px ;
-    /*float: right;*/
-    box-sizing: border-box ;
-    border: 3px solid #555555 ;
-    border-radius: 50% ;
-    text-align: center ;
-    vertical-align: middle ;
-    cursor: default ;
-    margin-top: 6px ;
-    margin-bottom: 6px ;
-    margin-right: 6px ;
-    color: #555555 ;
-    display: inline-block;
+    /* background-image: url(../assets/action-back.svg); */
+    mask: url(../assets/action-back.svg);
+    background-color: #6d6c6c;
+    -webkit-mask: url(../assets/action-back.svg);
+    transform: rotate(180deg);
+    background-repeat: no-repeat;
+    background-position: center;
+    border-radius: 20px;
+    /* margin-top: 6px; */
+    transition: 0.2s border;
+    border: 2px #f1f1f1 solid;
+    /* filter: contrast(0.5); */
+    /* background-blend-mode: lighten; */
+    /* background-color: #ffffff; */
+    background-size: 30px 30px;
+    /* font-size: 24px; */
+    width: 20px;
+    height: 20px;
+    /* line-height: 40px; */
+    /* float: right; */
+    /* box-sizing: border-box; */
+    /* border: 3px solid #555555; */
+    /* border-radius: 50%; */
+    text-align: center;
+    /* vertical-align: middle; */
+    cursor: default;
+    /* margin-top: 6px; */
+    /* margin-bottom: 6px; */
+    /* margin-right: 6px; */
+    color: #a9a9a9;
+    /* display: inline-block; */
 }
 
 .silky-sp-back-button:hover {
-
-    border-color: #999999 ;
-    color: #999999 ;
+    background-color: #a3a3a3;
+    /* border: #b8b8b8 2px solid;*/
 }
 
-.silky-sp-back-button span {
-    line-height: 34px ;
-}
 
 .silky-options-title {
     display: inline ;
@@ -133,17 +144,16 @@ h1 {
 .silky-options-header {
     flex-shrink: 0;
     flex-grow: 0;
-
     display: flex;
     justify-content: space-between;
-    align-items:center;
-
-    margin-top: 5px ;
-    padding-bottom: 5px ;
-    padding-right: 15px ;
-    padding-left: 15px ;
-
-    background-image: linear-gradient(to left, #ACACAC, transparent);
+    align-items: center;
+    /* margin-top: 5px; */
+    /* padding-bottom: 5px; */
+    /*padding-right: 15px;*/
+    padding-left: 15px;
+    /* border-bottom: #d5d5d5 1px solid; */
+    /* border-top: #d5d5d5 1px solid; */
+    /* background-image: linear-gradient(to left, #d5d5d5, transparent); */
     background-size: 100% 2px;
     background-position: 0 100%;
     background-repeat: no-repeat;
@@ -210,6 +220,7 @@ h1 {
 .silky-option-list {
     border: 1px solid rgb(130, 130, 130);
     background-color: rgb(255, 255, 255);
+    border-radius: 2px;
 }
 
 .silky-dropdown-toggle:before {

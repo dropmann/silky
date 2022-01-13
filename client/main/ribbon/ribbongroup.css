@@ -39,8 +39,9 @@
 
 .jmv-ribbon-group[data-position="bottom"] > .jmv-ribbon-group-label {
     order: 1;
-    font-size: 70%;
+    font-size: 82%;
     text-align: center;
+    margin-top: 3px;
 }
 
 .jmv-ribbon-group[data-position="top"] > .jmv-ribbon-group-body {

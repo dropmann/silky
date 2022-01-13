@@ -22,6 +22,7 @@
 .silky-target-list {
     border: 1px solid rgb(130, 130, 130);
     background-color: rgb(255, 255, 255);
+    border-radius: 2px;
 }
 
 .silky-option-list.silky-target-list {
@@ -49,6 +50,7 @@
     margin-right: 10px;
     margin-bottom: 5px;
     padding: unset;
+    border-radius: 4px;
 }
 
 .jmv-toolbar:not(.jmv-toolbar-disabled) .jmv-toolbar-button:not(.jmv-toolbar-disabled):hover {

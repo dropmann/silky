@@ -23,11 +23,11 @@
 }
 
 .jmv-variable-editor.sub-editor-open {
-    background-color: #e0e0e0
+    background-color: #eaeaea
 }
 
 .jmv-variable-editor.sub-editor-open.hover {
-    background-color: #cccccc
+    background-color: #dedede
 }
 
 .jmv-variable-editor.hidden {

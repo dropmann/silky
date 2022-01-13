@@ -106,6 +106,8 @@ const RibbonView = Backbone.View.extend({
 
             if (this.selectedTab) {
                 this.selectedTab.$el.addClass('selected');
+                let $span = this.selectedTab.$el.find('span');
+                this.$bar.css({left: $span.position().left + 'px', width: $span.width() + 'px'});
                 this.$fullScreen.attr('data-tabname', this.selectedTab.name);
             }
 
@@ -119,6 +121,7 @@ const RibbonView = Backbone.View.extend({
 
         this.$el.append(`
             <div class="jmv-ribbon-header">
+                <div class="bar"></div>
                 <div class="jmv-ribbon-fullscreen"></div>
                 <div class="jmv-ribbon-appmenu"></div>
             </div>
@@ -130,6 +133,7 @@ const RibbonView = Backbone.View.extend({
             <div class="jmv-store"></div>
         `);
 
+        this.$bar = this.$el.find('.bar');
         this.$header = this.$el.find('.jmv-ribbon-header');
         this.$body   = this.$el.find('.jmv-ribbon-body');
         this.$appMenu = this.$el.find('.jmv-ribbon-appmenu');
@@ -154,9 +158,19 @@ const RibbonView = Backbone.View.extend({
                 this.selectedTab = tab;
             }
 
-            let $tab = $('<div class="' + classes + '" data-tabname="' + tab.name.toLowerCase() + '">' + tab.title + '</div>');
+            let $tab = $('<div class="' + classes + '" data-tabname="' + tab.name.toLowerCase() + '"><span>' + tab.title + '</span></div>');
+            $tab.on('mouseover', () => {
+                $tab.css('width', $tab.width());
+            });
             this.$header.append($tab);
             tab.$el = $tab;
+
+            if (isSelected) {
+                setTimeout(() => {
+                    let $span = $tab.find('span');
+                    this.$bar.css({left: $span.position().left + 'px', width: '0px'});
+                }, 10);
+            }
         }
 
         this.$tabs = this.$header.find('.jmv-ribbon-tab');
@@ -261,6 +275,8 @@ const RibbonView = Backbone.View.extend({
     _ribbonClicked : function(event) {
         this._closeMenus();
         let index = this.$tabs.index(event.target);
+        if (index === -1 && event.target.parentElement)
+            index = this.$tabs.index(event.target.parentElement);
         let tab = this.model.getTab(index);
         if (tab.getRibbonItems)
             this.model.set('selectedTab', tab.name);

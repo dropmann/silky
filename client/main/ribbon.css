@@ -1,54 +1,81 @@
 
 .jmv-ribbon {
     width: 100% ;
-    color: #777777 ;
+    color: #1b1b1b ;
     flex-grow: 0;
     flex-shrink: 0;
 }
 
 .jmv-ribbon-header {
-    display: flex ;
-    flex-direction: row ;
+    display: flex;
+    flex-direction: row;
+    margin-left: 5px;
+    height: 30px;
+    position: relative;
+}
+
+.jmv-ribbon-header .bar {
+    background-color: #3e6da9;
+    height: 2px;
+    position: absolute;
+    width: 0px;
+    bottom: 3px;
+    left: 0px;
+    transition: .15s left ease-out, .15s width ease-out;
 }
 
 .jmv-ribbon-tab {
-    background-color : inherit ;
-    color: white ;
-    padding: 8px 20px ;
+    background-color: inherit;
+    color: #333333;
+    padding: 0px 10px;
     -webkit-app-region: no-drag;
     line-height: 100%;
+    font-size: 106%;
+    font-weight: 400;
+    margin-bottom: 3px;
+    align-self: flex-end;
+}
+
+.jmv-ribbon-tab:not([data-tabname=file]) span {
+    border-bottom: #f1f1f1 3px solid;
+    display: inline-block;
+    height: 17px;
+    transition: 0.2s border-color;
 }
 
 .jmv-ribbon-appmenu {
-    position: absolute ;
-    right: 6px ;
-    /*top: 8px ;*/
-    font-size: 150% ;
-    text-align: center ;
-    width: 24px ;
-    height: 24px ;
-    color : #FFFFFF ;
-    border-radius: 1px ;
-    padding: 0 ;
+    position: absolute;
+    right: 6px;
+    /* top: 8px; */
+    border-radius: 4px;
+    font-size: 150%;
+    text-align: center;
+    width: 22px;
+    height: 22px;
+    color: #333333;
+    /* border-radius: 1px; */
+    padding: 0;
     -webkit-app-region: no-drag;
+    transition: 0.1s background-color;
 }
 
 .jmv-ribbon-fullscreen {
-    position: absolute ;
-    right: 30px ;
-    /*top: 8px ;*/
-    font-size: 150% ;
-    text-align: center ;
-    width: 24px ;
-    height: 24px ;
-    color : #FFFFFF ;
-    border-radius: 1px ;
-    padding: 0 ;
+    position: absolute;
+    right: 30px;
+    border-radius: 4px;
+    font-size: 150%;
+    text-align: center;
+    width: 22px;
+    height: 22px;
+    color: #FFFFFF;
+    padding: 0;
     -webkit-app-region: no-drag;
-    background-image: url("../assets/fullscreen-hide-data.svg");
+    background-image: url(../assets/fullscreen-hide-data.svg);
     background-position: center;
     background-repeat: no-repeat;
-    background-size: 60% 60%
+    background-size: 60% 60%;
+    filter: invert(0.8);
+    transition: 0.1s background-color;
 }
 
 body[data-splitpanel-mode='results'] .jmv-ribbon-fullscreen {
@@ -76,16 +103,8 @@ body[data-splitpanel-mode='mixed'] .jmv-ribbon-fullscreen[data-tabname='data'] {
 }
 
 .jmv-ribbon-appmenu span {
-    line-height: 24px;
+    line-height: 22px;
     vertical-align: top;
-}
-
-body.windows.electron .jmv-ribbon-fullscreen {
-    top: 36px ;
-}
-
-body.windows.electron .jmv-ribbon-appmenu {
-    top: 36px ;
 }
 
 .jmv-ribbon-appmenu:hover {
@@ -95,34 +114,42 @@ body.windows.electron .jmv-ribbon-appmenu {
 
 .jmv-ribbon-fullscreen:hover {
     color: #EEEEEE ;
-    background-color: #4675B1 ;
+    background-color: #000000 ;
+    border-radius: 4px;
 }
 
-.jmv-ribbon-tab:hover {
-    color: #EEEEEE ;
-    background-color: #4675B1 ;
+.jmv-ribbon-tab:hover:not(.selected):not([data-tabname=file]) span {
+    border-bottom: #d7d7d7 3px solid;
 }
 
-.jmv-ribbon-tab.selected {
-    background-color : #F0F0F0 ;
-    color: #3E6DA9 ;
+.jmv-ribbon-tab[data-tabname=file]:hover:not(.selected) {
+    background-color: #f9f9f9;
+    border-radius: 5px;
+}
+
+.jmv-ribbon-tab.selected:not([data-tabname=file]) span {
+    font-weight: 600;
+    border-bottom: #3E6DA9 3px solid;
 }
 
 .jmv-ribbon-tab[data-tabname="file"] {
-    padding: 7px 20px;
-    width: 20px;
+    padding: 3px 10px 6px 10px;
+    transition: 0.1s background-color;
 }
 
 .jmv-ribbon-body {
-    background-color : #F0F0F0 ;
-    height: 58px ;
-    padding: 6px ;
+    background-color: #fAfAfA;
+    height: 67px;
+    box-sizing: content-box;
+    padding: 6px;
     -webkit-app-region: no-drag;
-    display: flex ;
-    /*overflow-x: overlay;
-    overflow-y: visible;*/
+    display: flex;
     -ms-overflow-style: none;
     scrollbar-width: none;
+    border-radius: 7px;
+    margin: 0px 5px 5px 5px;
+    border: #d5d5d5 1px solid;
+    filter: drop-shadow(0px 3px 1px #e7e7e7e7);
 }
 
 .jmv-ribbon-body::-webkit-scrollbar {

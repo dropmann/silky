@@ -1,21 +1,24 @@
 
 
 .jmv-ribbon-button {
-    position: relative ;
-    border: 0 ;
-    width: 74px ;
+    position: relative;
+    border: 0;
+    width: 74px;
     padding: 5px;
-    text-align: center ;
-    border-radius: 1px ;
-
+    text-align: center;
+    border-radius: 1px;
     display: flex;
     flex-wrap: nowrap;
+    border-radius: 4px;
     align-items: center;
+    justify-content: center;
     flex-direction: column;
-
-    transition: 0.2s opacity, 0.2s width, 0.2s visibility;
+    transition: 0.2s opacity, 0.2s width, 0.2s visibility, 0.1s background-color, 0.1s border-color;
     opacity: 1;
     visibility: visible;
+    border: transparent 1px solid;
+    margin: 1px;
+    /* transition: 0.1s background-color, 0.1s border-color; */
 }
 
 .jmv-ribbon[mode=demo] .display-in-menu {
@@ -62,7 +65,8 @@
 }
 
 .jmv-ribbon-button:not([disabled]):not(.maintain-color):hover {
-    background-color: #DDDDDD ;
+    background-color: #f6f3f3;
+    border-color: #DDDDDD;
 }
 
 .jmv-ribbon-button.maintain-color:not([disabled]):hover {
@@ -74,7 +78,9 @@
 }
 
 .jmv-ribbon-button:not([disabled]).checked {
-    background-color: #CCCCCC ;
+    background-color: #eae8e8;
+    border-radius: 5px;
+    border: #CCCCCC 1px solid;
 }
 
 .jmv-ribbon-button:focus {

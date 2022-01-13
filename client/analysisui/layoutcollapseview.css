@@ -11,7 +11,7 @@
 }
 
 .silky-options-collapse-button:hover {
-    background-color: #c9c9c9;
+    background-color: #dfdfdf;
 }
 
 .silky-options-collapse-button.silky-control-margin-small {
@@ -43,12 +43,13 @@
 }
 
 .silky-options-collapse-button {
-    font-size: 100% ;
-    border: 1px solid #B0B0B0;
-    background-color: #D8D8D8;
+    font-size: 100%;
+    border: 1px solid #D8D8D8;
+    background-color: #ebebeb;
+    border-radius: 4px;
     padding: 5px;
-    vertical-align: middle ;
-    color: #555555 ;
+    vertical-align: middle;
+    color: #555555;
 }
 
 .silky-options-collapse-icon {

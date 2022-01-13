@@ -51,6 +51,7 @@
     background-color: rgb(255, 255, 255);
     height: 160px;
     overflow-x: hidden;
+    border-radius: 2px;
 }
 
 .silky-rmanova-factors-header {

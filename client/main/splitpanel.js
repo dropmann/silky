@@ -521,8 +521,8 @@ const SplitPanel = SilkyView.extend({
                         resolve();
                 }
 
-                if (! silent && changed)
-                    this.$el.trigger('mode-changed');
+                if (changed)
+                    this.$el.trigger('mode-changed', silent);
             });
         });
     },
