@@ -230,7 +230,7 @@ class I18n {
             return rank;
         };
 
-        let bestLanguage = null;
+        let bestLanguage = { code: 'en' };
         let currentRank = 0;
         for (let language of languages) {
             let rank = compare(desiredLanguage, language);
