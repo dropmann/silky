@@ -90,10 +90,16 @@ class Main {  // this is constructed at the bottom
         $(document).mousemove(this, (event) => this._mouseMove(event));
 
         contextMenuListener(document.body, (event) => {
-            let clickEvent = $.Event('contextmenu');
-            clickEvent.pageX = event.pageX;
-            clickEvent.pageY = event.pageY;
-            this.$results.trigger(clickEvent);
+            const clickEvent = new MouseEvent('contextmenu', {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+                clientX: event.clientX,
+                clientY: event.clientY,
+                screenX: event.screenX,
+                screenY: event.screenY
+            });
+            this.$results[0].dispatchEvent(clickEvent);
         });
     }
 
