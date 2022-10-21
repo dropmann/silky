@@ -29,7 +29,7 @@ module.exports = {
                 element.removeEventListener('pointermove', cancelRightClick);
                 if (rightClickTimeout) {
                     clearTimeout(rightClickTimeout);
-                    this.rightClickTimeout = null;
+                    rightClickTimeout = null;
                 }
             };
 
@@ -37,6 +37,7 @@ module.exports = {
                 element.addEventListener('pointerup', cancelRightClick);
                 element.addEventListener('pointercancel', cancelRightClick);
                 element.addEventListener('pointermove', cancelRightClick);
+                event.stopPropagation();
 
                 rightClickTimeout = setTimeout(() => {
                     rightClickTimeout = null;
