@@ -28,18 +28,6 @@ class AnnotationTab extends RibbonTab {
         }
     }
 
-    clearValues(_items) {
-        if (_items === undefined)
-            _items = this.getRibbonItems();
-
-        for (let item of _items) {
-            if (item.value)
-                item.setValue(null);
-            else if (item.items)
-                this.clearValues(item.items);
-        }
-    }
-
     createColorItems(prefix, resetText) {
         return [
             new RibbonButton({ title: resetText, name: prefix + 'Reset', class: 'reset-color' }),

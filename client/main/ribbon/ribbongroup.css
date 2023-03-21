@@ -25,6 +25,10 @@
     margin: 0px 7px;
 }
 
+.jmv-ribbon-group-margin-none {
+    margin: 0px 0px;
+}
+
 .jmv-ribbon-group-body-vertical > .jmv-ribbon-group[data-position="top"] {
     /*margin: 5px;*/
 }

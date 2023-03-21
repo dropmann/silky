@@ -575,131 +575,50 @@ $(document).ready(async() => {
     });
 
     resultsView.$el.on('activeFormatChanged', (event, data) => {
-        let annotationsTab = ribbonModel.getTab('annotation');
-        annotationsTab.clearValues();
-
-        let alignmentSet = false;
-
-        let formats = data.formats;
-
         if (data.type === 'heading') {
-            ActionHub.get('textBold').set('enabled', false);
-            ActionHub.get('textUnderline').set('enabled', false);
-            ActionHub.get('textItalic').set('enabled', false);
-            ActionHub.get('textStrike').set('enabled', false);
-            ActionHub.get('textSubScript').set('enabled', false);
-            ActionHub.get('textSuperScript').set('enabled', false);
-            ActionHub.get('textCodeBlock').set('enabled', false);
-            ActionHub.get('textH2').set('enabled', false);
-            ActionHub.get('textListOrdered').set('enabled', false);
-            ActionHub.get('textListBullet').set('enabled', false);
-            ActionHub.get('textAlignCenter').set('enabled', false);
-            ActionHub.get('textAlignJustify').set('enabled', false);
-            ActionHub.get('textAlignRight').set('enabled', false);
-            ActionHub.get('textAlignLeft').set('enabled', false);
+            ActionHub.get('textBold').set({ enabled: false, value: false });
+            ActionHub.get('textUnderline').set({ enabled: false, value: false });
+            ActionHub.get('textItalic').set({ enabled: false, value: false });
+            ActionHub.get('textStrike').set({ enabled: false, value: false });
+            ActionHub.get('textSubScript').set({ enabled: false, value: false });
+            ActionHub.get('textSuperScript').set({ enabled: false, value: false });
+            ActionHub.get('textCodeBlock').set({ enabled: false, value: false });
+            ActionHub.get('textH2').set({ enabled: false, value: false });
+            ActionHub.get('textListOrdered').set({ enabled: false, value: false });
+            ActionHub.get('textListBullet').set({ enabled: false, value: false });
+            ActionHub.get('textAlignCenter').set({ enabled: false, value: false });
+            ActionHub.get('textAlignJustify').set({ enabled: false, value: false });
+            ActionHub.get('textAlignRight').set({ enabled: false, value: false });
+            ActionHub.get('textAlignLeft').set({ enabled: false, value: false });
             ActionHub.get('textLink').set('enabled', false);
             ActionHub.get('textFormula').set('enabled', false);
             ActionHub.get('textIndentLeft').set('enabled', false);
             ActionHub.get('textIndentRight').set('enabled', false);
             ActionHub.get('textColor').set('enabled', false);
             ActionHub.get('textBackColor').set('enabled', false);
-
-            return;
         }
         else {
-            ActionHub.get('textBold').set('enabled', true);
-            ActionHub.get('textUnderline').set('enabled', true);
-            ActionHub.get('textItalic').set('enabled', true);
-            ActionHub.get('textStrike').set('enabled', true);
-            ActionHub.get('textSubScript').set('enabled', true);
-            ActionHub.get('textSuperScript').set('enabled', true);
-            ActionHub.get('textCodeBlock').set('enabled', true);
-            ActionHub.get('textH2').set('enabled', true);
-            ActionHub.get('textListOrdered').set('enabled', true);
-            ActionHub.get('textListBullet').set('enabled', true);
-            ActionHub.get('textAlignCenter').set('enabled', true);
-            ActionHub.get('textAlignJustify').set('enabled', true);
-            ActionHub.get('textAlignRight').set('enabled', true);
-            ActionHub.get('textAlignLeft').set('enabled', true);
-            ActionHub.get('textLink').set('enabled', true);
-            ActionHub.get('textFormula').set('enabled', true);
-            ActionHub.get('textIndentLeft').set('enabled', true);
-            ActionHub.get('textIndentRight').set('enabled', true);
-            ActionHub.get('textColor').set('enabled', true);
-            ActionHub.get('textBackColor').set('enabled', true);
-        }
-
-        let button = null;
-        for (let name in formats) {
-            switch (name) {
-                case 'bold':
-                    button = annotationsTab.getItem('textBold');
-                    button.setValue(formats[name]);
-                    break;
-                case 'underline':
-                    button = annotationsTab.getItem('textUnderline');
-                    button.setValue(formats[name]);
-                    break;
-                case 'italic':
-                    button = annotationsTab.getItem('textItalic');
-                    button.setValue(formats[name]);
-                    break;
-                case 'strike':
-                    button = annotationsTab.getItem('textStrike');
-                    button.setValue(formats[name]);
-                    break;
-                case 'script':
-                    if (formats[name] === 'sub') {
-                        button = annotationsTab.getItem('textSubScript');
-                        button.setValue(true);
-                    }
-                    else if (formats[name] === 'super') {
-                        button = annotationsTab.getItem('textSuperScript');
-                        button.setValue(true);
-                    }
-                    break;
-                case 'code-block':
-                    button = annotationsTab.getItem('textCodeBlock');
-                    button.setValue(formats[name]);
-                    break;
-                case 'header':
-                    if (formats[name] === 2) {
-                        button = annotationsTab.getItem('textH2');
-                        button.setValue(true);
-                    }
-                    break;
-                case 'list':
-                    if (formats[name] === 'ordered') {
-                        button = annotationsTab.getItem('textListOrdered');
-                        button.setValue(true);
-                    }
-                    else if (formats[name] === 'bullet') {
-                        button = annotationsTab.getItem('textListBullet');
-                        button.setValue(true);
-                    }
-                    break;
-                case 'align':
-                    alignmentSet = true;
-                    if (formats[name] === 'center') {
-                        button = annotationsTab.getItem('textAlignCenter');
-                        button.setValue(true);
-                    }
-                    else if (formats[name] === 'right') {
-                        button = annotationsTab.getItem('textAlignRight');
-                        button.setValue(true);
-                    }
-                    else if (formats[name] === 'justify') {
-                        button = annotationsTab.getItem('textAlignJustify');
-                        button.setValue(true);
-                    }
-                    break;
-            }
-
-        }
-
-        if (alignmentSet === false) {
-            button = annotationsTab.getItem('textAlignLeft');
-            button.setValue(true);
+            let formats = data.formats;
+            ActionHub.get('textBold').set({ enabled: true, value: formats.bold | false });
+            ActionHub.get('textUnderline').set({ enabled: true, value: formats.underline | false });
+            ActionHub.get('textItalic').set({ enabled: true, value: formats.italic | false });
+            ActionHub.get('textStrike').set({ enabled: true, value: formats.strike | false });
+            ActionHub.get('textSubScript').set({ enabled: true, value: formats.script === 'sub' });
+            ActionHub.get('textSuperScript').set({ enabled: true, value: formats.script === 'super' });
+            ActionHub.get('textCodeBlock').set({ enabled: true, value: formats['code-block'] | false });
+            ActionHub.get('textH2').set({ enabled: true, value: formats.header | false });
+            ActionHub.get('textListOrdered').set({ enabled: true, value: formats.list === 'ordered' });
+            ActionHub.get('textListBullet').set({ enabled: true, value: formats.list === 'bullet' });
+            ActionHub.get('textAlignCenter').set({ enabled: true, value: formats.align === 'center' });
+            ActionHub.get('textAlignJustify').set({ enabled: true, value: formats.align === 'justify' });
+            ActionHub.get('textAlignRight').set({ enabled: true, value: formats.align === 'right' });
+            ActionHub.get('textAlignLeft').set({ enabled: true, value: formats.align === undefined || formats.align === 'left' });
+            ActionHub.get('textLink').set({ enabled: true });
+            ActionHub.get('textFormula').set({ enabled: true });
+            ActionHub.get('textIndentLeft').set({ enabled: true });
+            ActionHub.get('textIndentRight').set({ enabled: true });
+            ActionHub.get('textColor').set({ enabled: true });
+            ActionHub.get('textBackColor').set({ enabled: true });
         }
     });
 

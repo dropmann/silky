@@ -7,6 +7,11 @@ const RibbonMenu = require('./ribbonmenu');
 const RibbonTab = require('./ribbontab');
 const Placeholder = require('./placeholder');
 
+const RibbonButton = require('./ribbonbutton');
+const RibbonSeparator = require('./ribbonseparator');
+const RibbonGroup = require('./ribbongroup');
+const RibbonListbox = require('./ribbonlistbox');
+
 const Store = require('../store');
 
 class AnalyseTab extends RibbonTab {
@@ -74,6 +79,10 @@ class AnalyseTab extends RibbonTab {
     }
 
     async getRibbonItems(ribbon) {
+        if (this.optionsGroup !== undefined) {
+            this.optionsGroup.$el.detach();
+        }
+
         this.buttons = [ ];
         if ( ! this.modules)
             return this.buttons;
@@ -191,7 +200,37 @@ class AnalyseTab extends RibbonTab {
             this.buttons.push(new Placeholder('factor', _('Factor')));
         }
 
+        this.buttons.push(new RibbonSeparator());
+
+        if (this.optionsGroup === undefined)
+            this.optionsGroup = this.constructOptionsButtons();
+        
+        this.buttons.push(this.optionsGroup);
+
         return this.buttons;
+    }
+
+    constructOptionsButtons() {
+        let optionsGroup = new RibbonGroup({
+            title: _('Results'), margin: 'large', items: [
+                new RibbonButton({
+                    title: _('Options'), name: 'resultsOptions', size: 'medium', shortcutKey: 'o', shortcutPosition: { x: '50%', y: '90%' }, subItems: [
+                        new RibbonGroup({
+                            orientation: 'vertical', titlePosition: 'top', title: _('Variable'), items: [
+                                new RibbonListbox({
+                                    title: _('Display Label'), name: 'varLabel', size: 'medium', shortcutKey: 'l', shortcutPosition: { x: '50%', y: '90%' }
+                                })]
+                        }),
+                        new RibbonSeparator(),
+                        new RibbonButton({
+                            title: _('Application level options...'), name: 'appLevelOptions', size: 'medium', shortcutKey: 'a', shortcutPosition: { x: '50%', y: '90%' }
+                        })
+                    ]
+                })
+            ]
+        });
+
+        return optionsGroup;
     }
 
     _analysisSelected(analysis) {

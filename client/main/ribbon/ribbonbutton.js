@@ -96,6 +96,19 @@ const RibbonButton = Backbone.View.extend({
                 this._clicked(event, false);
         });
 
+        this.action = ActionHub.get(name);
+        this.setEnabled(this.action.get('enabled'));
+        this.action.on('change:enabled', (event) => {
+            this.setEnabled(event.changed.enabled);
+        });
+        this.action.on('change:value', (event) => {
+            if (event.changed.value)
+                this.$el.addClass('checked');
+            else
+                this.$el.removeClass('checked');
+        });
+
+
         this._refresh();
 
         if (params.subItems !== undefined) {
@@ -103,16 +116,9 @@ const RibbonButton = Backbone.View.extend({
                 this.addItem(params.subItems[i]);
         }
 
-        let action = ActionHub.get(name);
-        this.setEnabled(action.get('enabled'));
-        action.on('change:enabled', (event) => {
-            this.setEnabled(event.changed.enabled);
-        });
-
+        
         if (this.size === 'small' && this.title !== null)
             this.$el.attr('title', this.title);
-
-        this.value = false;
     },
     render_xml(id, xml_string){
         var doc = new DOMParser().parseFromString(xml_string, 'application/xml');
@@ -122,11 +128,7 @@ const RibbonButton = Backbone.View.extend({
         );
     },
     setValue(value) {
-        this.value = value;
-        if (value)
-            this.$el.addClass('checked');
-        else
-            this.$el.removeClass('checked');
+        this.action.set('value', value);
     },
     setParent(parent, parentShortcutPath, inMenu) {
         this.parent = parent;
@@ -169,16 +171,14 @@ const RibbonButton = Backbone.View.extend({
         if (this.menu && $target.closest(this.menu.$el).length !== 0)
             return;
 
-        let action = ActionHub.get(this.name);
-
-        if ( ! action.attributes.enabled)
+        if ( ! this.action.attributes.enabled)
             ; // do nothing
         else if (this._menuGroup !== undefined) {
             this._toggleMenu(fromMouse);
-            action.do(this);
+            this.action.do(this);
         }
         else {
-            action.do(this);
+            this.action.do(this);
             this.$el.trigger('menuActioned', this);
         }
 
@@ -197,8 +197,7 @@ const RibbonButton = Backbone.View.extend({
             $('<div class="jmv-ribbon-menu-arrow"></div>').appendTo(this.$el);
 
             this.$el.on('menuActioned', (event, item) => {
-                let action = ActionHub.get(this.name);
-                action.do(item);
+                this.action.do(item);
             });
         }
 
@@ -230,6 +229,11 @@ const RibbonButton = Backbone.View.extend({
             this.$el.attr('aria-label', this.title);
 
         this.$el.html(html);
+
+        if (this.action.attributes.value)
+            this.$el.addClass('checked');
+        else
+            this.$el.removeClass('checked');
     },
 
     hideMenu(fromMouse) {
