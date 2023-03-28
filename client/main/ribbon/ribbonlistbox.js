@@ -78,15 +78,23 @@ const RibbonListbox = Backbone.View.extend({
 
         this.setting = DataSettings.get(name);
 
-        let $select = this.$el.find('select');
-        $select[0].value = this.setting.getValue();
-
         this.setEnabled(this.setting.isEnabled())
         this.setting.on('change:enabled', (event) => {
             this.setEnabled(event.value);
         });
         this.setting.on('change:value', (event) => {
             this.$el.find('select')[0].value = event.value;
+        });
+        this.setting.on('change:options', (event) => {
+            let def = event.options;
+            let options = def.options;
+            let html = '';
+            for (let option of options) 
+                html += `<option value="${option.value}">${option.label}</option>`;
+
+            let $select = this.$el.find('select');
+            $select.html(html);
+            $select[0].value = this.setting.getValue();
         });
     },
     setValue(value) {
@@ -133,7 +141,7 @@ const RibbonListbox = Backbone.View.extend({
     _refresh() {
         let html = '';
         html += '   <div class="jmv-ribbon-button-icon" role="none">' + (this.icon === null ? '' : this.icon) + '</div>';
-        html += `<div id="${this.labelId}" class="jmv-ribbon-button-label">${this.title}</div><select aria-labelledby="${this.labelId}"><option value="0">Variable Name</option><option value="1">Variable Description</option></select>`;
+        html += `<div id="${this.labelId}" class="jmv-ribbon-button-label">${this.title}</div><select aria-labelledby="${this.labelId}"></select>`;
 
         this.$el.html(html);
 

@@ -218,7 +218,7 @@ class AnalyseTab extends RibbonTab {
                         new RibbonGroup({
                             orientation: 'vertical', titlePosition: 'top', title: _('Variable'), items: [
                                 new RibbonListbox({
-                                    title: _('Display Label'), name: 'varLabel', size: 'medium', shortcutKey: 'l', shortcutPosition: { x: '50%', y: '90%' }
+                                    title: _('Display Label'), name: 'sheet/results/analysis/varLabel', size: 'medium', shortcutKey: 'l', shortcutPosition: { x: '50%', y: '90%' }
                                 })]
                         }),
                         new RibbonSeparator(),
