@@ -82,20 +82,30 @@ const RibbonListbox = Backbone.View.extend({
         this.setting.on('change:enabled', (event) => {
             this.setEnabled(event.value);
         });
+        
+        this.$el.find('select')[0].value = this.setting.getValue();
         this.setting.on('change:value', (event) => {
             this.$el.find('select')[0].value = event.value;
         });
-        this.setting.on('change:options', (event) => {
-            let def = event.options;
-            let options = def.options;
-            let html = '';
-            for (let option of options) 
-                html += `<option value="${option.value}">${option.label}</option>`;
 
-            let $select = this.$el.find('select');
-            $select.html(html);
-            $select[0].value = this.setting.getValue();
-        });
+        let def = this.setting.getOptions();
+        if (def)
+            this.setOptions(def.options);
+        else {
+            this.setting.once('change:options', (event) => {
+                let def = event.options;
+                this.setOptions(def.options);
+            });
+        }
+    },
+    setOptions(options) {
+        let html = '';
+        for (let option of options)
+            html += `<option value="${option.value}">${option.label}</option>`;
+
+        let $select = this.$el.find('select');
+        $select.html(html);
+        $select[0].value = this.setting.getValue();
     },
     setValue(value) {
         this.setting.setValue(value);

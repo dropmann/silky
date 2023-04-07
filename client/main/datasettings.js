@@ -2,78 +2,567 @@
 
 const EventEmitter = require('events');
 
-class ContextSetting extends Setting {
-    constructor(setting, parent) {
-        super(this._baseSetting.name(), parent);
-        this._baseSetting = setting;
+class AppSettings extends EventEmitter {
+    constructor(data) {
+        super();
 
-        let options = setting.getOptions();
-        if (options !== null)
-            this.setOptions(options);
+        this._settings = {
+
+        }
+
+        this._proxys = {
+
+        }
+
+        this._focusZones = {
+
+        };
+
+        this.valueChangedEvent = this.valueChangedEvent.bind(this);
+
+        this.processData(data);
+
+        /*setTimeout((event) => {
+            this.recieveData();
+        }, 10000);*/
+        
+    }
+
+    // jonathon needs to add to
+    pushData(data) {
+        // push to server
+
+        //example data
+       /*let data = {
+            'sheets/results/analysis/varLabel': 0
+        }*/
+        console.log(data);
+    }
+
+    // jonathon needs to add to
+    recieveData(event) {
+        // get data from server
+        
+
+
+        // example data
+        let data = {
+            action: 'refresh', // update, remove, refresh
+            content: { // for refresh all settings need to represented or they will be removed
+                'sheet/results/analysis/varLabel': 0,
+                'sheet[0]/results/analysis/varLabel': 1,
+                'sheet[0]/name': 'worksheet 1',
+                'sheet[1]/index': '0',
+                'sheet[0]/DataviewMode': 'spreadsheet',
+                'sheet[1]/DataviewMode': 'variablelist',
+                'sheet[2]/DataviewMode': 'variablelist'
+            }
+        };
+
+        /*let data = {
+            action: 'remove',
+            content: [ 
+                'sheets/results/analysis/varLabel'
+            ]
+        };*/
+
+        /*let data = {
+            action: 'update',
+            content: {
+                'sheets/results/analysis/varLabel': 0
+            }
+        };*/
+
+        switch (data.action) {
+            case 'refresh':
+                this.refreshData(data.content);
+                break;
+            case 'update':
+                this.processData(data.content);
+                break;
+            case 'remove':
+                this.removeSettings(data.content);
+        }
+    }
+
+    refreshData(data) {
+        this.startPurge();
+        this.processData(data);
+        this.endPurge();
+    }
+
+    startPurge() {
+        for (let path in this._settings) {
+            let setting = this._settings[path];
+            setting._purge = true;
+            setting.startPurge();
+        }
+    }
+
+    endPurge() {
+        for (let path in this._settings) {
+            let setting = this._settings[path];
+            if (setting._purge) {
+                if (setting.hasDefinition()) {
+                    setting._purge = false;
+                    setting.clearContexts();
+                }
+                else
+                    this.removeSetting(path);
+            }
+            else
+                setting.endPurge();
+        }
+    }
+
+    define(path, def) {
+        let directPath = stripPath(path);
+        let isRootPath = path === directPath;
+        if (isRootPath === false)
+            throw 'Must be root path';
+        
+        let rootSetting = this._settings[directPath];
+        if (!rootSetting) {
+            rootSetting = new Setting(directPath);
+            this._settings[directPath] = rootSetting;
+            this._settingAdded(rootSetting);
+        }
+
+        if (rootSetting.getOptions() !== null)
+            throw 'Setting has already been defined.';
+        
+        rootSetting._purge = false;
+        rootSetting.setOptions(def);
+
+    }
+
+    get(path) {
+        let proxy = this._proxys[path];
+        if (!proxy) {
+            proxy = new ProxySetting(path, this);
+            this._proxys[path] = proxy;
+        }
+
+        return proxy;
+    }
+
+    _settingAdded(setting) {
+        setting.on('change:value', this.valueChangedEvent);
+        this.emit('setting:added', { path: setting.path() });
+    }
+
+    _settingRemoved(setting) {
+        setting.off('change:value', this.valueChangedEvent);
+        this.emit('setting.removed', { path: setting.path() });
+        console.log(`setting removed:${setting.path()}`);
+    }
+
+    removeSetting(path) {
+        let setting = this._settings[path];
+        if (setting) {
+            delete this._settings[path];
+            this._settingRemoved(setting);
+        }
+    }
+
+    removeSettings(paths) {
+        for (let path of paths) {
+            let rootSetting = this._settings[path];
+            if (!rootSetting) {
+                let directPath = stripPath(path);
+                rootSetting = this._settings[directPath];
+                if (rootSetting)
+                    rootSetting.removeContext(path);
+            }
+            else {
+                delete this._settings[path];
+                this._settingRemoved(rootSetting);
+            }
+        }
+    }
+
+    valueChangedEvent(event) {
+        let data = {};
+        data[event.path] = event.value;
+        
+        this.pushData(data);
+    }
+
+    processData(data) {
+        for (let path in data) {
+            let directPath = stripPath(path);
+            let rootSetting = this._settings[directPath];
+            if (!rootSetting) {
+                rootSetting = new Setting(directPath);
+                this._settings[directPath] = rootSetting;
+                this._settingAdded(rootSetting);
+            }
+
+            rootSetting._purge = false;
+            let isRootSetting = path === directPath;
+
+            let options = data[path];
+            if (options.defaultValue !== undefined) {
+                if (isRootSetting && rootSetting.getOptions() === null)
+                    rootSetting.setOptions(options);
+                else
+                    throw 'Cannot set options to a context or options have already been asigned';
+            }
+            else
+                rootSetting.setContext(data[path], path);
+        }
+    }
+
+    setContextFocus(zone, context) {
+        let proxys = this._focusZones[zone];
+        if (!proxys) {
+            proxys = [];
+            this._focusZones[zone] = proxys;
+        }
+        
+        if (context === null) {
+            for (let proxy of proxys)
+                proxy.setContextFocus(null);
+        }
         else {
-            setting.once('change:options', (event) => {
-                this.setOptions(setting.getOptions());
-            });
+            for (let path in this._proxys) {
+                let proxy = this._proxys[path];
+                if (proxy.setContextFocus(context)) {
+                    proxys.push(proxy);
+                }
+            }
         }
     }
 }
 
+class Value extends EventEmitter {
+    constructor(path, setting) {
+        super();
+        this._setting = setting;
+        this._path = path;
+        this._value = null;
+    }
+
+    getValue() {
+        if (this._value === null)
+            return this._setting.getDefaultValue();
+
+        return this._value;
+    }
+
+    path() {
+        return this._path;
+    }
+
+    setValue(value) {
+        let validated = this._setting.valiadate(value);
+        if (validated !== this._value) {
+            this._value = validated;
+
+            this.emit('change:value', { path: this._path, value: this._value });
+
+            return true;
+        }
+        return false;
+    }
+
+    getOptions() {
+        return this._setting.getOptions();
+    }
+}
+
 class Setting extends EventEmitter {
-    constructor(name, parent) {
+    constructor(path) {
         super();
 
-        this._name = name;
-        this._enabled = false;
-        this._value = null;
+        this.onValueChanged = this.onValueChanged.bind(this);
+
+        this._path = path;
         this._options = null;
         this._local = false;
         this._global = false;
         this._defaultValue = null;
-        this._parent = parent;
+
+        this._contextValues = {};  // if global is ignored
     }
 
-    setOptions(options) {
+    path() {
+        return this._path;
+    }
 
-        let value = options.value;
-        if (value !== undefined && Object.keys(options).length === 1) {
-            this.setValue(options.value);
-            return;
+    startPurge() {
+        for (let path in this._contextValues) {
+            let context = this._contextValues[path];
+            context._purge = true;
+        }
+    }
+
+    endPurge() {
+        for (let path in this._contextValues) {
+            let context = this._contextValues[path];
+            if (context._purge)
+                this.removeContext(path);
+        }
+    }
+
+    setContext(value, path) {  // setContext is like setValue however will create the context if missing.
+        if (path === undefined)
+            path = this._path;
+        
+        let context = this._contextValues[path];
+        if (!context) {
+            context = new Value(path, this);
+            this._contextValues[path] = context;
+            this._valueAdded(context);
+            this.emit('context:added', { path: path });
         }
 
-        let currentValue = this.getValue(); //if the underlying value could change because of the definition change, store the current value
+        context.setValue(value);
+        context._purge = false; // do not remove in a purge
+        return context;
+    }
 
-        this._options = options;
+    getContext(path) {
+        if (this._global)
+            return this._contextValues[this._path];
+        
+        return this._contextValues[path];
+    }
 
-        if (options.global !== undefined)
-            this._global = options.global;
+    /*setValue(value, path) {
+        if (path === undefined || this._global)
+            path = this._path;
         
-        if (options._local !== undefined)
-            this._local = options.local;
+        let context = this._contextValues[path];
+        if (context)
+            return context.setValue(value);
         
-        if (options.defaultValue !== undefined)
-            this._defaultValue = options.defaultValue;
-        
-        this.emit('change:options', { name: this._name, path: this.path(), options: options });
+        return false;
+    }
 
-        if (options.value !== undefined)
-            this.setValue(options.value);
-        else  // force value change because default value has changed
-        {
-            value = this.getValue();
-            if (currentValue !== value)
-                this.emit('change:value', { name: this._name, path: this.path(), value: value, contextChanged: false });
+    getValue(path) {
+        if (path === undefined || this._global)
+            path = this._path;
+        
+        let context = this._contextValues[path];
+        if (context)
+            return context.getValue();
+
+        return undefined;
+    }*/
+
+    _valueAdded(value) {
+        value.on('change:value', this.onValueChanged);
+    }
+
+    _valueRemoved(value) {
+        value.off('change:value', this.onValueChanged);
+        console.log(`context removed:${value.path()}`);
+    }
+
+    removeContext(path) {
+        let context = this._contextValues[path]
+        if (context) {
+            delete this._contextValues[path];
+            this._valueRemoved(context);
+
+            this.emit('context:removed', { path: path });
+
+            return true;
         }
+        return false;
+    }
+
+    clearContexts() {
+        for (let path in this._contextValues) {
+            this.removeContext(path);
+        }
+    }
+
+    onValueChanged(event) {
+        this.emit('change:value', event);
+    }
+
+    getDefaultValue() {
+        return this._defaultValue;
+    }
+
+    valiadate(value) {
+
+        // needs doing but not important
+
+        return value;
     }
 
     getOptions() {
         return this._options;
     }
 
-    getValue() {
-        if (this._value === null)
-            return this._defaultValue;
+    setOptions(options) {
+        this._options = options;
+
+        if (options.global !== undefined)
+            this._global = options.global;
+
+        if (options._local !== undefined)
+            this._local = options.local;
+
+        if (options.defaultValue !== undefined)
+            this._defaultValue = options.defaultValue;
+
+        if (options.value !== undefined)
+            this.setContext(options.value, this._path);
+        else if (options.global)
+            this.setContext(options.defaultValue, this._path);
+
+        this.emit('change:options', { path: this._path, setting: this, options: options });
+    }
+}
+
+class ProxySetting extends EventEmitter {
+    constructor(path, collection) {
+        super();
+
+        this._collection = collection;
+        this._path = path;
+        this._focusPath = path;
+        this._rootPath = stripPath(path);
+
+        this._enabled = true;
+
+        this.settingAddedEvent = this.settingAddedEvent.bind(this);
+        this.optionsChangedEvent = this.optionsChangedEvent.bind(this);
+        this.contextRemovedEvent = this.contextRemovedEvent.bind(this);
+        this.contextAddedEvent = this.contextAddedEvent.bind(this);
+        this.valueChangedEvent = this.valueChangedEvent.bind(this);
+
+        this._collection.on('setting.removed', (event) => {
+            if (this._rootPath === event.path)
+                this.disconnectSetting();
+        });
+
+        this.connectToSetting(this._collection._settings[this._rootPath]);
+    }
+
+    setContextFocus(context) {
+        if (context === null) {
+            this._focusPath = this._path;
+            return true;
+        }
+
+        context = this.parseContextPath(context);
+        let parts = this.parseContextPath(this._path);
+        if (context.length > parts.length - 1)
+            return false;
         
-        return this._value;
+        for (let i = 0; i < context.length; i++) {
+            let cPart = context[i];
+            let pPart = parts[i];
+            if (cPart.name != pPart.name)
+                return false;
+            if (cPart.key === null)
+                continue;
+            if (pPart.key !== null)
+                return false;
+            
+            pPart.key = cPart.key;
+        }
+        
+        let focusPath = '';
+        for (let j = 0; j < parts.length; j++) {
+            focusPath += parts[j].name;
+            if (parts[j].key !== null)
+                focusPath += `[${parts[j].key}]`;
+            if (j !== parts.length - 1)
+                focusPath += '/';
+        }
+
+        if (focusPath !== this._focusPath) {
+            this._focusPath = focusPath;
+            this.disconnectContext();
+        }
+        return true;
+    }
+
+    disconnectSetting() {
+        this._setting.off('change:options', this.optionsChangedEvent);
+        this._setting.off('context:removed', this.contextRemovedEvent);
+        this._setting = null;
+        this.disconnectContext();
+        this.connectToSetting(this._collection._settings[this._rootPath]);
+    }
+
+    disconnectContext() {
+        if (this._targetValue)
+            this._targetValue.off('change:value', this.valueChangedEvent);
+        if (this._setting)
+            this._connectToContext(this._setting.getContext(this._focusPath));
+    }
+
+    connectToSetting(setting) {
+        this._setting = setting;
+        if (!this._setting)
+            this._collection.on('setting:added', this.settingAddedEvent);
+        else {
+            this._setting.on('change:options', this.optionsChangedEvent);
+            this._setting.on('context:removed', this.contextRemovedEvent);
+
+            let targetValue = setting.getContext(this._focusPath);
+            this._connectToContext(targetValue);
+        }
+    }
+
+    settingAddedEvent(event) {
+        if (this._rootPath === event.path) {
+            this._collection.off('setting:added', this.settingAddedEvent);
+            this.connectToSetting(this._collection._settings[this._rootPath]);
+        }
+    }
+
+    contextAddedEvent(event) {
+        if (this._focusPath === event.path) {
+            this._collection.off('context:added', this.contextAddedEvent);
+            this._connectToContext(this._setting.getContext(this._focusPath));
+        }
+    }
+
+    contextRemovedEvent(event) {
+        if (this.path === event.path)
+            this.disconnectContext();
+    }
+
+    _connectToContext(context) {
+        this._targetValue = context;
+        if (!this._targetValue)
+            this._setting.on('context:added', this.contextAddedEvent);
+        else {
+            this._targetValue.on('change:value', this.valueChangedEvent);
+            //this.emit('change:value', { path: this._focusPath, value: this._targetValue.getValue() })
+        }
+    }
+
+    valueChangedEvent(event) {
+        this.emit('change:value', event);
+    }
+
+    optionsChangedEvent(event) {
+        this._setting.off('change:options', this.optionsChangedEvent);
+        this.emit('change:options', event);
+    }
+
+    getValue() {
+        if (this._targetValue)
+            return this._targetValue.getValue();
+        
+        if (this._setting)
+            return this._setting.getDefaultValue();
+        
+        return null;
+    }
+
+    setValue(value) {
+        if (this._targetValue)
+            return this._targetValue.setValue(value);
     }
 
     isEnabled() {
@@ -81,46 +570,31 @@ class Setting extends EventEmitter {
     }
 
     isDisabled() {
-        return ! this._enabled;
+        return !this._enabled;
     }
 
-    name() {
-        return this._name;
+    setEnabled(value) {
+        if (value !== this._enabled) {
+            this._enabled = value;
+            this.emit('change:enabled', { path: this._focusPath, value: value });
+        }
     }
 
     path() {
-        return this._parent.path() + this._name;
+        return this._focusPath;
     }
 
-    setEnabled(value) {       
-        if (value !== this._enabled) {
-            this._enabled = value;
-            this.emit('change:enabled', { name: this._name, value: value });
-        }
+    getOptions() {
+        if (this._setting)
+            return this._setting.getOptions();
+
+        return false;
     }
 
-    setValue(value) {  
-        if (value !== this._value) {        
-            
-            let value = this._valiadateValue(value);
-
-            this._value = value;
-            
-            this.emit('change:value', { name: this._name, path: this.path(), value });
-        }
-    }
-
-    validateValue(value) {
-
-        // validation still needs doing
-
-        return value;
-    }
-/*
     parseContextPath(contextPath) {
         if (contextPath === null)
             return null;
-        
+
         let contextItems = context.split('/');
         for (let i = 0; i < contextItems.length; i++) {
             let contextItem = contextItems[i];
@@ -134,7 +608,7 @@ class Setting extends EventEmitter {
                     name = contextItem.substring(0, start);
                     key = contextItem.substring(start + 1, contextItem.length - 1);
                 }
-                
+
             }
             contextItems[i] = {
                 name: name, key: key
@@ -143,38 +617,6 @@ class Setting extends EventEmitter {
 
         return contextItems;
     }
-
-    parseSettingSpace(settingSpacePath) {
-        return settingSpacePath.split('/');
-    }
-
-    contextToPath(context) {
-        let contextPath = '';
-        for (let item of context) {
-            if (item.context === null)
-                contextPath += `${item.name}/`;
-            else
-                contextPath += `${item.name}[${item.key}]/`;
-        }
-        return contextPath; //contextPath always ends with a forward slash
-    }
-
-    settingSpaceToPath(settingSpace) {
-        return settingSpace.join('/'); //settingSpace path doesn't end with a forward slash
-    }
-
-    settingSpaceToContext(settingSpace) {
-        let context = [];
-        for (let name of settingSpace) {
-            context.push({ name: name, key: null });
-        }
-        return context;
-    }
-
-    isSettingSpaceCompatible(settingSpacePath) {
-        return this._settingSpacePath.startsWith(settingSpacePath);
-    }
-*/
 }
 
 const stripPath = function(path) {
@@ -205,398 +647,21 @@ const stripPath = function(path) {
         }
     }
 
-    return pathItems;
+    return pathItems.join('/');
 }
 
-class SettingProxy extends EventEmitter {
-    constructor(path, space) {
-        this._path = path;
-        this._pathItems = this.parseContextPath(path);
-        this._space = space;
 
-        this._space.on('change:value', (event) => {
-            if (this.isCompatiblePath(event.path, event.global))
-                this.emit('change:value', event);
-        });
 
-        this._space.on('change:enabled', (event) => {
-            if (this.isCompatiblePath(event.path, event.global))
-                this.emit('change:enabled', event);
-        });
-
-        this._space.on('change:options', (event) => {
-            if (this.isCompatiblePath(event.path, event.global))
-                this.emit('change:options', event);
-        });
+const appSettings = new AppSettings({
+    'sheet/results/analysis/varLabel': {
+        defaultValue: 0,
+        value: 1,
+        global: true,
+        options: [
+            { name: 'name', value: 0, label: 'Variable Name' },
+            { name: 'desc', value: 1, label: 'Variable Description' }
+        ]
     }
-
-    isCompatiblePath(path, isGlobal) {
-        let match = true;
-        let pathItems = this.parseContextPath(path);
-        if (pathItems.length !== this._pathItems.length)
-            match = false;
-        else {
-            for (let i = 0; i < pathItems.length; i++) {
-                let sourceItem = pathItems[i];
-                let listenerItem = this._pathItems[i];
-                if (sourceItem.name !== listenerItem.name)
-                    match = false;
-                else if (isGlobal === false && listenerItem.key !== null && listenerItem.key !== sourceItem.key)
-                    match = false;
-
-                if (match === false)
-                    break;
-            }
-        }
-
-        return match;
-    }
-
-    parseContextPath(contextPath) {
-        if (contextPath === null)
-            return null;
-
-        let contextItems = context.split('/');
-        for (let i = 0; i < contextItems.length; i++) {
-            let contextItem = contextItems[i];
-            let name = contextItem;
-            let key = null;
-            if (contextItem[contextItem.length - 1] === ']') {
-                let start = contextItem.indexOf('[');
-                if (start === 0)
-                    throw 'path item cannot have no name';
-                else if ((start !== -1)) {
-                    name = contextItem.substring(0, start);
-                    key = contextItem.substring(start + 1, contextItem.length - 1);
-                }
-
-            }
-            contextItems[i] = {
-                name: name, key: key
-            };
-        }
-
-        return contextItems;
-    }
-
-    setValue(value) {
-        this._space.setValue(value, this._path);
-    }
-
-    value() {
-
-    }
-
-    isEnabled() {
-
-    }
-
-    getOptions() {
-
-    }
-}
-
-class ContextSpace extends EventEmitter {
-    constructor(key, parent) {
-        this._key = key;
-
-        this._parent = parent;
-    }
-}
-
-class SettingSpace extends EventEmitter {
-    constructor(name, parentSpace) {
-
-        super();
-
-        this._name = name;
-        this._key = null;
-
-        if (name[name.length - 1] === ']') {
-            let start = name.indexOf('[');
-            if (start > 0) {
-                this._name = name.substring(0, start);
-                this._key = name.substring(start + 1, name.length - 1);
-            }
-        }
-
-        this._parentSpace = parentSpace;
-
-        this._settings = {};
-        this._spaces = {};
-
-        this._contexts = {};
-        this._proxy = {};
-
-        this._path = this.path();
-    }
-
-    isContextSpace() {
-        return this._key !== null;
-    }
-
-    name() {
-        return this._name;
-    }
-
-    key() {
-        return this._key;
-    }
-
-    path() {
-        let ns = this._name;
-        if (this._parentSpace != null) {
-            let path = this._parentSpace.path();
-            if (path !== null) {
-                if (this._parentSpace.name() === this._name && this._parentSpace.key() === null && this._key !== null)
-                    ns = `${path}[${this._key}]`;
-                else
-                    ns = `${path}${this._name}`;
-            }
-        }
-        
-        return ns + '/';
-    }
-
-    createSetting(name, options) {
-        if (this.isContextSpace())
-            throw 'Settings can only be created in a root settings space.';
-
-        let setting = new Setting(name, this);
-
-        this._settings[name] = setting;
-
-        setting.on('change:value', (event) => {
-            this.emit('change:value', event);
-            this.onValueChanged(setting, event);
-        });
-        setting.on('change:enabled', (event) => {
-            this.emit('change:enabled', event);
-        });
-
-        if (options)
-            setting.setOptions(options);
-        else {
-            setting.once('change:options', (event) => {
-                this.emit('change:options', event);
-            });
-        }
-
-        for (let contextName in this._contexts) {
-            let context = this._contexts[contextName];
-            context.createSetting(name, options);
-        }
-
-        return setting;
-    }
-
-    createSettingSpace(name) {
-        if (this.isContextSpace())
-            throw 'A new settings space can only be created in a root settings space.';
-        
-        let settingSpace = new SettingSpace(name, this);
-        this._spaces[name] = settingSpace;
-
-        settingSpace.on('change:value', this.echoValueChange);
-        settingSpace.on('change:enabled', this.echoEnabledChange);
-        settingSpace.once('change:options', this.echoOptionsChange);
-
-        return settingSpace;
-    }
-
-    cloneTo(space) {
-        for (let settingName in this._settings) {
-            let templateSetting = this._settings[settingName];
-            let contextSetting = space.createSetting(settingName);
-            let options = templateSetting.getOptions();
-            if (options !== null)
-                contextSetting.setOptions(options);
-            else {
-                templateSetting.once('change:options', (event) => {
-                    contextSetting.setOptions(templateSetting.getOptions());
-                });
-            }
-        }
-
-        for (let spaceName in this._spaces) {
-            let templateSpace = this._spaces[spaceName];
-            let space = context.createSettingSpace(spaceName);
-            templateSpace.cloneTo(space);
-        }
-    }
-
-    addItem(key) {
-        if (this.isContextSpace())
-            throw 'A new item can only be created in a root settings space.';
-
-        let context = new SettingSpace(`${this._name}[${key}]`, this);
-        this._contexts[key] = context;
-
-        context.on('change:value', this.echoValueChange);
-        context.on('change:enabled', this.echoEnabledChange);
-        context.once('change:options', this.echoOptionsChange);
-
-        this.cloneTo(context);
-
-        return context;
-    }
-
-    removeItem(key) {
-        if (this.isContextSpace())
-            throw 'An item can only be removed in a root settings space.';
-
-        let context = this._contexts[key];
-
-        context.off('change:value', this.echoValueChange);
-        context.off('change:enabled', this.echoEnabledChange);
-        context.off('change:options', this.echoOptionsChange);
-    }
-
-    echoValueChange(event) {
-        this.emit('change:value', event);
-    }
-
-    echoEnabledChange(event) {
-        this.emit('change:enabled', event);
-    }
-
-    echoOptionsChange(event) {
-        this.emit('change:options', event);
-    }
-
-    get(path) {
-        let pathItems = stripPath(path);
-        if (path.endsWith('/')) { // settingSpace Path
-            let settingSpace = this._spaces[pathItems[0]];
-            if (!settingSpace)
-                throw 'No setting space with this name.';
-            
-            return settingSpace;
-        }
-        
-        let proxy = this._proxys[path];
-        if (!proxy) {
-            proxy = new SettingProxy(path, this);
-            this._proxys[path] = proxy;
-        }
-        return proxy;
-    }
-
-    setValue(value, path) {
-        let pathItems = path.split('/');
-        if (pathItems.length === 1) {
-            let setting = this._settings[pathItems[0]];
-            if (setting) {
-                setting.setValue(value);
-                return true;
-            }
-            return false;
-        }
-            
-        let space = this._spaces[pathItems[0]];
-        if (!space)
-            space = this._contexts[pathItems[0]];
-        
-        if (space) {
-            pathItems.shift();
-            return space.setValue(value, pathItems.join('/'));
-        }
-
-        return false;
-    }
-
-    processData(data) {
-        for (let path in data) {
-            let directPath = stripPath(path);
-            let setting = this.getSetting(directPath);
-            let isRootSetting = path === directPath;
-
-            let options = data[path];
-
-            if (isRootSetting && setting.getOptions() === null)
-                setting.setOptions(options);
-            else if (options.value !== undefined)
-                setting.setValue(path, options.value);
-            else
-                throw 'Inapropriate data. Setting was already defined or did not contain a value';
-        }
-    }
-
-    onValueChanged(setting, event) {
-
-    }
-}
-
-class AppSettings extends SettingSpace {
-    constructor() {
-
-        super(null, null);
-
-        this.initaliseSettings(); // Asks the server for its settings
-
-        // test code
-        setTimeout(event => {
-            let data = {
-                'sheets[0]/results/analysis/varLabel': { value: 0 },
-                'sheets[0]/name': { value: `Damo's worksheet ` },
-                'sheets[2]/DataviewMode': { value: 'spreadsheet' },
-            };
-
-            this.processData(data);
-        }, 10000);
-    }
-
-    setFocus(path) {
-        this._context = context;
-        let path = this.path();
-        if (context)
-            path = `${path.substring(0, path.length - 1)}[${context}]/`;
-
-        this.emit('change:context', { path });
-    }
-
-
-    onValueChanged(setting, event) {
-        if (setting.local === false && event.contextChanged === false)
-            this.pushChange(event);
-    }
-
-    pushChange(change) {
-        let value = change.value;
-        let path = change.path;
-
-        let data = {};
-        data[path] = value;
-
-        console.log(change);
-
-        // push data to server
-    }
-
-    initaliseSettings() {
-
-        // example data
-        let data = {
-            'sheets/results/analysis/varLabel': {
-                value: 1,
-                defaultValue: 0,
-                global: true,
-                options: [
-                    { name: 'name', value: 0, label: 'Variable Name' },
-                    { name: 'desc', value: 1, label: 'Variable Description' }
-                ]
-            },
-            'sheets[0]/name': { value: 'worksheet 1' },
-            'sheets[1]/index': { value: '0' },
-            'sheets[0]/DataviewMode': { value: 'spreadsheet' }, //server provides the saved value, erver doesn't care about this settings but client might want them saved in the file
-            'sheets[1]/DataviewMode': { value: 'variablelist' },
-            'sheets[2]/DataviewMode': { value: 'variablelist' },
-        };
-
-        this.processData(data);
-    }
-}
-
-const appSettings = new AppSettings(settings);
+});
 
 module.exports = appSettings;
