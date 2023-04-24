@@ -4,10 +4,11 @@
 const $ = require('jquery');
 const Backbone = require('backbone');
 const DataSettings = require('../datasettings');
+const SettingControl = require('./settingcontrol');
 
 const focusLoop = require('../../common/focusloop');
 
-const RibbonListbox = Backbone.View.extend({
+class RibbonListbox extends SettingControl {
 
     /*
     params
@@ -22,7 +23,8 @@ const RibbonListbox = Backbone.View.extend({
     }
     */
 
-    initialize(params) {
+    constructor(params) {
+        super(params.name);
 
         let title = params.title === undefined ? null : params.title;
         let icon = params.icon === undefined ? null : params.icon;
@@ -76,29 +78,27 @@ const RibbonListbox = Backbone.View.extend({
 
         this._refresh();
 
-        this.setting = DataSettings.get(name);
+        this.connect();
+    }
 
-        this.setEnabled(this.setting.isEnabled())
-        this.setting.on('change:enabled', (event) => {
-            this.setEnabled(event.value);
-        });
-        
-        this.$el.find('select')[0].value = this.setting.getValue();
-        this.setting.on('change:value', (event) => {
-            this.$el.find('select')[0].value = event.value;
-        });
+    displayValue(value) {
+        this.$el.find('select')[0].value = value;
+    }
 
-        let def = this.setting.getOptions();
-        if (def)
-            this.setOptions(def.options);
-        else {
-            this.setting.once('change:options', (event) => {
-                let def = event.options;
-                this.setOptions(def.options);
-            });
+    setEnabled(enabled) {
+        let $select = this.$el.find('select');
+        if (enabled) {
+            this.$el.removeAttr('disabled');
+            $select.removeAttr('disabled');
         }
-    },
-    setOptions(options) {
+        else {
+            this.$el.attr('disabled', '');
+            $select.attr('disabled', '');
+        }
+    }
+
+    setDefinition(def) {
+        let options = def.options;
         let html = '';
         for (let option of options)
             html += `<option value="${option.value}">${option.label}</option>`;
@@ -106,10 +106,8 @@ const RibbonListbox = Backbone.View.extend({
         let $select = this.$el.find('select');
         $select.html(html);
         $select[0].value = this.setting.getValue();
-    },
-    setValue(value) {
-        this.setting.setValue(value);
-    },
+    }
+
     setParent(parent, parentShortcutPath, inMenu) {
         this.parent = parent;
 
@@ -128,25 +126,16 @@ const RibbonListbox = Backbone.View.extend({
                     this.$el[0].focus({preventScroll:true});
             });
         }
-    },
+    }
+
     setTabName(name) {
         if (this._definedTabName === false)
             this.tabName = name;
-    },
-    setEnabled(enabled) {
-        let $select = this.$el.find('select');
-        if (enabled) {
-            this.$el.removeAttr('disabled');
-            $select.removeAttr('disabled');
-        }
-        else {
-            this.$el.attr('disabled', '');
-            $select.attr('disabled', '');
-        }
-    },
+    }
+
     getMenus() {
         return [];
-    },
+    }
 
     _refresh() {
         let html = '';
@@ -160,6 +149,6 @@ const RibbonListbox = Backbone.View.extend({
             this.setValue(parseInt($select[0].value));
         });
     }
-});
+};
 
 module.exports = RibbonListbox;

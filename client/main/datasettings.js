@@ -6,17 +6,16 @@ class AppSettings extends EventEmitter {
     constructor(data) {
         super();
 
+        //settings are created when recieved from the server or specifically defined by the client. A setting object
+        // stores its definition and values
         this._settings = {
 
         }
 
+        // proxy settings are used by the client for reading and writing to a setting. Proxy settings are weakly stored
         this._proxys = {
 
         }
-
-        this._focusZones = {
-
-        };
 
         this.valueChangedEvent = this.valueChangedEvent.bind(this);
 
@@ -103,7 +102,7 @@ class AppSettings extends EventEmitter {
         for (let path in this._settings) {
             let setting = this._settings[path];
             if (setting._purge) {
-                if (setting.hasDefinition()) {
+                if (setting.hasDefinition()) { // if the setting has specifically been defined the setting is retained however the values are cleared.
                     setting._purge = false;
                     setting.clearContexts();
                 }
@@ -133,7 +132,6 @@ class AppSettings extends EventEmitter {
         
         rootSetting._purge = false;
         rootSetting.setOptions(def);
-
     }
 
     get(path) {
@@ -141,6 +139,9 @@ class AppSettings extends EventEmitter {
         if (!proxy) {
             proxy = new ProxySetting(path, this);
             this._proxys[path] = proxy;
+            proxy.once('dead', (event) => {
+                delete this._proxys[event.path];
+            });
         }
 
         return proxy;
@@ -329,28 +330,6 @@ class Setting extends EventEmitter {
         return this._contextValues[path];
     }
 
-    /*setValue(value, path) {
-        if (path === undefined || this._global)
-            path = this._path;
-        
-        let context = this._contextValues[path];
-        if (context)
-            return context.setValue(value);
-        
-        return false;
-    }
-
-    getValue(path) {
-        if (path === undefined || this._global)
-            path = this._path;
-        
-        let context = this._contextValues[path];
-        if (context)
-            return context.getValue();
-
-        return undefined;
-    }*/
-
     _valueAdded(value) {
         value.on('change:value', this.onValueChanged);
     }
@@ -420,13 +399,14 @@ class Setting extends EventEmitter {
 }
 
 class ProxySetting extends EventEmitter {
-    constructor(path, collection) {
+    constructor(path, settings) {
         super();
 
-        this._collection = collection;
+        this._settings = settings;
         this._path = path;
         this._focusPath = path;
         this._rootPath = stripPath(path);
+        this._dead = false; // base setting has been removed
 
         this._enabled = true;
 
@@ -436,12 +416,12 @@ class ProxySetting extends EventEmitter {
         this.contextAddedEvent = this.contextAddedEvent.bind(this);
         this.valueChangedEvent = this.valueChangedEvent.bind(this);
 
-        this._collection.on('setting.removed', (event) => {
+        this._settings.on('setting.removed', (event) => {
             if (this._rootPath === event.path)
                 this.disconnectSetting();
         });
 
-        this.connectToSetting(this._collection._settings[this._rootPath]);
+        this.connectToSetting(this._settings._settings[this._rootPath]);
     }
 
     setContextFocus(context) {
@@ -489,20 +469,26 @@ class ProxySetting extends EventEmitter {
         this._setting.off('context:removed', this.contextRemovedEvent);
         this._setting = null;
         this.disconnectContext();
-        this.connectToSetting(this._collection._settings[this._rootPath]);
+        //this.connectToSetting(this._settings._settings[this._rootPath]);
     }
 
     disconnectContext() {
-        if (this._targetValue)
-            this._targetValue.off('change:value', this.valueChangedEvent);
         if (this._setting)
-            this._connectToContext(this._setting.getContext(this._focusPath));
+            this.disconnectSetting();
+        else if (this._targetValue) {
+            this._targetValue.off('change:value', this.valueChangedEvent);
+            this._dead = true;
+            this.emit('dead', { path: this._focusPath });
+        }
+        //if (this._setting)
+        //    this._connectToContext(this._setting.getContext(this._focusPath));
     }
+    
 
     connectToSetting(setting) {
         this._setting = setting;
         if (!this._setting)
-            this._collection.on('setting:added', this.settingAddedEvent);
+            this._settings.on('setting:added', this.settingAddedEvent);
         else {
             this._setting.on('change:options', this.optionsChangedEvent);
             this._setting.on('context:removed', this.contextRemovedEvent);
@@ -514,14 +500,14 @@ class ProxySetting extends EventEmitter {
 
     settingAddedEvent(event) {
         if (this._rootPath === event.path) {
-            this._collection.off('setting:added', this.settingAddedEvent);
-            this.connectToSetting(this._collection._settings[this._rootPath]);
+            this._settings.off('setting:added', this.settingAddedEvent);
+            this.connectToSetting(this._settings._settings[this._rootPath]);
         }
     }
 
     contextAddedEvent(event) {
         if (this._focusPath === event.path) {
-            this._collection.off('context:added', this.contextAddedEvent);
+            this._settings.off('context:added', this.contextAddedEvent);
             this._connectToContext(this._setting.getContext(this._focusPath));
         }
     }
