@@ -37,6 +37,17 @@ class FocusLoop extends EventEmitter {
         this._bluringTimeout = null;
         this._broadcastTimeout = null;
 
+        if (this._isMainWindow) {
+            this._speachBox = document.createElement('div');
+            this._speachBox.setAttribute('id', 'jmv-speach-box');
+            this._speachBox.setAttribute('role', 'region');
+            this._speachBox.setAttribute('aria-live', 'polite');
+            this._speachBox.setAttribute('aria-atomic', false);
+            this._speachBox.setAttribute('aria-hidden', false);
+            this._speachBox.setAttribute('style', 'position: absolute; left: 0px; top: -1px; z-index: -2; opacity: 0;')
+            document.body.appendChild(this._speachBox);
+        }
+
         window.addEventListener('message', event => {
             if (event.source === window)
                 return;
@@ -52,6 +63,9 @@ class FocusLoop extends EventEmitter {
                     this._fromBroadcast = true;
                     break;
                 case 'setFocusDefault':
+                    this._fromBroadcast = true;
+                    break;
+                case 'speakMessage':
                     this._fromBroadcast = true;
                     break;
                 case 'processKeyObj':
@@ -299,6 +313,22 @@ class FocusLoop extends EventEmitter {
             this.updateBaseKeyPaths();
     }
 
+    speakMessage(message) {
+        if (this._isMainWindow) {
+            let msg = document.createElement('div');
+            msg.innerHTML = message;
+            
+            if (this._speachBox.childNodes.length > 20) {
+                this._speachBox.innerHTML = '';
+            }
+
+            this._speachBox.appendChild(msg);
+        }
+        else {
+            this.invoke(this._mainWindow, 'speakMessage', [message], false);
+        }
+    }
+
     setDefaultFocusControl(defaultFocusControl) {
         this.defaultFocusControl = defaultFocusControl;
         if (this.defaultFocusControl && this._inDefaultMode)
@@ -478,6 +508,17 @@ class FocusLoop extends EventEmitter {
         this.broadcast('setFocusMode', [focusMode, options], ! noTransfer && (focusMode !== 'keyboard' && focusMode !== 'hover'));
     }
 
+    invoke(invokeWindow, id, args, transferFocus) {
+        let data = { id, args, type: 'focusLoop' };
+        if (invokeWindow !== window) {
+            if (transferFocus)
+                this.transferFocus(this._mainWindow);
+            this._mainWindow.postMessage(data, '*');
+        }
+        else
+            throw "Cannot invoke in the same window that was called from";
+    }
+
     broadcast(id, args, transferFocus) {
         let data = { id, args, type: 'focusLoop' };
         if (this._isMainWindow === false) {
@@ -501,6 +542,23 @@ class FocusLoop extends EventEmitter {
             token.level = level;
             element.setAttribute('data-level', token.level);
         }
+    }
+
+    removeFocusLoop(element) {
+        let token = this.loopOptions.get(element);
+
+        element.setAttribute('data-level', '');
+        element.classList.remove('menu-level');
+        if (token.hoverFocus)
+            element.classList.remove('hover-focus');
+
+        if (element.classList.contains('focus-listener')) {
+            element.classList.remove('focus-listener');
+            element.removeEventListener('keydown', this._handleKeyPress);
+            if (token.hoverFocus)
+                element.removeEventListener('mousemove', this._handleMouseMove);
+        }
+        this.loopOptions.delete(element);
     }
 
     addFocusLoop(element, options) {
@@ -559,7 +617,7 @@ class FocusLoop extends EventEmitter {
         }
         else {
             if (token.action && options.action)
-                token.off('shortcut-action', options.action);
+                token.off('shortcut-action', token.action);
 
             token = Object.assign(token, options);
         }
@@ -580,8 +638,17 @@ class FocusLoop extends EventEmitter {
         if (options.path)
             element.setAttribute('shortcut-path', token.fullPath);
 
-        if (options.action)
+        if (options.action) {
+            if (token.label) {
+                let action = token.action;
+                token.action = (event) => {
+                    this.speakMessage(token.label);
+                    action(event);
+                };
+            }
+
             token.on('shortcut-action', token.action);
+        }
 
         return token;
     }
@@ -1162,6 +1229,10 @@ class FocusLoop extends EventEmitter {
             return false;
 
         return handleInfo.handle.call();  
+    }
+
+    getFocusToken(element) {
+        return this.loopOptions.get(element);
     }
 
     async _handleKeyPress(event) {

@@ -1200,7 +1200,8 @@ const BackstageView = SilkyView.extend({
                     key: op.shortcutKey.toUpperCase(),
                     path: 'F',
                     action: this.clickOp.bind(this),
-                    position: { x: '9%', y: '27%' }
+                    position: { x: '9%', y: '27%' },
+                    label: s6e(op.title)
                 });
             }
             if (i === 0)
@@ -1218,7 +1219,8 @@ const BackstageView = SilkyView.extend({
                             key: place.shortcutKey.toUpperCase(),
                             path: `F${op.shortcutKey.split('-')[0].toUpperCase()}`,
                             action: this.clickPlace.bind(this),
-                            position: { x: '12%', y: '25%' }
+                            position: { x: '12%', y: '25%' },
+                            label: s6e(place.title)
                         });
                     }
                     $opPlaces.append($opPlace);

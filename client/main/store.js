@@ -26,7 +26,7 @@ const Store = Backbone.View.extend({
 
         this.$header = $('<div class="jmv-store-header"></div>').appendTo(this.$el);
 
-        this.$close = $(`<div class="jmv-store-button-close" title="${_('Hide library')}"><span class="mif-arrow-up"></span></div>`).appendTo(this.$header);
+        this.$close = $(`<div class="jmv-store-button-close" aria-label="${_('Hide library')}"><span class="mif-arrow-up"></span></div>`).appendTo(this.$header);
 
         this.$close.on('click', event => {
             this.hide();

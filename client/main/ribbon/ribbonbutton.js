@@ -52,7 +52,7 @@ class RibbonButton extends EventEmitter {
 
         if (shortcutKey) {
             this.shortcutKey = shortcutKey.toUpperCase();
-            let stcOptions = { key: this.shortcutKey, action: event => this._clicked(event, false) };
+            let stcOptions = { key: this.shortcutKey, action: event => this._clicked(event, false), label: params.ariaLabel ? params.ariaLabel : title };
             if (params.shortcutPosition)
                 stcOptions.position = params.shortcutPosition;
             focusLoop.applyShortcutOptions(this.$el[0], stcOptions);
@@ -212,6 +212,7 @@ class RibbonButton extends EventEmitter {
                 let action = ActionHub.get(this.name);
                 action.do(item);
                 this.emit('menuActioned', item);
+                this.hideMenu();
             });
         }
 
