@@ -894,8 +894,8 @@ $(document).ready(async() => {
 
                 if (location || status.status === 'requires-auth') {
                     const response = await lobby.show(location, params);
-                    if (response && response.action === 'skip')
-                        filePath = '';
+                    if (response && response.action === 'open')
+                        filePath = response.path;
 
                     await auth.waitForSignIn();
                     options.authToken = await auth.getAuthToken();
