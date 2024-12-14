@@ -293,6 +293,14 @@ body.windows.electron #header-buttons {
     min-width: 0px;
 }
 
+.ce-paragraph, .ce-header, .tc-cell, .cdx-list__item-content {
+    cursor: text;
+}
+
+.embed-tool__caption {
+    /*display: none;*/
+}
+
 #splitter {
     width: 8px ;
 }

@@ -8,7 +8,15 @@ const I18n = require('../common/i18n');
 const focusLoop = require('../common/focusloop');
 
 const formatIO = require('../common/utils/formatio');
-
+const EditorJS = require('@editorjs/editorjs');
+const Header = require('@editorjs/header');
+const Code = require('@editorjs/code');
+const Table = require('@editorjs/table');
+const InlineCode = require('@editorjs/inline-code');
+const List = require('@editorjs/list');
+const Embed = require('@editorjs/embed');
+const Undo = require('editorjs-undo');
+const DragDrop = require('editorjs-drag-drop');
 const Menu = require('./menu');
 const ContextMenus = require('./contextmenu/contextmenus');
 const ContextMenu = require('./contextmenu');
@@ -34,6 +42,166 @@ const ResultsPanel = Backbone.View.extend({
         this.$el.attr('role', 'list');
         this.$el.attr('aria-label', 'Results');
         this.$el.attr('tabindex', '-1');
+
+        this.$el.append('<div id="editorjs"></div>');
+        let $editor = this.$el.find('#editorjs');
+
+        $editor.on('keydown', (event) => {
+            event.stopPropagation();
+        });
+
+        if ('iframeUrl' in args)
+            this.iframeUrl = args.iframeUrl;
+
+        this.editor = new EditorJS({
+            /**
+             * Id of Element that should contain Editor instance
+             */
+            holder: 'editorjs',
+            placeholder: 'Add an analysis or type some text',
+            tools: { 
+                header: Header,
+                code: Code,
+                table: Table,
+                inlineCode: InlineCode,
+                list: List,
+                embed: {
+                    class: Embed,
+                    config: {
+                      services: {
+                        analysis: {
+                          regex: new RegExp('jamovi\/analyses\/([^\/\?\&]*)'),
+                          embedUrl: `<%= remote_id %>`,
+                          html: `<iframe data-id="2"
+                                    class="analysis"
+                                    sandbox="allow-scripts allow-same-origin"
+                                    scrolling="no"
+                                    style="border: 0 ; height : 0 ;">
+                                </iframe>`,
+                          height: 300,
+                          width: 600
+                        }
+                      }
+                    }
+                  }
+            },
+            onReady: () => {
+                new Undo({ editor: this.editor });
+                new DragDrop(this.editor);
+            },
+            onChange: (api, events) => { 
+                events = Array.isArray(events) ? events : [events];
+                for (let event of events) {
+                    if (event.detail.target.name === 'embed') {
+                        if (event.type === 'block-removed') {
+                            let $iframe = $(event.detail.target.holder.querySelector('iframe'));
+                            let analysisId = parseInt($iframe.attr('data-id'));
+                            let analysis = this.model.analyses().get(analysisId);
+                            this.model.deleteAnalysis(analysis);
+                        }
+                        else if (event.type === 'block-added') { 
+                            
+                            let $iframe = $(event.detail.target.holder.querySelector('iframe'));
+                            let analysisId = parseInt($iframe.attr('src'));
+                            if (Number.isNaN(analysisId) === true) 
+                                continue; 
+
+                            $iframe.attr('data-id', analysisId);
+                            $iframe.attr('src', `${ this.iframeUrl }${ this.model.instanceId() }/${ analysisId }/`);
+
+                            let resources = this.resources[analysisId];
+                            resources.iframe = $iframe[0];
+                            resources.$iframe = $iframe;
+
+                            resources.loaded = false;
+
+                            $iframe.on('load', () => {
+                                this._sendI18nDef(resources);
+                                this._sendResults(resources);
+                                resources.loaded = true;
+                            });
+
+                            $iframe.on('mouseover mouseout', (event) => {
+                                this._sendMouseEvent(resources, event);
+                            });
+
+                            let analysis = resources.analysis;
+                            let $container = $(event.detail.target.holder.querySelector(".ce-block__content"));
+                            let $cover = $('<div class="jmv-results-cover"></div>').prependTo($container);
+                            $cover.on('click', event => this._resultsClicked(event, analysis));
+
+                            $container.find('.embed-tool__caption').css("display", "none");
+                            $iframe.attr('contenteditable', 'true'); // to make the toolbar appear
+
+                            resources.$container = $container;
+                            
+                            $container.attr('data-analysis-name', analysis.name);
+                            $container.addClass('jmv-results-container');
+                            $container.addClass('results-loop-list-item');
+                            $container.addClass('results-loop-auto-select');
+                            $container.attr('tabindex', -1);
+
+                            contextMenuListener($cover[0], event => {
+                                this._resultsMouseClicked(2, event.offsetX, event.offsetY, analysis);
+                                event.stopPropagation();
+                                event.preventDefault();
+                                return false;
+                            });
+
+                            $iframe.on('keydown', (event) => {
+                                if ((event.ctrlKey || event.metaKey) && event.code === 'KeyC') {
+                                    this._menuEvent({ op: 'copy', address: [ analysis.id] });
+                                    event.stopPropagation();
+                                }
+                            });
+
+                            let selected = this.model.get('selectedAnalysis');
+                            if (selected !== null && analysis.id === selected.id) {
+                                resources.$container.attr('data-selected', '');
+                                resources.$container.attr('aria-current', true);
+                            }
+
+                            
+
+                        /* let isEmptyAnalysis = analysis.name === 'empty';
+                            let classes = '';
+                            if (isEmptyAnalysis)
+                                classes = 'empty-analysis';*/
+                    
+                            
+                            //let $container = $(`<div class="jmv-results-container results-loop-list-item results-loop-auto-select  ${ classes }" tabindex="-1" role="listitem" aria-label="${ isEmptyAnalysis ? 'Annotation Field' : (analysis.results.title + '- Results')}"></div>`);
+                            
+                            $container.on('keydown', (event) => {
+                                if ((event.ctrlKey || event.metaKey) && event.code === 'KeyC') {
+                                    this._menuEvent({ op: 'copy', address: [ analysis.id] });
+                                    event.stopPropagation();
+                                }
+                            });
+
+                            if (analysis.index === 0)
+                                this.resultsLooper.highlightElement($container[0], true, false);
+
+                            $cover.on('mouseenter', event => {
+                                this._sendMouseEvent(resources, event);
+                                $iframe.addClass('hover');
+                            });
+
+                            $cover.on('mouseleave', event => {
+                                this._sendMouseEvent(resources, event);
+                                $iframe.removeClass('hover');
+                            });
+
+                        }   
+                    }
+                }
+            }
+          });
+
+          this.editor.isReady.then(() => {
+            this.toolbarElement = document.querySelector('.ce-toolbar');
+            this.toolbarElement.style.zIndex = '200';
+          });
+        
 
         this.el.dataset.mode = args.mode;
         this.annotationFocus = 0;
@@ -69,9 +237,6 @@ const ResultsPanel = Backbone.View.extend({
         });
 
         this.resources = { };
-
-        if ('iframeUrl' in args)
-            this.iframeUrl = args.iframeUrl;
 
         if ('mode' in args)
             this.mode = args.mode;
@@ -154,11 +319,18 @@ const ResultsPanel = Backbone.View.extend({
         this._refsTable.update();
         this._updateRefsMode();
     },
-    _analysisCreated(analysis) {
+    async _analysisCreated(analysis) {
 
         this._updateRefs(analysis);
 
-        let element = `
+        if (analysis.name !== 'empty') {
+            this.editor.isReady.then(async () => {
+                await this.editor.blocks.insert('embed', { service: 'analysis', source: `jamovi/anlyses/${analysis.id}`, embed: `${analysis.id}/${analysis.name}`, width: 600, height: 400 });
+            });
+        }
+
+
+        /*let element = `
             <iframe
                 data-id="${ analysis.id }"
                 src="${ this.iframeUrl }${ this.model.instanceId() }/${ analysis.id }/"
@@ -166,43 +338,43 @@ const ResultsPanel = Backbone.View.extend({
                 sandbox="allow-scripts allow-same-origin"
                 scrolling="no"
                 style="border: 0 ; height : 0 ;"
-            ></iframe>`;
+            ></iframe>`;*/
 
         let isEmptyAnalysis = analysis.name === 'empty';
-        let classes = '';
-        if (isEmptyAnalysis)
-            classes = 'empty-analysis';
+        //let classes = '';
+        //if (isEmptyAnalysis)
+        //    classes = 'empty-analysis';
 
 
-        let $container = $(`<div class="jmv-results-container results-loop-list-item results-loop-auto-select  ${ classes }" tabindex="-1" role="listitem" aria-label="${ isEmptyAnalysis ? 'Annotation Field' : (analysis.results.title + '- Results')}"></div>`);
+        //let $container = $(`<div class="jmv-results-container results-loop-list-item results-loop-auto-select  ${ classes }" tabindex="-1" role="listitem" aria-label="${ isEmptyAnalysis ? 'Annotation Field' : (analysis.results.title + '- Results')}"></div>`);
         
-        $container.on('keydown', (event) => {
+        /*$container.on('keydown', (event) => {
             if ((event.ctrlKey || event.metaKey) && event.code === 'KeyC') {
                 this._menuEvent({ op: 'copy', address: [ analysis.id] });
                 event.stopPropagation();
             }
-        });
+        });*/
 
-        let $after = $(this._refsTable);
+        /*let $after = $(this._refsTable);
         if (analysis.results.index > 0) {
             let $siblings = this.$el.children('.jmv-results-container');
             let index = analysis.results.index - 1;
             if (index < $siblings.length)
                 $after = $siblings[index];
-        }
+        }*/
 
-        $container.insertBefore($after);
+        //$container.insertBefore($after);
 
-        $container.attr('data-analysis-name', analysis.name);
+        //$container.attr('data-analysis-name', analysis.name);
 
-        if ( ! isEmptyAnalysis || analysis.index === 0)
-            this.resultsLooper.highlightElement($container[0], true, false);
+        //if ( ! isEmptyAnalysis || analysis.index === 0)
+        //    this.resultsLooper.highlightElement($container[0], true, false);
 
-        let $cover = $('<div class="jmv-results-cover"></div>').appendTo($container);
-        let $iframe = $(element).appendTo($container);
-        let iframe = $iframe[0];
+        //let $cover = $('<div class="jmv-results-cover"></div>').appendTo($container);
+        //let $iframe = $(element).appendTo($container);
+        //let iframe = $iframe[0];
 
-        $container.on('keydown', (event) => {
+        /*$container.on('keydown', (event) => {
             if (event.keyCode === 13) { //enter
                 this.model.set('selectedAnalysis', analysis);
             }
@@ -219,14 +391,14 @@ const ResultsPanel = Backbone.View.extend({
         if (selected !== null && analysis.id === selected.id) {
             $container.attr('data-selected', '');
             $container.attr('aria-current', true);
-        }
+        }*/
 
         let resources = {
             id: analysis.id,
             analysis : analysis,
-            iframe : iframe,
-            $iframe : $iframe,
-            $container : $container,
+            //iframe : iframe,
+            //$iframe : $iframe,
+            //$container : $container,
             loaded : false,
             isEmpty: isEmptyAnalysis,
             hasTitle: ! isEmptyAnalysis || analysis.isFirst()
@@ -234,7 +406,7 @@ const ResultsPanel = Backbone.View.extend({
 
         this.resources[analysis.id] = resources;
 
-        $iframe.on('load', () => {
+        /*$iframe.on('load', () => {
             this._sendI18nDef(resources);
             this._sendResults(resources);
             resources.loaded = true;
@@ -242,9 +414,9 @@ const ResultsPanel = Backbone.View.extend({
 
         $iframe.on('mouseover mouseout', (event) => {
             this._sendMouseEvent(resources, event);
-        });
+        });*/
 
-        if (isEmptyAnalysis === false) {
+        /*if (isEmptyAnalysis === false) {
             $cover.on('click', event => this._resultsClicked(event, analysis));
             this.analysisCount += 1;
             if (this.analysisCount === 1)
@@ -257,16 +429,16 @@ const ResultsPanel = Backbone.View.extend({
                 let clickEvent = $.Event('enterannotation', { });
                 iframe.contentWindow.postMessage(clickEvent, this.iframeUrl);
             });
-        }
+        }*/
 
-        contextMenuListener($cover[0], event => {
+        /*contextMenuListener($cover[0], event => {
             this._resultsMouseClicked(2, event.offsetX, event.offsetY, analysis);
             event.stopPropagation();
             event.preventDefault();
             return false;
-        });
+        });*/
 
-        $cover.on('mouseenter', event => {
+        /*$cover.on('mouseenter', event => {
             this._sendMouseEvent(resources, event);
             $iframe.addClass('hover');
         });
@@ -274,12 +446,12 @@ const ResultsPanel = Backbone.View.extend({
         $cover.on('mouseleave', event => {
             this._sendMouseEvent(resources, event);
             $iframe.removeClass('hover');
-        });
+        });*/
     },
     _analysisDeleted(analysis) {
         this._updateRefs();
-        let resources = this.resources[analysis.id];
-        let $container = resources.$container;
+        //let resources = this.resources[analysis.id];
+        /*let $container = resources.$container;
         $container.css('height', '0');
         if (analysis.name === 'empty')
             $container.remove();
@@ -294,7 +466,7 @@ const ResultsPanel = Backbone.View.extend({
                 if (removed === false)
                     $container.remove();
             }, 400);
-        }
+        }*/
         delete this.resources[analysis.id];
     },
     _updateRefs(exclude) {
@@ -513,7 +685,7 @@ const ResultsPanel = Backbone.View.extend({
         for (let id in this.resources) {
 
             let resources = this.resources[id];
-            if (event.source !== resources.iframe.contentWindow)
+            if (resources.iframe === undefined || event.source !== resources.iframe.contentWindow)
                 continue;
 
             let payload = event.data;
@@ -572,8 +744,8 @@ const ResultsPanel = Backbone.View.extend({
                         this._scrollIntoView($container, height);
                     $iframe.width(width);
                     $iframe.height(height);
-                    $container.width(width);
-                    $container.height(height);
+                    //$container.width(width);
+                    //$container.height(height);
 
                     resources.sized = true;
                     this._checkIfEverythingReady();
@@ -932,7 +1104,7 @@ const ResultsPanel = Backbone.View.extend({
             }
             else {
                 let oldSelectedResults = this.resources[oldSelected.id];
-                if (oldSelectedResults) {
+                if (oldSelectedResults && oldSelectedResults.$container) {
                     oldSelectedResults.$container.removeAttr('data-selected');
                     oldSelectedResults.$container.attr('aria-current', false);
                 }
@@ -947,7 +1119,7 @@ const ResultsPanel = Backbone.View.extend({
             }
             else {
                 let newSelectedResults = this.resources[newSelected.id];
-                if (newSelectedResults) {
+                if (newSelectedResults && newSelectedResults.$container) {
                     newSelectedResults.$container.attr('data-selected', '');
                     newSelectedResults.$container.attr('aria-current', true);
                 }
