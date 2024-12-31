@@ -22,7 +22,7 @@ const ContextMenus = require('./contextmenu/contextmenus');
 const ContextMenu = require('./contextmenu');
 const Notify = require('./notification');
 const host = require('./host');
-const selectionLoop = require('../common/selectionloop');
+//const selectionLoop = require('../common/selectionloop');
 
 const { flatten, unflatten } = require('../common/utils/addresses');
 const { contextMenuListener } = require('../common/utils');
@@ -68,22 +68,22 @@ const ResultsPanel = Backbone.View.extend({
                 embed: {
                     class: Embed,
                     config: {
-                      services: {
-                        analysis: {
-                          regex: new RegExp('jamovi\/analyses\/([^\/\?\&]*)'),
-                          embedUrl: `<%= remote_id %>`,
-                          html: `<iframe data-id="2"
-                                    class="analysis"
-                                    sandbox="allow-scripts allow-same-origin"
-                                    scrolling="no"
-                                    style="border: 0 ; height : 0 ;">
-                                </iframe>`,
-                          height: 300,
-                          width: 600
+                        services: {
+                            analysis: {
+                                regex: new RegExp('jamovi\/analyses\/([^\/\?\&]*)'),
+                                embedUrl: `<%= remote_id %>`,
+                                html: `<iframe data-id="2"
+                                          class="analysis"
+                                            sandbox="allow-scripts allow-same-origin"
+                                            scrolling="no"
+                                            style="border: 0 ; height : 0 ;">
+                                        </iframe>`,
+                                height: 300,
+                                width: 600
+                            }
                         }
-                      }
                     }
-                  }
+                }
             },
             onReady: () => {
                 new Undo({ editor: this.editor });
@@ -92,6 +92,9 @@ const ResultsPanel = Backbone.View.extend({
             onChange: (api, events) => { 
                 events = Array.isArray(events) ? events : [events];
                 for (let event of events) {
+                    if (event.type === 'block-added')
+                        event.detail.target.stretched = true;
+
                     if (event.detail.target.name === 'embed') {
                         if (event.type === 'block-removed') {
                             let $iframe = $(event.detail.target.holder.querySelector('iframe'));
@@ -100,7 +103,6 @@ const ResultsPanel = Backbone.View.extend({
                             this.model.deleteAnalysis(analysis);
                         }
                         else if (event.type === 'block-added') { 
-                            
                             let $iframe = $(event.detail.target.holder.querySelector('iframe'));
                             let analysisId = parseInt($iframe.attr('src'));
                             if (Number.isNaN(analysisId) === true) 
@@ -178,8 +180,8 @@ const ResultsPanel = Backbone.View.extend({
                                 }
                             });
 
-                            if (analysis.index === 0)
-                                this.resultsLooper.highlightElement($container[0], true, false);
+                            //if (analysis.index === 0)
+                            //    this.resultsLooper.highlightElement($container[0], true, false);
 
                             $cover.on('mouseenter', event => {
                                 this._sendMouseEvent(resources, event);
@@ -206,7 +208,7 @@ const ResultsPanel = Backbone.View.extend({
         this.el.dataset.mode = args.mode;
         this.annotationFocus = 0;
 
-        this.resultsLooper = new selectionLoop('results-loop', this.el, true);
+        //this.resultsLooper = new selectionLoop('results-loop', this.el, true);
         this.analysisCount = 0;
 
         focusLoop.addFocusLoop(this.el);

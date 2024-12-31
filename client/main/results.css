@@ -5,15 +5,35 @@
 }
 
 .jmv-results-panel {
-    width: 100% ;
-    height: 100% ;
+    --a4-width: 900px;
+    width: min-content ;
+    height: max-content ;
     box-sizing: border-box;
-    position: absolute ;
-    top: 0 ;
-    overflow: scroll ;
     transition: all .2s ;
     background-color: white ;
     padding: 2px 0px 0 2px;
+    min-width: var(--a4-width);
+    min-height: 100%;
+    filter: drop-shadow(2px 2px 2px #a6a6a600);
+    justify-self: center;
+    align-self: center;
+    padding: 40px 100px;
+    overflow:visible;
+    margin: 0 auto;
+    border: 1px transparent solid;
+}
+
+[data-splitpanel-mode='results'] .jmv-results-panel {
+    --a4-width: 900px;
+    --a4-ratio: 1.414;
+    min-width: var(--a4-width);
+    filter: drop-shadow(2px 2px 2px #a6a6a6);
+    align-self: center;
+    height: max-content;
+    min-height: calc(var(--a4-width)*var(--a4-ratio));
+    margin-bottom: 7px;
+    margin-top: 7px;
+    border: 1px #bbb solid;
 }
 
 .jmv-results-container[data-analysis-name='weights'] {
@@ -40,10 +60,11 @@
     width: 0 ;
     overflow: hidden ;
     padding-right: 0 ;
+    height: 0;
 }
 
-.jmv-results-panel[data-analysis-selected] {
-    background-color: #E8E8E8 ;
+[data-splitpanel-mode='mixed'] .jmv-results-panel[data-analysis-selected] {
+    background-color: inherit ;
 }
 
 .jmv-results-panel.all-selected {
@@ -65,6 +86,11 @@
     background-color: white ;
 }
 
+[data-splitpanel-mode='results'] .jmv-results-panel:not(.all-selected) .jmv-results-container[data-selected] iframe,
+[data-splitpanel-mode='results'] .jmv-results-panel:not(.all-selected) jmv-references[data-selected] {
+    outline: solid;
+}
+
 .jmv-results-panel:not(.all-selected) .jmv-results-container.empty-analysis iframe.hover {
     background-color: #f1f1f1 ;
 }
@@ -75,6 +101,24 @@
 
 .jmv-results-container {
     position: relative ;
+    max-width: min-content !important;
+}
+
+.ce-block .ce-block__content {
+    max-width: 760px;
+    margin: unset;
+}
+
+.ce-toolbar__content {
+    margin: unset;
+}
+
+.ce-block {
+    position: relative;
+}
+
+.codex-editor {
+    position: relative;
 }
 
 .jmv-results-container:not([data-analysis-name='empty']) {

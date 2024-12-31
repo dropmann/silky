@@ -32,6 +32,10 @@ const ResultsView = Backbone.View.extend({
             }
         );
 
+        this.$el.on('click', (event) => {
+            this.model.set('selectedAnalysis', null);
+        });
+
         this.$richView = $('<div></div>');
         this.$richView.appendTo(this.$el);
         this.richView = new ResultsPanel({
