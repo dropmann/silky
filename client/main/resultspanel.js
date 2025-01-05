@@ -60,7 +60,10 @@ const ResultsPanel = Backbone.View.extend({
             holder: 'editorjs',
             placeholder: 'Add an analysis or type some text',
             tools: { 
-                header: Header,
+                header: {
+                    class: Header,
+                    inlineToolbar: true
+                },
                 code: Code,
                 table: Table,
                 inlineCode: InlineCode,
@@ -88,6 +91,7 @@ const ResultsPanel = Backbone.View.extend({
             onReady: () => {
                 new Undo({ editor: this.editor });
                 new DragDrop(this.editor);
+                this.editor.blocks.insert( 'header',  { text: 'Results', level: 1 }, {}, 0, true );
             },
             onChange: (api, events) => { 
                 events = Array.isArray(events) ? events : [events];
@@ -327,7 +331,9 @@ const ResultsPanel = Backbone.View.extend({
 
         if (analysis.name !== 'empty') {
             this.editor.isReady.then(async () => {
-                await this.editor.blocks.insert('embed', { service: 'analysis', source: `jamovi/anlyses/${analysis.id}`, embed: `${analysis.id}/${analysis.name}`, width: 600, height: 400 });
+                let currentIndex = this.editor.blocks.getCurrentBlockIndex();
+                let insertIndex = (currentIndex == -1 ? this.editor.blocks.getBlocksCount() - 1 : currentIndex) + 1;
+                await this.editor.blocks.insert('embed', { service: 'analysis', source: `jamovi/anlyses/${analysis.id}`, embed: `${analysis.id}/${analysis.name}`, width: 600, height: 400 }, {}, insertIndex);
             });
         }
 

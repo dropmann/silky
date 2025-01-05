@@ -257,7 +257,7 @@ body.windows.electron #header-buttons {
 
 #main-options {
     background-color: inherit;
-    border: 1px solid #ACACAC ;
+    border-right: 1px solid #ACACAC ;
     grid-area: 2 / 3 / span 1 / span 1;
     width: 587px;
     opacity: 1;
@@ -266,6 +266,10 @@ body.windows.electron #header-buttons {
     position: relative;
     justify-self: flex-end;
     min-width: 0px;
+}
+
+[data-splitpanel-mode='results'] #main-options {
+    box-shadow: 5px 0px 7px 1px #c2c2c285;
 }
 
 #main-options.initialised {

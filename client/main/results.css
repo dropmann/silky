@@ -104,6 +104,17 @@
     max-width: min-content !important;
 }
 
+.ce-inline-toolbar { 
+    visibility: hidden; 
+    opacity: 0; 
+    transition: opacity 0.3s ease; 
+} 
+
+.ce-block--focused .ce-inline-toolbar { 
+    visibility: visible; 
+    opacity: 1; 
+}
+
 .ce-block .ce-block__content {
     max-width: 760px;
     margin: unset;
