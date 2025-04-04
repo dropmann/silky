@@ -21,6 +21,7 @@ const AnalysisResources = function(analysis, $target, iframeUrl, instanceId) {
 
     this.analysis = analysis;
     this.name = analysis.name;
+    this.ns = analysis.ns;
     this.options = null;
     this.def = null;
     this.optionsViewReady = false;
@@ -41,7 +42,7 @@ const AnalysisResources = function(analysis, $target, iframeUrl, instanceId) {
     this.frameCommsApi = {
         frameDocumentReady: data => {
             this.notifyDocumentReady();
-            this.trigger("frameReady");
+            //this.trigger("frameReady");
         },
 
         onFrameMouseEvent: data => {
@@ -137,20 +138,15 @@ const AnalysisResources = function(analysis, $target, iframeUrl, instanceId) {
         this.optionsViewReady = false;
         this.ready.then(() => {
             this.analysis.ready.then(() => {
-                this.updateData(this.analysis.options.getValues());
+                this.updateData(this.analysis.getOptions(), 'absolute');
             });
         });  
     };
 
-    this.updateData = function(options) {
+    this.updateData = function(options, editType) {
         this.options = options;
         if (!this.analysis.missingModule)
-            this.frameComms.send("initialiseOptions", { id: this.analysis.id, options: this.options });
-    };
-
-    this.updateOptions = function (values) {
-        if ( ! this.analysis.missingModule)
-            this.frameComms.send("updateOptions", values);
+            this.frameComms.send("initialiseOptions", { id: this.analysis.id, options: this.options, editType });
     };
 
     this.notifyDataChanged = function(dataType, dataInfo) {
@@ -209,39 +205,24 @@ let OptionsPanel = SilkyView.extend({
 
         this._currentResources = null;
 
-        $(window).resize(() => { this.resizeHandler(); });
-        this.$el.on('resized', () => { this.resizeHandler(); });
-
-        args.model.analyses().on('analysisHeadingChanged', this._analysisNameChanged, this);
-
-        args.model.analyses().on('analysisOptionsChanged', this._optionsChanged, this);
+        args.model.on('analysisOptionsChanged', (analysis) => {
+            if (this._currentResources && this._currentResources.analysis === analysis) {
+                analysis.ready.then(() => {
+                    this._currentResources.updateData(analysis.getOptions(), 'relative');
+                });
+            }
+        }, this);
 
         this.render();
     },
 
     setFocus: function() {
         if (this._currentResources) {
-            this._currentResources.$frame[0].focus();
+           /* this._currentResources.$frame[0].focus();
            setTimeout(() => { // needed for firefox cross iframe focus
                 this._currentResources.$frame[0].contentWindow.focus();
-            }, 100);
+            }, 100);*/
         }
-    },
-
-    _optionsChanged: function (analysis, incoming) {
-        if (incoming) {
-            let analysesKey = analysis.ns + "-" + analysis.name;
-            let resources = this._analysesResources[analysesKey];
-            if (resources && analysis.id === resources.analysis.id)
-                resources.updateOptions(analysis.options.getValues());
-        }
-    },
-
-    _analysisNameChanged: function(analysis) {
-        let analysesKey = analysis.ns + "-" + analysis.name;
-        let resources = this._analysesResources[analysesKey];
-        if (resources)
-            resources.setAnalysisTitle(analysis.getHeading());
     },
 
     reloadAnalyses: function(moduleName) {
@@ -262,6 +243,7 @@ let OptionsPanel = SilkyView.extend({
         }
 
         if (analysis !== null) {
+            analysis.reload();
             this.setAnalysis(analysis);
         }
     },
@@ -293,13 +275,12 @@ let OptionsPanel = SilkyView.extend({
         if (this._currentResources === null) {
             this._currentResources = resources;
             this.addMsgListeners(this._currentResources);
-            this.updateContentHeight();
         }
         if (this._currentResources !== null) {
             this._currentResources.$frame.css("height", '');
             this._currentResources.$frame.removeClass('silky-hidden-options-control');
-            if (focusLoop.inAccessibilityMode())
-                focusLoop.transferFocus(this._currentResources.$frame[0]);
+            //if (focusLoop.inAccessibilityMode())
+            //    focusLoop.transferFocus(this._currentResources.$frame[0]);
         }
     },
 
@@ -346,34 +327,14 @@ let OptionsPanel = SilkyView.extend({
         this.$el.empty();
     },
 
-    updateContentHeight: function() {
-        if (this._currentResources === null)
-            return;
-
-        let $frame = this._currentResources.$frame;
-        let pos = $frame.position();
-
-        let properties = this.$el.css(["height", "padding-top", "padding-bottom", "border-top", "border-bottom"]);
-        let height = parseFloat(properties.height) - parseFloat(properties["padding-top"]) - parseFloat(properties["padding-bottom"]) - parseFloat(properties["border-top"]) - parseFloat(properties["border-bottom"]);
-
-        let value = height - pos.top;
-
-        $frame.css("height", value);
-    },
-
     addMsgListeners: function(resource) {
         resource.on("hideOptions", () => {
             this.model.set('selectedAnalysis', null);
-        });
-
-        resource.on("frameReady", () => {
-            this.updateContentHeight();
         });
     },
 
     removeMsgListeners: function(resource) {
         resource.off("hideOptions");
-        resource.off("frameReady");
     },
 
     hideOptions: function(clearSelected) {
@@ -386,14 +347,6 @@ let OptionsPanel = SilkyView.extend({
         }
 
         this.$el.trigger("splitpanel-hide");
-    },
-
-    frameReady: function(data) {
-        this.updateContentHeight();
-    },
-
-    resizeHandler: function() {
-        this.updateContentHeight();
     }
 });
 

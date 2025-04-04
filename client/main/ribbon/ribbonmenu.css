@@ -23,6 +23,7 @@
     visibility: visible;
     background-color: inherit;
     font: inherit;
+    border-radius: 4px;
 }
 
 .display-in-menu {

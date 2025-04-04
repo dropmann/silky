@@ -362,6 +362,7 @@ class InfoBox extends HTMLElement {
                 background-color: white;
                 padding: 20px;
                 box-shadow: 0px 0px 10px #777777;
+                border-radius: 5px;
             }
 
             div.local.import {

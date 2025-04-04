@@ -8,20 +8,33 @@ const I18n = require('../common/i18n');
 const focusLoop = require('../common/focusloop');
 
 const formatIO = require('../common/utils/formatio');
-
 const Menu = require('./menu');
 const ContextMenus = require('./contextmenu/contextmenus');
 const ContextMenu = require('./contextmenu');
 const Notify = require('./notification');
 const host = require('./host');
-const selectionLoop = require('../common/selectionloop');
+//const selectionLoop = require('../common/selectionloop');
+
+import { HeadingNode, QuoteNode } from '@lexical/rich-text';
+import { CodeNode } from '@lexical/code';
+import { LinkNode } from '@lexical/link';
+import { ListNode, ListItemNode } from '@lexical/list';
+import { PlaceholderNode } from './lexical/placeholdernode';
+import { AnalysisNode } from './lexical/analysisnode'
 
 const { flatten, unflatten } = require('../common/utils/addresses');
 const { contextMenuListener } = require('../common/utils');
 
-require('./references');
+//require('./references');
 
 const path = require('path');
+
+import { ResultsContext, Analysis, YDocSupport } from './lexical/editorcontext'
+//import { ResultsEditor } from './resultseditor';
+import { References } from './lexical/components/references';
+
+
+
 
 const ResultsPanel = Backbone.View.extend({
     className: 'ResultsPanel',
@@ -35,11 +48,177 @@ const ResultsPanel = Backbone.View.extend({
         this.$el.attr('aria-label', 'Results');
         this.$el.attr('tabindex', '-1');
 
+        this.$el.on('focus', (event) => {
+            this.resultsContext.setFocus();
+            event.stopPropagation();
+            event.preventDefault();
+        });
+
+        if ('iframeUrl' in args)
+            this.iframeUrl = args.iframeUrl;
+
+
+        this.$el.on('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+        // this.editor = new EditorJS({
+        //     holder: 'editorjs',
+        //     placeholder: 'Add an analysis or type some text',
+        //     tools: { 
+        //         header: {
+        //             class: Header,
+        //             inlineToolbar: true
+        //         },
+        //         code: Code,
+        //         table: Table,
+        //         inlineCode: InlineCode,
+        //         list: List,
+        //         embed: {
+        //             class: Embed,
+        //             config: {
+        //                 services: {
+        //                     analysis: {
+        //                         regex: new RegExp('jamovi\/analyses\/([^\/\?\&]*)'),
+        //                         embedUrl: `<%= remote_id %>`,
+        //                         html: `<iframe data-id="2"
+        //                                   class="analysis"
+        //                                     sandbox="allow-scripts allow-same-origin"
+        //                                     scrolling="no"
+        //                                     style="border: 0 ; height : 0 ;">
+        //                                 </iframe>`,
+        //                         height: 300,
+        //                         width: 600
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     },
+        //     onReady: () => {
+        //         new Undo({ editor: this.editor });
+        //         new DragDrop(this.editor);
+        //         this.editor.blocks.insert( 'header',  { text: 'Results', level: 1 }, {}, 0, true );
+        //     },
+        //     onChange: (api, events) => { 
+        //         events = Array.isArray(events) ? events : [events];
+        //         for (let event of events) {
+        //             if (event.type === 'block-added')
+        //                 event.detail.target.stretched = true;
+
+        //             if (event.detail.target.name === 'embed') {
+        //                 if (event.type === 'block-removed') {
+        //                     let $iframe = $(event.detail.target.holder.querySelector('iframe'));
+        //                     let analysisId = parseInt($iframe.attr('data-id'));
+        //                     let analysis = this.model.analyses().get(analysisId);
+        //                     this.model.deleteAnalysis(analysis);
+        //                 }
+        //                 else if (event.type === 'block-added') { 
+        //                     let $iframe = $(event.detail.target.holder.querySelector('iframe'));
+        //                     let analysisId = parseInt($iframe.attr('src'));
+        //                     if (Number.isNaN(analysisId) === true) 
+        //                         continue; 
+
+        //                     $iframe.attr('data-id', analysisId);
+        //                     $iframe.attr('src', `${ this.iframeUrl }${ this.model.instanceId() }/${ analysisId }/`);
+
+        //                     let resources = this.resources[analysisId];
+        //                     resources.iframe = $iframe[0];
+        //                     resources.$iframe = $iframe;
+
+        //                     resources.loaded = false;
+
+        //                     $iframe.on('load', () => {
+        //                         this._sendI18nDef(resources);
+        //                         this._sendResults(resources);
+        //                         resources.loaded = true;
+        //                     });
+
+        //                     $iframe.on('mouseover mouseout', (event) => {
+        //                         this._sendMouseEvent(resources, event);
+        //                     });
+
+        //                     let analysis = resources.analysis;
+        //                     let $container = $(event.detail.target.holder.querySelector(".ce-block__content"));
+        //                     let $cover = $('<div class="jmv-results-cover"></div>').prependTo($container);
+        //                     $cover.on('click', event => this._resultsClicked(event, analysis));
+
+        //                     $container.find('.embed-tool__caption').css("display", "none");
+        //                     $iframe.attr('contenteditable', 'true'); // to make the toolbar appear
+
+        //                     resources.$container = $container;
+                            
+        //                     $container.attr('data-analysis-name', analysis.name);
+        //                     $container.addClass('jmv-results-container');
+        //                     $container.addClass('results-loop-list-item');
+        //                     $container.addClass('results-loop-auto-select');
+        //                     $container.attr('tabindex', -1);
+
+        //                     contextMenuListener($cover[0], event => {
+        //                         this._resultsMouseClicked(2, event.offsetX, event.offsetY, analysis);
+        //                         event.stopPropagation();
+        //                         event.preventDefault();
+        //                         return false;
+        //                     });
+
+        //                     $iframe.on('keydown', (event) => {
+        //                         if ((event.ctrlKey || event.metaKey) && event.code === 'KeyC') {
+        //                             this._menuEvent({ op: 'copy', address: [ analysis.id] });
+        //                             event.stopPropagation();
+        //                         }
+        //                     });
+
+        //                     let selected = this.model.get('selectedAnalysis');
+        //                     if (selected !== null && analysis.id === selected.id) {
+        //                         resources.$container.attr('data-selected', '');
+        //                         resources.$container.attr('aria-current', true);
+        //                     }
+
+                            
+
+        //                 /* let isEmptyAnalysis = analysis.name === 'empty';
+        //                     let classes = '';
+        //                     if (isEmptyAnalysis)
+        //                         classes = 'empty-analysis';*/
+                    
+                            
+        //                     //let $container = $(`<div class="jmv-results-container results-loop-list-item results-loop-auto-select  ${ classes }" tabindex="-1" role="listitem" aria-label="${ isEmptyAnalysis ? 'Annotation Field' : (analysis.results.title + '- Results')}"></div>`);
+                            
+        //                     $container.on('keydown', (event) => {
+        //                         if ((event.ctrlKey || event.metaKey) && event.code === 'KeyC') {
+        //                             this._menuEvent({ op: 'copy', address: [ analysis.id] });
+        //                             event.stopPropagation();
+        //                         }
+        //                     });
+
+        //                     //if (analysis.index === 0)
+        //                     //    this.resultsLooper.highlightElement($container[0], true, false);
+
+        //                     $cover.on('mouseenter', event => {
+        //                         this._sendMouseEvent(resources, event);
+        //                         $iframe.addClass('hover');
+        //                     });
+
+        //                     $cover.on('mouseleave', event => {
+        //                         this._sendMouseEvent(resources, event);
+        //                         $iframe.removeClass('hover');
+        //                     });
+
+        //                 }   
+        //             }
+        //         }
+        //     }
+        //   });
+
+        //   this.editor.isReady.then(() => {
+        //     this.toolbarElement = document.querySelector('.ce-toolbar');
+        //     this.toolbarElement.style.zIndex = '200';
+        //   });
+        
+
         this.el.dataset.mode = args.mode;
         this.annotationFocus = 0;
 
-        this.resultsLooper = new selectionLoop('results-loop', this.el, true);
-        this.analysisCount = 0;
+        //this.resultsLooper = new selectionLoop('results-loop', this.el, true);
+        //this.analysisCount = 0;
 
         focusLoop.addFocusLoop(this.el);
 
@@ -70,37 +249,34 @@ const ResultsPanel = Backbone.View.extend({
 
         this.resources = { };
 
-        if ('iframeUrl' in args)
-            this.iframeUrl = args.iframeUrl;
-
         if ('mode' in args)
             this.mode = args.mode;
 
-        let analyses = this.model.analyses();
-        analyses.on('analysisCreated', this._analysisCreated, this);
-        analyses.on('analysisDeleted', this._analysisDeleted, this);
-        analyses.on('analysisResultsChanged', this._resultsEvent, this);
-        analyses.on('analysisAnnotationChanged', this._annotationEvent, this);
-        analyses.on('analysisHeadingChanged', this._analysisNameChanged, this);
+        //let analyses = this.model.analyses();
+        //analyses.on('analysisCreated', this._analysisCreated, this);
+        //analyses.on('analysisDeleted', this._analysisDeleted, this);
+        //analyses.on('analysisResultsChanged', this._resultsEvent, this);
+        //analyses.on('analysisAnnotationChanged', this._annotationEvent, this);
+        //analyses.on('analysisHeadingChanged', this._analysisNameChanged, this);
 
         this.model.on('change:selectedAnalysis', this._selectedChanged, this);
 
         window.addEventListener('message', event => this._messageEvent(event));
 
-        this.$el.on('click', () => {
-            if (this.model.attributes.selectedAnalysis !== null)
-                this.model.set('selectedAnalysis', null);
-        });
+        //this.$el.on('click', () => {
+            //if (this.model.attributes.selectedAnalysis !== null)
+            //    this.model.set('selectedAnalysis', null);
+        //});
 
         this._ready = false;
 
-        this._refsTable = document.createElement('jmv-references');
+        this._refsTable = new References();
         this._refsTable.setAttribute('role', 'listitem');
         this._refsTable.setAttribute('tabindex', '-1');
         this._refsTable.setAttribute('aria-label', _('References'));
         this._refsTable.classList.add('results-loop-list-item', 'results-loop-auto-select');
         this._refsTable.style.display = 'none';
-        this._refsTable.setAnalyses(this.model.analyses());
+        
         contextMenuListener(this._refsTable, (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -114,7 +290,28 @@ const ResultsPanel = Backbone.View.extend({
             }
         });
         this._refsTable.addEventListener('click', (event) => this._resultsClicked(event, 'refsTable'));
+
+        this.resultsContext = new ResultsContext();
+        this.resultsContext.setAllowedNodes(HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, AnalysisNode, PlaceholderNode);
+        this.resultsContext.addEventListener('selectedAnalysisChanged', (event: CustomEvent<Analysis>) => {
+            this.model.set('selectedAnalysis', event.detail);
+        });
+        this.resultsContext.addEventListener('analysisOptionsChanged', (event: CustomEvent<Analysis>) => {
+            this.model.trigger('analysisOptionsChanged', event.detail, true);
+        });
+        
+
+        this.resultsContext.setReferences(this._refsTable); // must be added before adding to the dom
+        this.$el.append(this.resultsContext);
+        this.resultsContext.setModules(this.model.modules());
+
+        // test analysis write
+        //setTimeout(() => {
+        //    this.resultsContext.selectedAnalysis.setOptions({spearman: true});
+        //}, 6000);
+        
         this.el.appendChild(this._refsTable);
+
 
         contextMenuListener(this.el, (event) => {
             if (Object.keys(this.resources).length > 0) {
@@ -129,12 +326,119 @@ const ResultsPanel = Backbone.View.extend({
         this.model.settings().on('change:devMode', () => this._updateAll());
         this.model.settings().on('change:syntaxMode', () => this._updateAll());
         this.model.settings().on('change:refsMode', () => this._updateRefsMode());
-        this.model.on('change:editState', () => this._updateEditState());
+        //this.model.on('change:editState', () => this._updateEditState());
+
+        this.resultsContext.addEventListener("nextUpdate", (event: CustomEvent<Uint8Array>) => {
+            this.sendUpdate(event.detail);
+          }, false);
+
+        this.model.attributes.coms.on('broadcast', message => {
+            let payloadType = message.payloadType;
+            if ( ! payloadType)
+                return;
+    
+            if (payloadType === 'ProjectRR')
+                this._processProjectRRResponse(message);
+        });
+        this.model.on('createAnalysis', (opts) => {
+            this.resultsContext.insertAnalysis(opts);
+        });
+        //this.model.analyses().on('analysisOptionsChanged', this._optionsChanged, this);
+        setTimeout(() => {
+            let format;
+            try {
+                format = JSON.parse(this.model.settings().get('format'));
+                // we added .pt later
+                if ( ! ('pt' in format))
+                    format.pt = 'dp';
+            }
+            catch (e) {
+                format = {t:'sf',n:3,pt:'dp',p:3};
+            }
+            this.resultsContext.format = format;
+            this.resultsContext.mode = this.model.settings().get('syntaxMode') ? 'text' : 'rich';
+            this.resultsContext.refsMode = this.model.settings().getSetting('refsMode');
+            this.resultsContext.editState = this.model.get('editState');
+            this.resultsContext.devMode = this.model.settings().get('devMode');
+
+
+            this.updateDoc();
+            this._updateRefsMode();
+        }, 1000)
+        
+
+        this.resultsContext.addEventListener('keydown', (event) => {
+            event.stopPropagation();
+        });
     },
+
+    setFocus() {
+        this.$el.focus();
+    },
+
+    sendUpdate(update) {
+        let instance = this.model;
+        let coms = instance.attributes.coms;
+
+        let docPB = new coms.Messages.ProjectRR();
+        docPB.op = coms.Messages.GetSet.SET;
+        docPB.incDoc = true;
+        docPB.docUpdate = update;
+
+        let request = new coms.Messages.ComsMessage();
+        request.payload = docPB.toArrayBuffer();
+        request.payloadType = 'ProjectRR';
+        request.instanceId = instance.instanceId();
+
+        return coms.send(request).then(response => {
+            console.log('sent')
+        });
+    },
+
+    updateDoc() {
+        let instance = this.model;
+        let coms = instance.attributes.coms;
+
+        let docPB = new coms.Messages.ProjectRR();
+        docPB.op = coms.Messages.GetSet.GET;
+        docPB.incDoc = true;
+
+        let request = new coms.Messages.ComsMessage();
+        request.payload = docPB.toArrayBuffer();
+        request.payloadType = 'ProjectRR';
+        request.instanceId = instance.instanceId();
+
+        return coms.send(request).then(response => {
+            let docPB = coms.Messages.ProjectRR.decode(response.payload);
+            let update = docPB.docUpdate.toBuffer();
+            update = new Uint8Array(update);
+            let ydocSupport = this.resultsContext.getFeature(YDocSupport);
+            ydocSupport.applyUpdate(update);
+
+            //this._processProjectRRResponse(response);
+        });
+    },
+
+    _processProjectRRResponse(response) {
+        let docPB = coms.Messages.ProjectRR.decode(response.payload);
+        let update = docPB.docUpdate.toBuffer();
+        update = new Uint8Array(update);
+        let ydocSupport = this.resultsContext.getFeature(YDocSupport);
+            ydocSupport.applyUpdate(update);
+    },
+
+    //_optionsChanged(analysis, incoming) {
+        /*if ( ! incoming) {
+            this.editor.update(() => {
+                this.nodes[analysis.id].setOptions(analysis.options.getValues());
+            });
+        }*/
+    //},
+
     _updateRefsMode() {
-        if ( ! this._ready)
-            return;
-        this._updateAllRefNumbers();
+       // if ( ! this._ready)
+       //     return;
+        //this._updateAllRefNumbers();
         let refsMode = this.model.settings().getSetting('refsMode', 'bottom');
         if (refsMode === 'bottom')
             this._refsTable.style.display = '';
@@ -142,23 +446,25 @@ const ResultsPanel = Backbone.View.extend({
             this._refsTable.style.display = 'none';
     },
     _checkIfEverythingReady() {
-        if (this._ready)
+        /*if (this._ready)
             return;
 
         for (let id in this.resources) {
             if ( ! this.resources[id].sized)
                 return;
-        }
+        }*/
 
         this._ready = true;
-        this._refsTable.update();
+        //this._refsTable.update();
         this._updateRefsMode();
     },
-    _analysisCreated(analysis) {
+    //async _analysisCreated(analysis) {
 
-        this._updateRefs(analysis);
+        //this._updateRefs(analysis);
 
-        let element = `
+
+
+        /*let element = `
             <iframe
                 data-id="${ analysis.id }"
                 src="${ this.iframeUrl }${ this.model.instanceId() }/${ analysis.id }/"
@@ -166,43 +472,43 @@ const ResultsPanel = Backbone.View.extend({
                 sandbox="allow-scripts allow-same-origin"
                 scrolling="no"
                 style="border: 0 ; height : 0 ;"
-            ></iframe>`;
+            ></iframe>`;*/
 
-        let isEmptyAnalysis = analysis.name === 'empty';
-        let classes = '';
-        if (isEmptyAnalysis)
-            classes = 'empty-analysis';
+        //let isEmptyAnalysis = analysis.name === 'empty';
+        //let classes = '';
+        //if (isEmptyAnalysis)
+        //    classes = 'empty-analysis';
 
 
-        let $container = $(`<div class="jmv-results-container results-loop-list-item results-loop-auto-select  ${ classes }" tabindex="-1" role="listitem" aria-label="${ isEmptyAnalysis ? 'Annotation Field' : (analysis.results.title + '- Results')}"></div>`);
+        //let $container = $(`<div class="jmv-results-container results-loop-list-item results-loop-auto-select  ${ classes }" tabindex="-1" role="listitem" aria-label="${ isEmptyAnalysis ? 'Annotation Field' : (analysis.results.title + '- Results')}"></div>`);
         
-        $container.on('keydown', (event) => {
+        /*$container.on('keydown', (event) => {
             if ((event.ctrlKey || event.metaKey) && event.code === 'KeyC') {
                 this._menuEvent({ op: 'copy', address: [ analysis.id] });
                 event.stopPropagation();
             }
-        });
+        });*/
 
-        let $after = $(this._refsTable);
+        /*let $after = $(this._refsTable);
         if (analysis.results.index > 0) {
             let $siblings = this.$el.children('.jmv-results-container');
             let index = analysis.results.index - 1;
             if (index < $siblings.length)
                 $after = $siblings[index];
-        }
+        }*/
 
-        $container.insertBefore($after);
+        //$container.insertBefore($after);
 
-        $container.attr('data-analysis-name', analysis.name);
+        //$container.attr('data-analysis-name', analysis.name);
 
-        if ( ! isEmptyAnalysis || analysis.index === 0)
-            this.resultsLooper.highlightElement($container[0], true, false);
+        //if ( ! isEmptyAnalysis || analysis.index === 0)
+        //    this.resultsLooper.highlightElement($container[0], true, false);
 
-        let $cover = $('<div class="jmv-results-cover"></div>').appendTo($container);
-        let $iframe = $(element).appendTo($container);
-        let iframe = $iframe[0];
+        //let $cover = $('<div class="jmv-results-cover"></div>').appendTo($container);
+        //let $iframe = $(element).appendTo($container);
+        //let iframe = $iframe[0];
 
-        $container.on('keydown', (event) => {
+        /*$container.on('keydown', (event) => {
             if (event.keyCode === 13) { //enter
                 this.model.set('selectedAnalysis', analysis);
             }
@@ -219,22 +525,22 @@ const ResultsPanel = Backbone.View.extend({
         if (selected !== null && analysis.id === selected.id) {
             $container.attr('data-selected', '');
             $container.attr('aria-current', true);
-        }
+        }*/
 
-        let resources = {
-            id: analysis.id,
-            analysis : analysis,
-            iframe : iframe,
-            $iframe : $iframe,
-            $container : $container,
-            loaded : false,
-            isEmpty: isEmptyAnalysis,
-            hasTitle: ! isEmptyAnalysis || analysis.isFirst()
-        };
+        //let resources = {
+        //    id: analysis.id,
+        //    analysis : analysis,
+            //iframe : iframe,
+            //$iframe : $iframe,
+            //$container : $container,
+        //    loaded : false,
+        //    isEmpty: isEmptyAnalysis,
+        //    hasTitle: ! isEmptyAnalysis || analysis.isFirst()
+        //};
 
-        this.resources[analysis.id] = resources;
+        //this.resources[analysis.id] = resources;
 
-        $iframe.on('load', () => {
+        /*$iframe.on('load', () => {
             this._sendI18nDef(resources);
             this._sendResults(resources);
             resources.loaded = true;
@@ -242,9 +548,9 @@ const ResultsPanel = Backbone.View.extend({
 
         $iframe.on('mouseover mouseout', (event) => {
             this._sendMouseEvent(resources, event);
-        });
+        });*/
 
-        if (isEmptyAnalysis === false) {
+        /*if (isEmptyAnalysis === false) {
             $cover.on('click', event => this._resultsClicked(event, analysis));
             this.analysisCount += 1;
             if (this.analysisCount === 1)
@@ -257,16 +563,16 @@ const ResultsPanel = Backbone.View.extend({
                 let clickEvent = $.Event('enterannotation', { });
                 iframe.contentWindow.postMessage(clickEvent, this.iframeUrl);
             });
-        }
+        }*/
 
-        contextMenuListener($cover[0], event => {
+        /*contextMenuListener($cover[0], event => {
             this._resultsMouseClicked(2, event.offsetX, event.offsetY, analysis);
             event.stopPropagation();
             event.preventDefault();
             return false;
-        });
+        });*/
 
-        $cover.on('mouseenter', event => {
+        /*$cover.on('mouseenter', event => {
             this._sendMouseEvent(resources, event);
             $iframe.addClass('hover');
         });
@@ -274,12 +580,12 @@ const ResultsPanel = Backbone.View.extend({
         $cover.on('mouseleave', event => {
             this._sendMouseEvent(resources, event);
             $iframe.removeClass('hover');
-        });
-    },
-    _analysisDeleted(analysis) {
-        this._updateRefs();
-        let resources = this.resources[analysis.id];
-        let $container = resources.$container;
+        });*/
+    //},
+    //_analysisDeleted(analysis) {
+        //this._updateRefs();
+        //let resources = this.resources[analysis.id];
+        /*let $container = resources.$container;
         $container.css('height', '0');
         if (analysis.name === 'empty')
             $container.remove();
@@ -294,18 +600,18 @@ const ResultsPanel = Backbone.View.extend({
                 if (removed === false)
                     $container.remove();
             }, 400);
-        }
-        delete this.resources[analysis.id];
-    },
-    _updateRefs(exclude) {
+        }*/
+        //delete this.resources[analysis.id];
+    //},
+    /*_updateRefs(exclude) {
         if ( ! this._ready)
             return;
 
         let modulesWithRefChanges = [ ];
 
-        let oldNums = this._refsTable.getNumbers();
+        let oldNums = this._refsTable.getAllNumbers();
         this._refsTable.update();
-        let refNums = this._refsTable.getNumbers();
+        let refNums = this._refsTable.getAllNumbers();
         for (let name in oldNums) {
             if ( ! underscore.isEqual(refNums[name], oldNums[name]))
                 modulesWithRefChanges.push(name);
@@ -318,16 +624,16 @@ const ResultsPanel = Backbone.View.extend({
                     this._sendRefNumbers(res);
             }
         }
-    },
-    _annotationEvent(sender, analysis, address) {
+    },*/
+    /*_annotationEvent(sender, analysis, address) {
         if (sender !== this) {
             let resources = this.resources[analysis.id];
             resources.analysis = analysis;
             if (resources.loaded)
                 this._sendResults(resources);
         }
-    },
-    _analysisNameChanged(analysis){
+    },*/
+    /*_analysisNameChanged(analysis){
         let resources = this.resources[analysis.id];
         if (resources) {
             let heading = analysis.getHeading();
@@ -335,22 +641,22 @@ const ResultsPanel = Backbone.View.extend({
                 heading = analysis.results.title
             resources.$container.attr('aria-label', `${ heading } - Results`);
         }
-    },
-    _resultsEvent(analysis) {
-        this._updateRefs(analysis);
-        let resources = this.resources[analysis.id];
-        resources.analysis = analysis;
-        if (resources.loaded)
-            this._sendResults(resources);
-    },
-    _updateAllRefNumbers() {
+    },*/
+    //_resultsEvent(analysis) {
+        //this._updateRefs(analysis);
+        //let resources = this.resources[analysis.id];
+        //resources.analysis = analysis;
+        //if (resources.loaded)
+        //    this._sendResults(resources);
+    //},
+    /*_updateAllRefNumbers() {
         for (let id in this.resources) {
             let res = this.resources[id];
             if (res.loaded)
                 this._sendRefNumbers(res);
         }
-    },
-    _sendRefNumbers(resources) {
+    },*/
+   /* _sendRefNumbers(resources) {
         let analysis = resources.analysis;
         let event = {
             type: 'reftablechanged',
@@ -360,8 +666,8 @@ const ResultsPanel = Backbone.View.extend({
             }
         };
         resources.iframe.contentWindow.postMessage(event, this.iframeUrl);
-    },
-    _sendMouseEvent(resources, eventData) {
+    },*/
+    /*_sendMouseEvent(resources, eventData) {
         let analysis = resources.analysis;
 
         let event = {
@@ -371,8 +677,8 @@ const ResultsPanel = Backbone.View.extend({
             }
         };
         resources.iframe.contentWindow.postMessage(event, this.iframeUrl);
-    },
-    async _sendI18nDef(resources) {
+    },*/
+    /*async _sendI18nDef(resources) {
         let analysis = resources.analysis;
 
         await analysis.ready;
@@ -385,8 +691,8 @@ const ResultsPanel = Backbone.View.extend({
             }
         };
         resources.iframe.contentWindow.postMessage(event, this.iframeUrl);
-    },
-    _sendResults(resources) {
+    },*/
+    /*_sendResults(resources) {
 
         let format;
         try {
@@ -423,20 +729,36 @@ const ResultsPanel = Backbone.View.extend({
             }
         };
         resources.iframe.contentWindow.postMessage(event, this.iframeUrl);
-    },
+    },*/
     _updateAll() {
 
-        for (let id in this.resources) {
+        let format;
+        try {
+            format = JSON.parse(this.model.settings().get('format'));
+            // we added .pt later
+            if ( ! ('pt' in format))
+                format.pt = 'dp';
+        }
+        catch (e) {
+            format = {t:'sf',n:3,pt:'dp',p:3};
+        }
+        this.resultsContext.format = format;
+        this.resultsContext.mode = this.model.settings().get('syntaxMode') ? 'text' : 'rich';
+        this.resultsContext.refsMode = this.model.settings().getSetting('refsMode');
+        this.resultsContext.editState = this.model.get('editState');
+        this.resultsContext.devMode = this.model.settings().get('devMode');
+
+        /*for (let id in this.resources) {
             let resources = this.resources[id];
             if (resources === undefined)
                 continue;
             if (resources.loaded === false)
                 continue;
             this._sendResults(resources);
-        }
+        }*/
 
     },
-    _tryGetResource(xpos, ypos) {
+    /*_tryGetResource(xpos, ypos) {
         for (let id in this.resources) {
             let $container = this.resources[id].$container;
             let offset = $container.offset();
@@ -444,7 +766,7 @@ const ResultsPanel = Backbone.View.extend({
                 return this.resources[id];
         }
         return null;
-    },
+    },*/
     _resultsClicked(event, analysis) {
         event.stopPropagation();
         let current = this.model.get('selectedAnalysis');
@@ -455,7 +777,7 @@ const ResultsPanel = Backbone.View.extend({
         else
             this.model.set('selectedAnalysis', null);
     },
-    _resultsMouseClicked(button, offsetX, offsetY, analysis) {
+    /*_resultsMouseClicked(button, offsetX, offsetY, analysis) {
         let selected = this.model.attributes.selectedAnalysis;
         if ((selected === null && analysis !== null) || selected === analysis) {
             let resources = this.resources[analysis.id];
@@ -466,7 +788,7 @@ const ResultsPanel = Backbone.View.extend({
         else {
             this.model.set('selectedAnalysis', null);
         }
-    },
+    },*/
     _refsRightClicked(event) {
 
         let rect = this._refsTable.getBoundingClientRect();
@@ -513,7 +835,7 @@ const ResultsPanel = Backbone.View.extend({
         for (let id in this.resources) {
 
             let resources = this.resources[id];
-            if (event.source !== resources.iframe.contentWindow)
+            if (resources.iframe === undefined || event.source !== resources.iframe.contentWindow)
                 continue;
 
             let payload = event.data;
@@ -572,8 +894,8 @@ const ResultsPanel = Backbone.View.extend({
                         this._scrollIntoView($container, height);
                     $iframe.width(width);
                     $iframe.height(height);
-                    $container.width(width);
-                    $container.height(height);
+                    //$container.width(width);
+                    //$container.height(height);
 
                     resources.sized = true;
                     this._checkIfEverythingReady();
@@ -918,11 +1240,14 @@ const ResultsPanel = Backbone.View.extend({
                 this.$el.stop().animate({ scrollTop: itemBottom - viewHeight }, { duration: 'slow', easing: 'swing' });
         }
     },
-    setFocus() {
+    /*setFocus() {
         focusLoop.enterFocusLoop(this.el, { withMouse: false });
-    },
+    },*/
     _selectedChanged(event) {
-        let oldSelected = this.model.previous('selectedAnalysis');
+        let newSelected = this.model.get('selectedAnalysis');
+        if (newSelected === null)
+            this.resultsContext.clearSelectedAnalysis();
+        /*let oldSelected = this.model.previous('selectedAnalysis');
         let newSelected = this.model.get('selectedAnalysis');
 
         if (oldSelected) {
@@ -932,7 +1257,7 @@ const ResultsPanel = Backbone.View.extend({
             }
             else {
                 let oldSelectedResults = this.resources[oldSelected.id];
-                if (oldSelectedResults) {
+                if (oldSelectedResults && oldSelectedResults.$container) {
                     oldSelectedResults.$container.removeAttr('data-selected');
                     oldSelectedResults.$container.attr('aria-current', false);
                 }
@@ -947,7 +1272,7 @@ const ResultsPanel = Backbone.View.extend({
             }
             else {
                 let newSelectedResults = this.resources[newSelected.id];
-                if (newSelectedResults) {
+                if (newSelectedResults && newSelectedResults.$container) {
                     newSelectedResults.$container.attr('data-selected', '');
                     newSelectedResults.$container.attr('aria-current', true);
                 }
@@ -959,9 +1284,9 @@ const ResultsPanel = Backbone.View.extend({
         else {
             this._sendSelected(null);
             this.$el.removeAttr('data-analysis-selected');
-        }
+        }*/
     },
-    _sendSelected(resourceId) {
+   /* _sendSelected(resourceId) {
         let selectedResource = this.resources[resourceId];
         for (let id in this.resources) {
             let resource = this.resources[id];
@@ -983,8 +1308,8 @@ const ResultsPanel = Backbone.View.extend({
 
             resource.iframe.contentWindow.postMessage(event, this.iframeUrl);
         }
-    },
-    annotationGotFocus() {
+    },*/
+    /*annotationGotFocus() {
         // Added debounce to minimize focus events flying around due
         // to the disconnect between the toolbar and the editors in the iframes
         this.annotationFocus += 1;
@@ -1010,8 +1335,8 @@ const ResultsPanel = Backbone.View.extend({
             }
         }
 
-    },
-    annotationLostFocus() {
+    },*/
+    /*annotationLostFocus() {
         this.annotationFocus -= 1;
         if (this.annotationFocus === 0) {
 
@@ -1036,8 +1361,8 @@ const ResultsPanel = Backbone.View.extend({
         }
         else if (this.annotationFocus < 0)
             throw "shouldn't get here";
-    },
-    _updateEditState() {
+    },*/
+    /*_updateEditState() {
         let event = {
             type: 'annotationEvent',
             data: {
@@ -1054,8 +1379,8 @@ const ResultsPanel = Backbone.View.extend({
 
             resources.iframe.contentWindow.postMessage(event, this.iframeUrl);
         }
-    },
-    annotationAction(action) {
+    },*/
+    /*annotationAction(action) {
         let event = {
             type: 'annotationEvent',
             data: {
@@ -1077,7 +1402,7 @@ const ResultsPanel = Backbone.View.extend({
                 break;
             }
         }
-    },
+    },*/
 });
 
 module.exports = ResultsPanel;

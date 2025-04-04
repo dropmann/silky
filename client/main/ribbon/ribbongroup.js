@@ -3,7 +3,7 @@
 
 const $ = require('jquery');
 const Backbone = require('backbone');
-const ActionHub = require('../actionhub');
+import { ActionHub } from '../actionhub';
 const focusLoop = require('../../common/focusloop');
 const EventEmitter = require('events');
 

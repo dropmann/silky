@@ -2,7 +2,7 @@
 'use strict';
 
 const $ = require('jquery');
-const ActionHub = require('../actionhub');
+import { ActionHub } from '../actionhub';
 
 const StatusbarButton = function(name, properties) {
 

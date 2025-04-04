@@ -337,13 +337,15 @@ function updateOptions(values) {
     model.options.endEdit();
 }
 
-function setOptionsValues(data) {
+function setOptionsValues(data, editType) {
+    editType = editType || 'absolute';
+
     if (analysis.inError)
         return;
     
     if (analysis.View.isLoaded() === false) {
         setTimeout(() => {
-            setOptionsValues(data);
+            setOptionsValues(data, contentType);
         }, 0);
         return;
     }
@@ -363,6 +365,12 @@ function setOptionsValues(data) {
             }
             else
                 model.options.setOptionValue(key, value, params);
+        }
+        if (editType === 'absolute') {
+            for (let op of model.options._list) {
+                if (data.options === null || (op.name in data.options) === false)
+                    model.options.setOptionValue(op.name, null, params);
+            }
         }
         if (titleSet === false)
             setTitle('');

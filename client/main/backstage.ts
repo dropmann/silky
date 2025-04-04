@@ -15,7 +15,7 @@ const pathtools = require('./utils/pathtools');
 const Notify = require('./notification');
 
 const host = require('./host');
-const ActionHub = require('./actionhub');
+import { ActionHub } from './actionhub';
 const { s6e } = require('../common/utils');
 const focusLoop = require('../common/focusloop');
 const selectionLoop = require('../common/selectionloop');

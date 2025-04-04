@@ -10,7 +10,7 @@ const Notify = require('./notification');
 const dialogs = require('dialogs')({cancel:false});
 const { csvifyCells, htmlifyCells } = require('../common/utils/formatio');
 
-import ActionHub from './actionhub';
+import { ActionHub } from './actionhub';
 
 const focusLoop = require('../common/focusloop');
 

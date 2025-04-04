@@ -13,7 +13,7 @@ const path = require('path');
 const host = require('./host');
 const Notify = require('./notification');
 
-const Analyses = require('./analyses');
+import { Analyses, CreateAnalysisOptions } from './analyses';
 const DataSetViewModel = require('./dataset');
 const OptionsPB = require('./optionspb');
 const Modules = require('./modules');
@@ -28,14 +28,6 @@ import { UserFacingError } from './errors';
 import { CancelledError } from './errors';
 
 class FileExistsError extends Error { }
-
-interface CreateAnalysisOptions {
-    readonly name: string;
-    readonly ns: string;
-    readonly title: string;
-    readonly index?: number;
-    readonly onlyOne?: boolean;
-}
 
 import { parse as parseJsonLines } from './utils/jsonlines';
 
@@ -738,7 +730,9 @@ export const Instance = Backbone.Model.extend({
     },
     async createAnalysis(opts: CreateAnalysisOptions) {
 
-        let analysis: any;
+        this.trigger('createAnalysis', opts);
+
+        /*let analysis: any;
 
         if (opts.onlyOne) {
             // onlyOne means we reuse an existing analysis (when present)
@@ -759,7 +753,7 @@ export const Instance = Backbone.Model.extend({
                 enabled: true });
             this._sendAnalysis(analysis);
         }
-        this.set('selectedAnalysis', analysis);
+        this.set('selectedAnalysis', analysis);*/
     },
     async duplicateAnalysis(dupliceeId) {
 

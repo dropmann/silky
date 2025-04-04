@@ -1,5 +1,6 @@
 .jmv-ribbon-button.has-icon .jmv-ribbon-button-icon {
     background-image: unset;
+    margin: auto;
 }
 
 .jmv-ribbon-button-icon svg {

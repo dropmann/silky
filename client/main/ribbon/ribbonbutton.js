@@ -5,7 +5,7 @@ const $ = require('jquery');
 const Backbone = require('backbone');
 const RibbonGroup = require('./ribbongroup');
 
-const ActionHub = require('../actionhub');
+import { ActionHub } from '../actionhub';
 const focusLoop = require('../../common/focusloop');
 const Menu = require('../../common/menu');
 const EventEmitter = require('events');
@@ -41,6 +41,7 @@ class RibbonButton extends EventEmitter {
         let shortcutKey = params.shortcutKey === undefined ? null : params.shortcutKey.toUpperCase();
 
         this.$el = $el;
+        this.$el.attr('tabindex', '-1');
         this.$el.addClass('jmv-ribbon-button');
         this.$el.addClass('jmv-ribbon-button-size-' + size);
         this.$el.addClass('jmv-ribbon-button-margin-' + margin);
@@ -89,6 +90,8 @@ class RibbonButton extends EventEmitter {
         this.$el.on('mousedown', event => {
             if (this.menu)
                 this._clicked(event, event.detail > 0);
+
+            event.preventDefault();
         });
         this.$el.on('mouseup', event => {
             if ( ! this.menu)
@@ -193,6 +196,7 @@ class RibbonButton extends EventEmitter {
             this.emit('menuActioned', this);
         }
 
+        //event.stopPropagation();
         event.preventDefault();
     }
 

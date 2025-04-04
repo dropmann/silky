@@ -1,196 +1,226 @@
 
 'use strict';
 
-const $ = require('jquery');
-const Delta = require('quill-delta');
-const Backbone = require('backbone');
+import $ from 'jquery';
+import Delta from 'quill-delta';
+import Backbone from 'backbone';
 Backbone.$ = $;
 
-const host = require('./host');
-const Options = require('./options');
+import Options from './options';
 
-const Analysis = function(id, name, ns, modules) {
 
-    this.id = id;
-    this.name = name;
-    this.ns = ns;
-    this.modules = modules;
-    this.values = null;
-    this.results = null;
-    this.options = null;
-    this.isReady = false;
-    this.references = [ ];
-    this.index = -1;
-    this.uijs = undefined;
 
-    this.revision = 0;
-    this.missingModule = false;
-    this.arbitraryCode = false;
-    this.enabled = false;
+export class Analysis {
+    id: number;
+    name: string;
+    ns: string;
+    modules: any;
+    values: any;
+    results: any;
+    options: any;
+    isReady: boolean;
+    references: any;
+    index: number;
+    uijs: any;
+    revision: number;
+    missingModule: boolean;
+    arbitraryCode: boolean;
+    enabled: boolean;
+    waitingFor: number;
 
-    this._parent = null;
-    this._defn = null;
-    this.dependsOn = null;
-    this.dependents = [ ];
+    _parent: any;
+    _defn: any;
+    dependsOn: any;
+    dependents: any;
+    i18n: any;
 
-    this.reload();
-};
+    _notifySetup: any;
+    _notifyFail: any;
+    ready: Promise<void>;
 
-Analysis.prototype.addDependent = function(analysis) {
-    this.dependents.push(analysis);
-    analysis.dependsOn = this;
-    delete analysis.waitingFor;
-};
+    constructor(id, name, ns, modules) {
+        this.id = id;
+        this.name = name;
+        this.ns = ns;
+        this.modules = modules;
+        this.values = null;
+        this.results = null;
+        this.options = null;
+        this.isReady = false;
+        this.references = [ ];
+        this.index = -1;
+        this.uijs = undefined;
+        this.waitingFor = undefined;
 
-Analysis.prototype.getCurrentI18nCode = async function() {
-    return await this.modules.getCurrentI18nCode(this.ns);
-};
+        this.revision = 0;
+        this.missingModule = false;
+        this.arbitraryCode = false;
+        this.enabled = false;
 
-Analysis.prototype.reload = async function() {
+        this._parent = null;
+        this._defn = null;
+        this.dependsOn = null;
+        this.dependents = [ ];
 
-    if (this.ns === 'jmv' && this.name === 'empty') {
-        this._notifySetup = function() {};
-        this.isReady = true;
-        this.ready = Promise.resolve();
-        this.options = new Options();
-        return;
+        this.reload();
     }
 
-    this.isReady = false;
-    this.ready = (async () => {
+    addDependent(analysis) {
+        this.dependents.push(analysis);
+        analysis.dependsOn = this;
+        delete analysis.waitingFor;
+    }
 
-        let waitForDefn = (async () => {
-            let defn = await this.modules.getDefn(this.ns, this.name);
-            let i18nDefn = await this.modules.getI18nDefn(this.ns);
-            this.i18n = i18nDefn;
-            this.options = new Options(defn.options);
-            this.uijs = defn.uijs;
-            return defn;
-        })();
+    async getCurrentI18nCode() {
+        return await this.modules.getCurrentI18nCode(this.ns);
+    }
 
-        let waitForSetup = new Promise((resolve, reject) => {
-            this._notifySetup = resolve;
-            this._notifyFail  = reject;
-        });
+    async reload() {
 
-        try {
-            await Promise.all([ waitForDefn, waitForSetup ]);
-            let defn = await waitForDefn;
-            this.arbitraryCode = (defn.arbitraryCode || defn.arbitraryCode2);
-            this.missingModule = false;
-            this.options.setValues(this.values);
+        if (this.ns === 'jmv' && this.name === 'empty') {
+            this._notifySetup = function() {};
             this.isReady = true;
-        }
-        catch (e) {
-            this.missingModule = true;
+            this.ready = Promise.resolve();
             this.options = new Options();
-            this.isReady = true;
+            return;
         }
-
-    })();
-};
-
-Analysis.prototype.translate = function(key) {
-    if (this.i18n) {
-        let value = this.i18n.locale_data.messages[key][0];
-        if (value)
-            return value;
+    
+        this.isReady = false;
+        this.ready = (async () => {
+    
+            let waitForDefn = (async () => {
+                let defn = await this.modules.getDefn(this.ns, this.name);
+                let i18nDefn = await this.modules.getI18nDefn(this.ns);
+                this.i18n = i18nDefn;
+                this.options = new Options(defn.options);
+                this.uijs = defn.uijs;
+                return defn;
+            })();
+    
+            let waitForSetup = new Promise((resolve, reject) => {
+                this._notifySetup = resolve;
+                this._notifyFail  = reject;
+            });
+    
+            try {
+                await Promise.all([ waitForDefn, waitForSetup ]);
+                let defn = await waitForDefn;
+                this.arbitraryCode = (defn.arbitraryCode || defn.arbitraryCode2);
+                this.missingModule = false;
+                this.options.setValues(this.values);
+                this.isReady = true;
+            }
+            catch (e) {
+                this.missingModule = true;
+                this.options = new Options();
+                this.isReady = true;
+            }
+    
+        })();
     }
-    return key;
-};
 
-Analysis.prototype.setup = function(values) {
-    this.values = values;
-    this._notifySetup(this);
-};
+    translate(key) {
+        if (this.i18n) {
+            let value = this.i18n.locale_data.messages[key][0];
+            if (value)
+                return value;
+        }
+        return key;
+    };
+    
+    setup(values) {
+        this.values = values;
+        this._notifySetup(this);
+    }
 
-Analysis.prototype.setResults = async function (res, internal) {
-    if (internal === undefined)
-        internal = false;
+    async setResults(res, internal) {
+        if (internal === undefined)
+            internal = false;
+    
+        this.results = res.results;
+        this.references = res.references;
+        this.arbitraryCode = res.arbitraryCode;
+        this.enabled = (res.enabled === undefined ? true : res.enabled);
+        if (this.options) {
+            if (this.options.setValues(res.options)) {
+                if (this._parent !== null) 
+                    this._parent._notifyOptionsChanged(this, !internal);
+            }
+        }
+        if (this._parent !== null)
+            this._parent._notifyResultsChanged(this);
+    }
 
-    this.results = res.results;
-    this.references = res.references;
-    this.arbitraryCode = res.arbitraryCode;
-    this.enabled = (res.enabled === undefined ? true : res.enabled);
-    if (this.options) {
-        if (this.options.setValues(res.options)) {
-            if (this._parent !== null) 
-                this._parent._notifyOptionsChanged(this, !internal);
+    updateHeading(values) {
+        let heading = this.options.getHeading();
+        if (this._parent !== null)
+            this._parent._notifyHeadingChanged(this);
+    }
+
+    getHeading() {
+        return this.options.getHeading();
+    }
+
+    annotationChanged(sender, address) {
+        if (this._parent !== null)
+            this._parent._notifyAnnotationChanged(sender, this, address);
+    }
+
+    hasUserOptions() {
+        return this.name !== 'empty';
+    }
+
+    setOptions(values) {
+        if (this.options.setValues(values)) {
+            this.enabled = true;
+            this.revision++;
+            if (this._parent !== null)
+                this._parent._notifyOptionsChanged(this);
         }
     }
-    if (this._parent !== null)
-        this._parent._notifyResultsChanged(this);
-};
 
-Analysis.prototype.updateHeading = function(values) {
-    let heading = this.options.getHeading();
-    if (this._parent !== null)
-        this._parent._notifyHeadingChanged(this);
-};
-
-Analysis.prototype.getHeading = function() {
-    return this.options.getHeading();
-};
-
-Analysis.prototype.annotationChanged = function(sender, address) {
-    if (this._parent !== null)
-        this._parent._notifyAnnotationChanged(sender, this, address);
-};
-
-Analysis.prototype.hasUserOptions = function() {
-    return this.name !== 'empty';
-};
-
-Analysis.prototype.setOptions = function(values) {
-    if (this.options.setValues(values)) {
+    enable() {
+        if (this.enabled)
+            return;
         this.enabled = true;
+        if (this._parent !== null)
+            this._parent._notifyOptionsChanged(this);
+    }
+
+    notifyColumnsRenamed(columnRenames) {
+        for (let i = 0; i < columnRenames.length; i++)
+            this.options.renameColumn(columnRenames[i].oldName, columnRenames[i].newName);
+        this.revision++;
+    }
+
+    notifyLevelsRenamed(levelRenames) {
+        for (let i = 0; i < levelRenames.length; i++)
+            this.options.renameLevel(levelRenames[i].variable, levelRenames[i].oldLabel, levelRenames[i].newLabel);
+        this.revision++;
+    }
+
+    clearColumnUse(columnNames) {
+        for (let i = 0; i < columnNames.length; i++)
+            this.options.clearColumnUse(columnNames[i]);
         this.revision++;
         if (this._parent !== null)
             this._parent._notifyOptionsChanged(this);
     }
-};
 
-Analysis.prototype.enable = function() {
-    if (this.enabled)
-        return;
-    this.enabled = true;
-    if (this._parent !== null)
-        this._parent._notifyOptionsChanged(this);
-};
+    getUsingColumns() {
+        return this.options.getAssignedColumns();
+    }
 
-Analysis.prototype.notifyColumnsRenamed = function(columnRenames) {
-    for (let i = 0; i < columnRenames.length; i++)
-        this.options.renameColumn(columnRenames[i].oldName, columnRenames[i].newName);
-    this.revision++;
-};
+    getUsingOutputs() {
+        return this.options.getAssignedOutputs();
+    }
+    
+    isFirst() {
+        return this.index === 0;
+    }
+}
 
-Analysis.prototype.notifyLevelsRenamed = function(levelRenames) {
-    for (let i = 0; i < levelRenames.length; i++)
-        this.options.renameLevel(levelRenames[i].variable, levelRenames[i].oldLabel, levelRenames[i].newLabel);
-    this.revision++;
-};
-
-Analysis.prototype.clearColumnUse = function(columnNames) {
-    for (let i = 0; i < columnNames.length; i++)
-        this.options.clearColumnUse(columnNames[i]);
-    this.revision++;
-    if (this._parent !== null)
-        this._parent._notifyOptionsChanged(this);
-};
-
-Analysis.prototype.getUsingColumns = function() {
-    return this.options.getAssignedColumns();
-};
-
-Analysis.prototype.getUsingOutputs = function() {
-    return this.options.getAssignedOutputs();
-};
-
-Analysis.prototype.isFirst = function() {
-    return this.index === 0;
-};
-
-interface CreateOpts {
+export interface CreateOpts {
     readonly name: string;
     readonly ns: string;
     readonly title?: string;
@@ -204,7 +234,7 @@ interface CreateOpts {
     readonly arbitraryCode?: boolean;
 }
 
-const Analyses = Backbone.Model.extend({
+export const Analyses = Backbone.Model.extend({
 
     initialize() {
         this._analyses = [ ];
@@ -235,7 +265,7 @@ const Analyses = Backbone.Model.extend({
     count() {
         return this._analyses.length;
     },
-    async create(options: CreateOpts): Promise<typeof Analysis> {
+    async create(options: CreateOpts): Promise<Analysis> {
         
         let name = options.name;
         let ns = options.ns;
@@ -431,5 +461,3 @@ const Analyses = Backbone.Model.extend({
         this.trigger('analysisAnnotationChanged', sender, analysis, address);
     }
 });
-
-module.exports = Analyses;

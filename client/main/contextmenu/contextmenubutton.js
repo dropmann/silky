@@ -7,7 +7,7 @@ const RibbonGroup = require('../ribbon/ribbongroup');
 const focusLoop = require('../../common/focusloop');
 const Menu = require('../../common/menu');
 
-const ActionHub = require('../actionhub');
+import { ActionHub } from '../actionhub';
 
 const ContextMenuButton = Backbone.View.extend({
 

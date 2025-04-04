@@ -6,7 +6,7 @@ const RibbonSeparator = require('./ribbonseparator');
 const RibbonGroup = require('./ribbongroup');
 const RibbonTab = require('./ribbontab');
 
-import ActionHub from '../actionhub';
+import { ActionHub } from '../actionhub';
 
 
 class DataTab extends RibbonTab {

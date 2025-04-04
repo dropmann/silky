@@ -33,7 +33,7 @@ const Action = Backbone.Model.extend({
     
 });
 
-class ActionHub {
+class Actions {
 
     constructor() {
         this._actions = { };
@@ -57,4 +57,4 @@ class ActionHub {
 
 
 
-module.exports = new ActionHub();
+export const ActionHub = new Actions();

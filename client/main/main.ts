@@ -22,7 +22,7 @@ const Notifications = require('./notifications');
 const SplitPanelSection = require('./splitpanelsection');
 const OptionsPanel = require('./optionspanel');
 const VariableEditor = require('./variableeditor');
-const ActionHub = require('./actionhub');
+import { ActionHub } from './actionhub';
 const I18n = require('../common/i18n');
 
 const Instance = require('./instance');
@@ -434,16 +434,20 @@ $(document).ready(async() => {
         window.$body.attr('data-splitpanel-mode', splitPanel.mode);
         switch (splitPanel.mode) {
             case 'results':
+                resultsView.selectedView.resultsContext.persistantSelectedAnalysis = true;
                 let tab = ribbonModel.get('selectedTab');
                 if (tab !== 'annotation')
                     ribbonModel.set('selectedTab', 'analyses');
                 break;
             case 'data':
+                resultsView.selectedView.resultsContext.persistantSelectedAnalysis = true;
                 if (mainTableMode === 'spreadsheet')
                     ribbonModel.set('selectedTab', 'data');
                 else
                     ribbonModel.set('selectedTab', 'variables');
                 break;
+            default:
+                resultsView.selectedView.resultsContext.persistantSelectedAnalysis = false;
         }
     });
 
