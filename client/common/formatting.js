@@ -158,3 +158,6 @@ export const format = function(value, format) {
     }
 
 };
+
+
+module.exports = { determFormat, format };

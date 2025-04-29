@@ -42,6 +42,9 @@ export type SerializedResultNode = Spread<
   SerializedLexicalNode
 >;
 
+// Pre-Init
+const LUT_HEX_4b = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'];
+
 export class ResultNode extends DecoratorNode<HTMLElement> {
   __data: Uint8Array;
   __dataType: string;
@@ -82,8 +85,20 @@ export class ResultNode extends DecoratorNode<HTMLElement> {
   exportJSON(): SerializedResultNode {
     return {
       ...super.exportJSON(),
-      data: this.__data.toHex()
+      data: this.toHex(this.__data)
     };
+  }
+
+  
+// End Pre-Init
+  toHex(buffer) {
+    let out = '';
+    for (let idx = 0; idx < buffer.length; idx++) {
+      let n = buffer[idx];
+      out += LUT_HEX_4b[(n >>> 4) & 0xF];
+      out += LUT_HEX_4b[n & 0xF];
+    }
+    return out;
   }
 
   decodeData() {
@@ -118,14 +133,15 @@ export class ResultNode extends DecoratorNode<HTMLElement> {
 
     div.setAttribute('data-type', result.type);
 
-    div.addEventListener('click', () => {
+    /*result.addEventListener('click', () => {
+      result.parent.setFocus();
       result.parent.editor.update(() => {
           let nodeKey = this.getKey();
           const selection = $createNodeSelection();
           selection.add(nodeKey); // Select the node
           $setSelection(selection);
       });
-    });
+    });*/
 
     div.append(result);
  
@@ -145,7 +161,7 @@ export class ResultNode extends DecoratorNode<HTMLElement> {
 exportDOM(editor: LexicalEditor){
   let dom = editor.getElementByKey(this.getKey());
   let item = dom.querySelector('.jmv-results-item');
-  let contents = item.shadowRoot.querySelector('.contents').cloneNode(true);
+  let contents = item.getRootElement().querySelector('.contents').cloneNode(true);
 
   return { element: contents, /*after: (generatedElement: HTMLElement) => {
     console.log('stuff')

@@ -68,6 +68,10 @@ hr {
     background-color: #CCCCCC ;
 }
 
+.content-not-selectable, .content-not-selectable * {
+    user-select: none !important;
+}
+
 #header {
     font-weight: normal ;
     color: white ;

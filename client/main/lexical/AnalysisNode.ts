@@ -210,6 +210,10 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
   isIsolated(): boolean {
     return false;
   }
+
+  isInline(): boolean {
+    return true;
+  }
 }
 
 export function $isAnalysisNode(

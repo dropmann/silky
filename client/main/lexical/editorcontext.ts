@@ -38,7 +38,8 @@ import {
     ElementNode,
     DELETE_CHARACTER_COMMAND,
     COMMAND_PRIORITY_CRITICAL,
-    $isDecoratorNode
+    $createNodeSelection,
+    $setSelection
 } from 'lexical';
 
 const TEXT_COLOR_COMMAND = 'text-color';
@@ -71,8 +72,6 @@ import {
 } from '@lexical/yjs';
 
 
-
-
 import { registerDragonSupport } from '@lexical/dragon';
 import { createEmptyHistoryState, registerHistory, HistoryState } from '@lexical/history';
 import { registerRichText, $createHeadingNode } from '@lexical/rich-text';
@@ -99,6 +98,11 @@ const THEME = {
     }
 }
 
+let idCounter = 1;
+let getNextId = function() {
+    return idCounter++;
+}
+
 export interface CreateAnalysisOptions {
     readonly name: string;
     readonly ns: string;
@@ -107,7 +111,10 @@ export interface CreateAnalysisOptions {
     readonly onlyOne?: boolean;
 }
 
-
+export interface IEnterable {
+    onEnter: () => void;
+    onLeave: () => void;
+}
 
 abstract class Feature<T extends ItemContext> {
     private _item: T;
@@ -177,12 +184,15 @@ export class YDocSupport extends EditorFeature {
     }
 
     public applyUpdate(update: Uint8Array) {
+        let initialisingBinding = this._initialisingBinding;
         if (this._doc) {
             Y.applyUpdate(this._doc, update);
         }
 
-        const event = new CustomEvent<Uint8Array>('updateApplied', { detail: update });
-        this.item.dispatchEvent(event);
+        if ( ! initialisingBinding) {
+            const event = new CustomEvent<Uint8Array>('updateApplied', { detail: update });
+            this.item.dispatchEvent(event);
+        }
     }
 
     private onAwarenessChanged() {
@@ -261,6 +271,12 @@ export class YDocSupport extends EditorFeature {
                         const proto = Object.getPrototypeOf(nodeMap);
                         let rootNode = nodeMap.get('root');
                         proto.set.call(nodeMap, this.uuid, rootNode);
+
+                        // also do to prevEditorState.
+                        let prevNodeMap = prevEditorState._nodeMap;
+                        const prevProto = Object.getPrototypeOf(prevNodeMap);
+                        let preRootNode = prevNodeMap.get('root');
+                        prevProto.set.call(prevNodeMap, this.uuid, preRootNode);
                     }
                     syncLexicalUpdateToYjs(
                         binding,
@@ -460,21 +476,41 @@ export class Locked extends Feature<ItemContext> {
 export class Selectable extends Feature<ItemContext> {
     constructor(item: ItemContext) {
         super(item);
+
+        this.onClick = this.onClick.bind(this);
     }
 
     isReady() {
         return Promise.resolve();
     }
 
+    onClick(event) {
+        this.item.parent.setFocus();
+        this.item.parent.editor.update(() => {
+            let nodeKey = this.item.nodeKey;
+            const selection = $createNodeSelection();
+            selection.add(nodeKey); // Select the node
+            $setSelection(selection);
+        });
+    }
+
     public registerEvents() {
         let item = this.item;
         let unregister = null;
         if (!item.isRoot) {
-            unregister = item.parent.editor.registerCommand(
-                SELECTION_CHANGE_COMMAND,
-                this.updateDOMElement.bind(this),
-                COMMAND_PRIORITY_LOW
-            )
+            this.item.addEventListener('click', this.onClick);
+
+            unregister = mergeRegister(
+                item.parent.editor.registerCommand(
+                    SELECTION_CHANGE_COMMAND,
+                    this.updateDOMElement.bind(this),
+                    COMMAND_PRIORITY_LOW
+                ),
+                () => {
+                    this.item.removeEventListener('click', this.onClick);
+                }
+            );
+            
         }
         return unregister;
     }
@@ -493,6 +529,60 @@ export class Selectable extends Feature<ItemContext> {
             }
         });
     }
+}
+
+export class Enterable extends Feature<ItemContext> {
+    _enterable: IEnterable;
+    _active: boolean;
+
+    constructor(item: ItemContext & IEnterable) {
+        super(item);
+        item.setAttribute('tabindex', '0');
+        this._enterable = item;
+        //this.onDoubleClick = this.onDoubleClick.bind(this);
+        this.onFocusOut = this.onFocusOut.bind(this);
+        this.onFocusIn = this.onFocusIn.bind(this);
+    }
+
+    isReady() {
+        return Promise.resolve();
+    }
+
+    public registerEvents() {
+        let item = this.item;
+        let unregister = null;
+        if (!item.isRoot) {
+            //item.addEventListener('dblclick', this.onDoubleClick);
+            item.addEventListener('focusout', this.onFocusOut);
+            item.addEventListener('focusin', this.onFocusIn);
+            unregister = () => {
+                //item.removeEventListener('dblclick', this.onDoubleClick);
+                item.removeEventListener('focusout', this.onFocusOut);
+                item.removeEventListener('focusin', this.onFocusIn);
+            };
+        }
+        return unregister;
+    }
+
+    onFocusOut(event: FocusEvent) {
+        if (event.relatedTarget === null || (event.relatedTarget instanceof Node && this.item.contains(event.relatedTarget) === false)) {
+            this._active = false;
+            this._enterable.onLeave();
+        }
+    }
+
+    onFocusIn(event: FocusEvent) {
+        if ( !this._active && event.target instanceof Element) {
+            this._active = true;
+            this._enterable.onEnter();
+        }
+    }
+
+    /*onDoubleClick(event) {
+        if ( ! this._entered)
+            this._enterable.onEnter();
+        this._entered = true;
+    }*/
 }
 
 export class Removable extends Feature<ItemContext> {
@@ -544,16 +634,13 @@ export class Removable extends Feature<ItemContext> {
 }
 
 
-
-
 export class ItemContext extends HTMLElement {
     private _id: string;
     private _parent: ParentContext | null;  // A parent will always be either null (for root) or of type ParentContext which is the fundimental container for nested items
-    //protected _root: ShadowRoot;  //we can't use shadow dom yet because browser support of shadowdom selection is not great. Hopefully one day it will be. Works in firefox
-    protected _root: HTMLElement;
+    protected _root: ShadowRoot;  //we can't use shadow dom yet because browser support of shadowdom selection is not great. Hopefully one day it will be. Works in firefox
+    //protected _root: HTMLElement;
     private _host: Element;
     private _isConnected = false;
-    private _focusedEditor: ItemContext;
     private _nodeKey: string;
     private _unregisterEvents;
     private _features: Array<Feature<ItemContext>>;
@@ -563,8 +650,10 @@ export class ItemContext extends HTMLElement {
     constructor(nodeKey?: string) {
         super();
 
-        this._root = this; //this.attachShadow({ mode: 'open', serializable: true, delegatesFocus: true, clonable: true });  //used with shadow dom
-        this._host = this; //this._root.host;  //used with shadow dom
+        this._root = this.attachShadow({ mode: 'open', serializable: true, delegatesFocus: true, clonable: true });  //used with shadow dom
+        this._host = this._root.host;  //used with shadow dom
+        //this._root = this; //this.attachShadow({ mode: 'open', serializable: true, delegatesFocus: true, clonable: true });  //used with shadow dom
+        //this._host = this; //this._root.host;  //used with shadow dom
 
         this._id = crypto.randomUUID();
         this._nodeKey = nodeKey;
@@ -574,6 +663,10 @@ export class ItemContext extends HTMLElement {
         this._ready = [new Promise((resolve, reject) => {
             this._resolve = resolve;
         })];
+    }
+
+    public getRootElement() {
+        return this._root;
     }
 
     public get features() {
@@ -649,27 +742,6 @@ export class ItemContext extends HTMLElement {
         return this._parent === null;
     }
 
-    //global
-    public get focusedContext(): ItemContext {
-        if (this._parent)
-            return this._parent.focusedContext;
-
-        return this._focusedEditor;
-    }
-
-    protected onFocusedContextChanged() {
-
-    }
-
-    public set focusedContext(context: ItemContext) {
-        if (this._parent)
-            this._parent.focusedContext = context;
-        else if (this._focusedEditor != context) {
-            this._focusedEditor = context;
-            this.onFocusedContextChanged();
-        }
-    }
-
     //local
     public get nodeKey(): string {
         return this._nodeKey;
@@ -718,16 +790,24 @@ export abstract class EditorContext extends ItemContext {
 
     private _unregisterEditor;
     private _allowedNodes: Array<LexicalNode>;
-
+    private _focusedEditor: EditorContext;
     private _canUndo = false;
     private _canRedo = false;
     private _blockType: string;
     private _historyState: HistoryState;
+    protected _editorElement: HTMLElement;
 
     constructor(nodeKey?: string) {
         super(nodeKey);
 
-        this._root.innerHTML = `<style>${this._css()}</style><div class="editor" contenteditable="true"></div>`;
+        let elementId = `editor${getNextId()}`;
+        this._root.innerHTML = `<style>${this._css()}</style>`;
+
+        this._editorElement = document.createElement('div');
+        this._editorElement.setAttribute('id', elementId);
+        this._editorElement.setAttribute('contenteditable', 'true');
+        this._editorElement.classList.add('editor');
+        this._root.append(this._editorElement);
     }
 
     protected onConnected() {
@@ -788,6 +868,7 @@ export abstract class EditorContext extends ItemContext {
     }
 
     setFocus() {
+        //this._editorElement.focus();
         this.editor.focus();
     }
 
@@ -1033,6 +1114,27 @@ export abstract class EditorContext extends ItemContext {
         this._unregisterEditor = this.registerEditor();
     }
 
+    //global
+    public get focusedContext(): EditorContext {
+        if (this.parent)
+            return this.parent.focusedContext;
+
+        return this._focusedEditor;
+    }
+
+    protected onFocusedContextChanged() {
+
+    }
+
+    public set focusedContext(context: EditorContext) {
+        if (this.parent)
+            this.parent.focusedContext = context;
+        else if (this._focusedEditor != context) {
+            this._focusedEditor = context;
+            this.onFocusedContextChanged();
+        }
+    }
+
     //local
     public get editor(): LexicalEditor {
         return this._editor;
@@ -1252,7 +1354,7 @@ export abstract class ParentContext extends EditorContext {
     }
 }
 
-export class ResultsContext extends ParentContext {
+export class ResultsContext extends ParentContext implements IEnterable {
     private _references: References;
     private _mode: string;
     private _refsMode: string;
@@ -1272,8 +1374,26 @@ export class ResultsContext extends ParentContext {
         this.addFeatures(
             new YDocSupport(this, uuid),
             //new Removable(this), 
-            new Selectable(this)
+            new Selectable(this),
+            //new Enterable(this)
         );
+    }
+
+    public onEnter() {
+        this._editorElement.setAttribute('contenteditable', 'true');
+        this._editorElement.classList.remove('content-not-selectable');
+        //this.setFocus();
+        /*setTimeout(() => {
+            this._editorElement.focus();
+        }, 0);*/
+        
+        console.log('entered!!!!!!!!!!!!')
+    }
+
+    public onLeave() {
+        this._editorElement.setAttribute('contenteditable', 'false');
+        this._editorElement.classList.add('content-not-selectable');
+        console.log('left!!!!!!!!!!!!')
     }
 
     protected registerEditor() {
@@ -1292,6 +1412,9 @@ export class ResultsContext extends ParentContext {
         );
     }
 
+//18v makita auto feed DFR450ZX 418.45 + battery - 25mm fine thread screw wall - 32mm cieling  600mm centers
+
+
     protected _css() {
         let css = super._css();
         css += `
@@ -1300,6 +1423,7 @@ export class ResultsContext extends ParentContext {
                 transition: background-color .2s;
                 border-radius: 3px;
                 margin: 10px 0px;
+                display: block;
             }
 
             .jmv-analysis-wrapper:not(.analysis-selected):hover {
@@ -1341,15 +1465,18 @@ export class ResultsContext extends ParentContext {
 
     insertAnalysis(opts: CreateAnalysisOptions) {
         let focusedContext = this.focusedContext || this;
-        if (focusedContext instanceof EditorContext) {
+        //if (focusedContext instanceof EditorContext) {
             focusedContext.editor.update(() => {
                 let analysisNode = $createAnalysisNode(opts.ns, opts.name);
                 analysisNode.focusOnCreation = true;
 
+                let paragraphNode = $createParagraphNode();
+                paragraphNode.append(analysisNode);
+
                 const root = $getRoot();
                 const lastNode = root.getChildren().at(-1);
                 if ($isPlaceholderNode(lastNode))
-                    lastNode.replace(analysisNode);
+                    lastNode.replace(paragraphNode);
                 else {
                     let currentNode = null;
                     const selection = $getSelection();
@@ -1360,22 +1487,22 @@ export class ResultsContext extends ParentContext {
                     }
 
                     if (!currentNode || $isRootNode(currentNode))
-                        root.append(analysisNode);
+                        root.append(paragraphNode);
                     else {
                         let topLevel = currentNode.getTopLevelElement();
                         if (topLevel) {
                             if (topLevel.getType() === 'paragraph' && topLevel.getTextContent() === '')
-                                topLevel.replace(analysisNode);
+                                topLevel.replace(paragraphNode);
                             else
-                                topLevel.insertAfter(analysisNode);
+                                topLevel.insertAfter(paragraphNode);
                         }
                         else
-                            currentNode.insertAfter(analysisNode);
+                            currentNode.insertAfter(paragraphNode);
                     }
                 }
 
             });
-        }
+        //}
     }
 
     getAllAnalysisNodes(): Array<AnalysisNode> {
@@ -1586,6 +1713,7 @@ export class AnalysisContext extends ResultsContext {
     private _refTable: RefTable;
     private _ns: string;
     private _name: string;
+    private _test = 0;
 
     constructor(uuid: string, ns: string, name: string, nodeKey: string) {
         //let allowedNodes = [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, AnalysisNode, ResultNode];
@@ -1701,8 +1829,9 @@ export class AnalysisContext extends ResultsContext {
             root.append(headingNode);
 
             const paragraphNode1 = $createParagraphNode();
-            paragraphNode1.append($createTextNode(''));
+            paragraphNode1.append($createTextNode('T-' + this._test.toString()));
             root.append(paragraphNode1);
+            this._test += 1;
 
             let hex = '0a046d61696e120b414e4f5641202d206c656e28013281050a3c0a046e616d651a04746578743a081a04646f736528013a061a04737570703a0d1a09646f73653a7375707028023a0d1a09526573696475616c7328030a480a027373120e53756d206f6620537175617265731a066e756d6265723a09117a4cf060def4a2403a09113c33333333ab69403a091130dbf97e6a145b403a0911032b8716d94086400a3d0a026466120264661a07696e74656765723a091100000000000000403a0911000000000000f03f3a091100000000000000403a09110000000000004b400a450a026d73120b4d65616e205371756172651a066e756d6265723a09117a4cf060def492403a09113c33333333ab69403a091130dbf97e6a144b403a0911469bcfe1d15f2a400a330a01461201461a066e756d6265723a0911cd00c06cffff56403a09115eeba47dda242f403a0911f828c7128f6d10403a021a000a3f0a01701201701a066e756d626572220a7a746f2c7076616c75653a0911aa06a27904a9523c3a0911c3c1f936354d2e3f3a0911c56424d18962963f3a021a000a410a0565746153711204ceb7c2b21a066e756d62657222037a746f3a0911036a450ddd7de63f3a0911897ea7f9a374ae3f3a09112c887ef69b10a03f3a021a0078010a430a066574615371501205ceb7c2b2701a066e756d62657222037a746f3a09113a94cd744fbde83f3a0911fc1512f14fa6cc3f3a0911f0c6e0664ae6c03f3a021a0078010a430a076f6d65676153711204cf89c2b21a066e756d62657222037a746f3a091107778df49a29e63f3a09117b1a0f533164ac3f3a0911fec3f1bccd36983f3a021a007801120622646f7365221206227375707022120f5b22646f7365222c2273757070225d1202222238ffffffffffffffffff01820103636172';
             let resultNode = $createResultNode(this.hexToUint8Array(hex));
