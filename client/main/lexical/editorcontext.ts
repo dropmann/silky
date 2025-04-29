@@ -1106,12 +1106,25 @@ export abstract class EditorContext extends ItemContext {
 
         this.editorFinalisation(this.editor);
 
-        this._historyState = createEmptyHistoryState();
+        /*if (this.isRoot)
+            this._historyState = createEmptyHistoryState();
+        else
+            this._historyState = this._root._historyState;*/
 
         let element = this._root.querySelector('.editor');
         this.editor.setRootElement(element);
 
         this._unregisterEditor = this.registerEditor();
+    }
+
+    public get historyState() {
+        if (this.parent)
+            return this.parent.historyState;
+
+        if (!this._historyState)
+            this._historyState = createEmptyHistoryState();
+
+        return this._historyState;
     }
 
     //global
@@ -1174,7 +1187,7 @@ export abstract class EditorContext extends ItemContext {
             registerMarkdownShortcuts(this.editor, TRANSFORMERS),
             registerRichText(this.editor),
             registerDragonSupport(this.editor),
-            registerHistory(this.editor, this._historyState, 300),
+            registerHistory(this.editor, this.historyState, 300),
             this.registerToolbarBindings(),
             this.editor.registerUpdateListener(({ editorState }) => {
                 editorState.read(() => {
@@ -1470,13 +1483,13 @@ export class ResultsContext extends ParentContext implements IEnterable {
                 let analysisNode = $createAnalysisNode(opts.ns, opts.name);
                 analysisNode.focusOnCreation = true;
 
-                let paragraphNode = $createParagraphNode();
-                paragraphNode.append(analysisNode);
+                //let paragraphNode = $createParagraphNode();
+                //paragraphNode.append(analysisNode);
 
                 const root = $getRoot();
                 const lastNode = root.getChildren().at(-1);
                 if ($isPlaceholderNode(lastNode))
-                    lastNode.replace(paragraphNode);
+                    lastNode.replace(analysisNode);
                 else {
                     let currentNode = null;
                     const selection = $getSelection();
@@ -1487,17 +1500,17 @@ export class ResultsContext extends ParentContext implements IEnterable {
                     }
 
                     if (!currentNode || $isRootNode(currentNode))
-                        root.append(paragraphNode);
+                        root.append(analysisNode);
                     else {
                         let topLevel = currentNode.getTopLevelElement();
                         if (topLevel) {
                             if (topLevel.getType() === 'paragraph' && topLevel.getTextContent() === '')
-                                topLevel.replace(paragraphNode);
+                                topLevel.replace(analysisNode);
                             else
-                                topLevel.insertAfter(paragraphNode);
+                                topLevel.insertAfter(analysisNode);
                         }
                         else
-                            currentNode.insertAfter(paragraphNode);
+                            currentNode.insertAfter(analysisNode);
                     }
                 }
 
@@ -1725,9 +1738,9 @@ export class AnalysisContext extends ResultsContext {
         this._refTable = new RefTable();
 
         this.refchangedHandle = this.refchangedHandle.bind(this);
-        this.isReady().then(() => {
-            this.appendTable();
-        });
+        //this.isReady().then(() => {
+        //    this.appendTable();
+        //});
     }
 
     protected onConnected() {

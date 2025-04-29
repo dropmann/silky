@@ -109,6 +109,7 @@ class Instance:
         self._perms = Permissions.retrieve()
         self._mod_tracker = ModTracker(self._data)
         self._analyses_doc = AnalysesDoc()
+        self._analyses_doc.doc_changed += self._on_doc_changed
 
         now = monotonic()
 
@@ -316,7 +317,7 @@ class Instance:
         if request.op == OP_GET:
             if request.incDoc:
                 vector, update = self._analyses_doc.get_changes()
-                response.docVector = vector
+                # response.docVector = vector
                 response.docUpdate = update
         else:
             if request.incDoc:
@@ -325,6 +326,16 @@ class Instance:
 
         if self._coms is not None:
             self._coms.send(response, self._instance_id, request)
+
+    def _on_doc_changed(self, event):
+        response = jcoms.ProjectRR()
+        update = event.data.get_update()
+        print(update)
+        # response.docVector = bytearray()
+        response.docUpdate = update
+        print(response)
+        if self._coms is not None:
+            self._coms.send(response, self._instance_id)
 
     def _on_results(self, analysis):
         if self._coms is not None:

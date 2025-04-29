@@ -420,6 +420,8 @@ const ResultsPanel = Backbone.View.extend({
     },
 
     _processProjectRRResponse(response) {
+        let instance = this.model;
+        let coms = instance.attributes.coms;
         let docPB = coms.Messages.ProjectRR.decode(response.payload);
         let update = docPB.docUpdate.toBuffer();
         update = new Uint8Array(update);

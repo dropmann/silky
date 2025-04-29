@@ -11,4 +11,4 @@ aiohttp
 duckdb
 loguru
 pytest
-y-py
+y-py-dart>=0.6.3a19
