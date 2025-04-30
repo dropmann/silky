@@ -163,6 +163,7 @@ export class YDocSupport extends EditorFeature {
         super(item);
         this._uuid = uuid;
         this.yDocUpdateHandle = this.yDocUpdateHandle.bind(this);
+        this.updateHandler = this.updateHandler.bind(this);
         this._doc = new Y.Doc();
         this._ready = new Promise((resolve, reject) => {
             this._resolve = resolve;

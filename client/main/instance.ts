@@ -941,6 +941,9 @@ export const Instance = Backbone.Model.extend({
         else if (payloadType === 'DataSetRR') {
             this._dataSetModel._processDatasetRR(response);
         }
+        else if (payloadType === 'ProjectRR') {
+            this.trigger('projectChanged', { response });
+        }
         else if (payloadType === 'ModuleRR') {
             let moduleName = response.name;
             this._modules.purgeCache(moduleName);

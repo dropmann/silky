@@ -119,11 +119,11 @@ export class ResultNode extends DecoratorNode<HTMLElement> {
     let result: AnalysisElement | null = null;
 
     const writable = this.getWritable();
-    if ('table' in decoded) {
+    if ('table' in decoded && decoded.table !== null) {
       writable.__dataType = 'table';
       result = new Table(decoded, this.getKey());
     }
-    else if ('image' in decoded) {
+    else if ('image' in decoded && decoded.image !== null) {
       writable.__dataType = 'image';
       result = new Image(decoded, this.getKey());
     }

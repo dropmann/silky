@@ -332,13 +332,9 @@ const ResultsPanel = Backbone.View.extend({
             this.sendUpdate(event.detail);
           }, false);
 
-        this.model.attributes.coms.on('broadcast', message => {
-            let payloadType = message.payloadType;
-            if ( ! payloadType)
-                return;
-    
-            if (payloadType === 'ProjectRR')
-                this._processProjectRRResponse(message);
+        this.model.on('projectChanged', event => {
+            console.log(event);
+            this._processProjectRRResponse(event.response);
         });
         this.model.on('createAnalysis', (opts) => {
             this.resultsContext.insertAnalysis(opts);
@@ -410,23 +406,28 @@ const ResultsPanel = Backbone.View.extend({
 
         return coms.send(request).then(response => {
             let docPB = coms.Messages.ProjectRR.decode(response.payload);
-            let update = docPB.docUpdate.toBuffer();
-            update = new Uint8Array(update);
-            let ydocSupport = this.resultsContext.getFeature(YDocSupport);
-            ydocSupport.applyUpdate(update);
-
-            //this._processProjectRRResponse(response);
+            // let update = docPB.docUpdate.toBuffer();
+            // update = new Uint8Array(update);
+            // let ydocSupport = this.resultsContext.getFeature(YDocSupport);
+            // ydocSupport.applyUpdate(update);
+            this._processProjectRRResponse(docPB);
         });
     },
 
-    _processProjectRRResponse(response) {
-        let instance = this.model;
-        let coms = instance.attributes.coms;
-        let docPB = coms.Messages.ProjectRR.decode(response.payload);
+    _processProjectRRResponse(docPB) {
+        //let instance = this.model;
+        //let coms = instance.attributes.coms;
+        //let docPB = coms.Messages.ProjectRR.decode(response.payload);
         let update = docPB.docUpdate.toBuffer();
+        console.log('got something')
         update = new Uint8Array(update);
-        let ydocSupport = this.resultsContext.getFeature(YDocSupport);
-            ydocSupport.applyUpdate(update);
+        //console.log(response.payload, update);
+        if (update.length > 0) {
+            console.log('Process Project RR')
+            console.log(update)
+            let ydocSupport = this.resultsContext.getFeature(YDocSupport);
+                ydocSupport.applyUpdate(update);
+        }
     },
 
     //_optionsChanged(analysis, incoming) {
