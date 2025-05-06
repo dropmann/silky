@@ -102,6 +102,9 @@ export class ResultNode extends DecoratorNode<HTMLElement> {
   }
 
   decodeData() {
+    if (this.__data === null || this.__data === undefined)
+      return null;
+
     let decoded = Messages.ResultsElement.decode(this.__data);
     const type = this.getType();
     if (type !== ResultNode.getType() && (type in decoded) === false)
@@ -131,6 +134,7 @@ export class ResultNode extends DecoratorNode<HTMLElement> {
     if (result === null)
       throw 'Unknown result type';
 
+    result.classList.add('content');
     div.setAttribute('data-type', result.type);
 
     /*result.addEventListener('click', () => {
@@ -148,14 +152,18 @@ export class ResultNode extends DecoratorNode<HTMLElement> {
     return div;
   }
 
+  updateDOM(prevNode, div, config) {
+    let result = div.querySelector('.content');
+    let decoded = this.decodeData();
+    result.setData(decoded);
+    result.render();
+    return false;
+  }
+
   updateData(data: Uint8Array): boolean {
     const writable = this.getWritable();
     writable.__data = data;
     return true;
-  }
-
-  updateDOM(): boolean {
-    return false;
   }
 
 exportDOM(editor: LexicalEditor){

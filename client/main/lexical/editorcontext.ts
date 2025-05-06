@@ -4,6 +4,7 @@ import { $isHeadingNode } from '@lexical/rich-text';
 import { $createResultNode } from './resultnode';
 import { $isPlaceholderNode, $createPlaceholderNode, PlaceholderNode } from './placeholdernode';
 
+
 import {
     LexicalEditor,
     $getNodeByKey,
@@ -150,28 +151,28 @@ abstract class EditorFeature extends Feature<EditorContext> {
 }
 
 export class YDocSupport extends EditorFeature {
-    private _doc: Y.Doc | null;
     private _binding: Binding | null = null;
     private _syncing = false;
-    private _initialisingBinding = false;
     private _provider;
     private _uuid: string;
-    private _ready: Promise<void>;
-    private _resolve;
 
-    constructor(item: EditorContext, uuid: string) {
+    constructor(item: ResultsContext, uuid: string) {
         super(item);
         this._uuid = uuid;
-        this.yDocUpdateHandle = this.yDocUpdateHandle.bind(this);
-        this.updateHandler = this.updateHandler.bind(this);
-        this._doc = new Y.Doc();
-        this._ready = new Promise((resolve, reject) => {
-            this._resolve = resolve;
-        });
+    }
+
+    public registerEvents() {
+        return () => {
+
+        };
     }
 
     isReady() {
-        return this._ready;
+        return Promise.resolve();
+    }
+
+    public get binding() : Binding {
+        return this._binding;
     }
 
     //local
@@ -181,19 +182,22 @@ export class YDocSupport extends EditorFeature {
 
     //local
     public get doc() {
-        return this._doc;
+        if (this.item instanceof ResultsContext)
+            return this.item.doc;
+
+        throw 'Only ResultsContext can be used with YDoc';
     }
 
     public applyUpdate(update: Uint8Array) {
-        let initialisingBinding = this._initialisingBinding;
-        if (this._doc) {
-            Y.applyUpdate(this._doc, update);
+        //let initialisingBinding = this._initialisingBinding;
+        if (this.doc) {
+            Y.applyUpdate(this.doc, update);
         }
 
-        if ( ! initialisingBinding) {
+        //if ( ! initialisingBinding) {
             const event = new CustomEvent<Uint8Array>('updateApplied', { detail: update });
             this.item.dispatchEvent(event);
-        }
+        //}
     }
 
     private onAwarenessChanged() {
@@ -201,45 +205,54 @@ export class YDocSupport extends EditorFeature {
     }
 
     private registerBindings() {
-        this._provider = this.createNoOpProvider(this._doc);
+        this._provider = this.createNoOpProvider(this.doc);
 
         this._provider.awareness.on('change', this.onAwarenessChanged);
 
         // The original yjsroot node needs to be stored so that the right collabNode is given to the right yjsNode
-        let originalyjsRootNode = this._doc.get('root', Y.XmlText);
+        let originalyjsRootNode = this.doc.get('root', Y.XmlText);
         let rootCollabNode = originalyjsRootNode._collabNode; //store root collab node for future repair.
 
-        this._binding = createBinding(this.item.editor, this._provider, this.uuid, this._doc, {});
+        this._binding = createBinding(this.item.editor, this._provider, this.uuid, this.doc, {});
 
         if (this.uuid) {
             // Modify the binding to use the uuid root node in the yjs doc as the root node for lexical
-            const yjsRootNode = this._doc.get(this.uuid, Y.XmlText);
+            const yjsRootNode = this.doc.get(this.uuid, Y.XmlText);
             this._binding.root._xmlText = yjsRootNode;
             this._binding.root._key = this.uuid;
             yjsRootNode._collabNode = this._binding.root
+
+            
 
             originalyjsRootNode._collabNode = rootCollabNode; //repair root collab node
         }
 
         let unregisterListeners = this.registerCollaborationListeners(this.item.editor, this._provider, this._binding);
-        this._doc.on('update', this.yDocUpdateHandle);
+        //this.doc.on('update', this.yDocUpdateHandle);
 
         if (this.item.parent) {
-            let parentYDocSupport = this.item.parent.getFeature(YDocSupport)
-            if (parentYDocSupport) {
-                this._initialisingBinding = true;
-                this.applyUpdate(Y.encodeStateAsUpdate(parentYDocSupport.doc));
-            }
+            this.item.editor.update(() => {
+                const xmlText = this._binding.root._xmlText;
+                this._binding.root.syncPropertiesFromYjs(this._binding, null);
+                this._binding.root.applyChildrenYjsDelta(this._binding, xmlText.toDelta());
+                this._binding.root.syncChildrenFromYjs(this._binding);
+            });
+            //syncYjsChangesToLexical(this._binding, this._provider, events, false);
+            //let parentYDocSupport = this.item.parent.getFeature(YDocSupport)
+            //if (parentYDocSupport) {
+                //this._initialisingBinding = true;
+                //Y.applyUpdate(this.doc, Y.encodeStateAsUpdate(this.doc));
+            //}
         }
 
         return () => {
             unregisterListeners();
             this._provider.awareness.off('change', this.onAwarenessChanged);
-            this._doc.off('update', this.yDocUpdateHandle);
+            //this.doc.off('update', this.yDocUpdateHandle);
         };
     }
 
-    private yDocUpdateHandle(update: Uint8Array, origin, doc) {
+    /*private yDocUpdateHandle(update: Uint8Array, origin, doc) {
         if (this._initialisingBinding) {
             //force an update after the inital update has occured and delcare ready.
             this.item.editor.update(() => { }, {
@@ -252,7 +265,7 @@ export class YDocSupport extends EditorFeature {
 
         if (origin && origin.root._key === this._binding.root._key)
             this.onUpdate(update);
-    }
+    }*/
 
     private registerCollaborationListeners(editor: LexicalEditor, provider, binding: Binding) {
         const unsubscribeUpdateListener = editor.registerUpdateListener(
@@ -264,7 +277,7 @@ export class YDocSupport extends EditorFeature {
                 prevEditorState,
                 tags,
             }) => {
-                if (tags.has('skip-collab') === false && !this._syncing && !this._initialisingBinding) {
+                if (tags.has('skip-collab') === false && !this._syncing /*&& !this._initialisingBinding*/) {
                     if (this.uuid) {
                         // Copy the root lexicalNode to update the reference as the 'root' has seemingly be replaced
                         // This allows the binder to use the uuid node in the lexical to update the jys doc.
@@ -290,7 +303,7 @@ export class YDocSupport extends EditorFeature {
                         tags,
                     );
                 }
-                this._initialisingBinding = false;
+                //this._initialisingBinding = false;
             },
         );
 
@@ -312,9 +325,11 @@ export class YDocSupport extends EditorFeature {
 
     private createNoOpProvider(doc: Y.Doc) {
         const emptyFunction = () => { };
-
+        let awareness = new Awareness(doc);
+        awareness.setLocalStateField("anchorPos", null);
+        awareness.setLocalStateField("focusPos", null);
         return {
-            awareness: new Awareness(doc),
+            awareness: awareness,
             connect: emptyFunction,
             disconnect: emptyFunction,
             off: emptyFunction,
@@ -322,10 +337,10 @@ export class YDocSupport extends EditorFeature {
         };
     }
 
-    private onUpdate(update: Uint8Array) {
+    /*private onUpdate(update: Uint8Array) {
         const event = new CustomEvent<Uint8Array>('nextUpdate', { detail: update, bubbles: true, composed: true });
         this.item.dispatchEvent(event);
-    }
+    }*/
 
     public onEditorFinalisation(editor: LexicalEditor): void {
 
@@ -346,7 +361,7 @@ export class YDocSupport extends EditorFeature {
         return this.registerBindings();
     }
 
-    public registerEvents() {
+    /*public registerEvents() {
         if (!this.item.isRoot)
             this.item.parent.addEventListener('updateApplied', this.updateHandler);
 
@@ -354,12 +369,12 @@ export class YDocSupport extends EditorFeature {
             if (!this.item.isRoot)
                 this.item.parent.removeEventListener('updateApplied', this.updateHandler);
         }
-    }
+    }*/
 
-    private updateHandler(event: CustomEvent<Uint8Array>) {
-        let update: Uint8Array = event.detail;
-        this.applyUpdate(update);
-    }
+    //private updateHandler(event: CustomEvent<Uint8Array>) {
+        // let update: Uint8Array = event.detail;
+        // this.applyUpdate(update);
+    //}
 }
 
 export class Locked extends Feature<ItemContext> {
@@ -647,6 +662,9 @@ export class ItemContext extends HTMLElement {
     private _features: Array<Feature<ItemContext>>;
     private _ready: Array<Promise<void>>;
     private _resolve;
+    private _ppi: number;
+    private _theme: any;
+    private _palette: any;
 
     constructor(nodeKey?: string) {
         super();
@@ -664,6 +682,60 @@ export class ItemContext extends HTMLElement {
         this._ready = [new Promise((resolve, reject) => {
             this._resolve = resolve;
         })];
+    }
+
+    public get extra() {
+        return { 
+            '.ppi': this.ppi, 
+            theme: this.theme, 
+            palette: this.palette,
+            '.lang': 'en'
+        }
+    }
+
+    // global
+    public get ppi(): number {
+        if (this.parent)
+            return this.parent.ppi;
+
+        return this._ppi;
+    }
+
+    public set ppi(ppi: number) {
+        if (this.parent && this.parent instanceof ResultsContext)
+            throw 'Mode can only be changed on the root context';
+
+        this._ppi = ppi;
+    }
+
+    // global
+    public get theme(): number {
+        if (this.parent)
+            return this.parent.theme;
+
+        return this._theme;
+    }
+
+    public set theme(theme: number) {
+        if (this.parent && this.parent instanceof ResultsContext)
+            throw 'Mode can only be changed on the root context';
+
+        this._theme = theme;
+    }
+
+    // global
+    public get palette(): any {
+        if (this.parent)
+            return this.parent.palette;
+
+        return this._palette;
+    }
+
+    public set palette(palette: any) {
+        if (this.parent && this.parent instanceof ResultsContext)
+            throw 'Mode can only be changed on the root context';
+
+        this._palette = palette;
     }
 
     public getRootElement() {
@@ -1380,10 +1452,14 @@ export class ResultsContext extends ParentContext implements IEnterable {
     private _unsubscribeUpdateListener: () => void;
     private _persistantSelectedAnalysis = false;
 
+    private _doc: Y.Doc = null;
+
     constructor(uuid?: string, nodeKey?: string) {
         super(nodeKey);
         this._selectedAnalysis = null;
         this.onAnalysesChanged = this.onAnalysesChanged.bind(this);
+
+        this.yDocUpdateHandle = this.yDocUpdateHandle.bind(this);
 
         this.addFeatures(
             new YDocSupport(this, uuid),
@@ -1393,9 +1469,40 @@ export class ResultsContext extends ParentContext implements IEnterable {
         );
     }
 
+    public get doc() : Y.Doc {
+        if (this.parent && this.parent instanceof ResultsContext)
+            return this.parent.doc;
+
+        if (this._doc === null) 
+            this._doc = new Y.Doc();
+
+        return this._doc;
+    }
+
+    private yDocUpdateHandle(update: Uint8Array, origin, doc) {
+        /*if (this._initialisingBinding) {
+            //force an update after the inital update has occured and delcare ready.
+            this.editor.update(() => { }, {
+                discrete: true, onUpdate: () => {
+                    this._resolve();
+                }
+            });
+            return;
+        }*/
+
+        let binding = this.getFeature(YDocSupport).binding;
+        if (origin && origin.root._key === binding.root._key)
+            this.onUpdate(update);
+    }
+
+    private onUpdate(update: Uint8Array) {
+        const event = new CustomEvent<Uint8Array>('nextUpdate', { detail: update, bubbles: true, composed: true });
+        this.dispatchEvent(event);
+    }
+
     public onEnter() {
-        this._editorElement.setAttribute('contenteditable', 'true');
-        this._editorElement.classList.remove('content-not-selectable');
+        //this._editorElement.setAttribute('contenteditable', 'true');
+        //this._editorElement.classList.remove('content-not-selectable');
         //this.setFocus();
         /*setTimeout(() => {
             this._editorElement.focus();
@@ -1405,12 +1512,14 @@ export class ResultsContext extends ParentContext implements IEnterable {
     }
 
     public onLeave() {
-        this._editorElement.setAttribute('contenteditable', 'false');
-        this._editorElement.classList.add('content-not-selectable');
+        //this._editorElement.setAttribute('contenteditable', 'false');
+        //this._editorElement.classList.add('content-not-selectable');
         console.log('left!!!!!!!!!!!!')
     }
 
     protected registerEditor() {
+
+        this.doc.on('update', this.yDocUpdateHandle);
         return mergeRegister(
             super.registerEditor(),
             this.editor.registerMutationListener(AnalysisNode, this.onAnalysesChanged),
@@ -1422,7 +1531,10 @@ export class ResultsContext extends ParentContext implements IEnterable {
                     if (textContent.trim() === '')
                         this.initialiseContent();
                 });
-            })
+            }),
+            () => {
+                this.doc.off('update', this.yDocUpdateHandle);
+            }
         );
     }
 
@@ -1481,7 +1593,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
         let focusedContext = this.focusedContext || this;
         //if (focusedContext instanceof EditorContext) {
             focusedContext.editor.update(() => {
-                let analysisNode = $createAnalysisNode(opts.ns, opts.name);
+                let analysisNode = $createAnalysisNode(opts.ns, opts.name, this.extra);
                 analysisNode.focusOnCreation = true;
 
                 //let paragraphNode = $createParagraphNode();
@@ -1570,7 +1682,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
 
         if (context instanceof AnalysisContext) {
 
-            this._selectedAnalysis = new Analysis(context, this._modules);
+            this._selectedAnalysis = context.analysis;
 
             let editor = context.parent.editor;
             let element = editor.getElementByKey(context.nodeKey);
@@ -1629,6 +1741,13 @@ export class ResultsContext extends ParentContext implements IEnterable {
             throw 'Modules can only be changed on the root context';
 
         this._modules = modules;
+    }
+
+    public get modules() : Modules {
+        if (this.parent && this.parent instanceof ResultsContext)
+            return this.parent.modules;
+
+        return this._modules;
     }
 
     //Only root
@@ -1728,6 +1847,7 @@ export class AnalysisContext extends ResultsContext {
     private _ns: string;
     private _name: string;
     private _test = 0;
+    private _analysis: Analysis | null = null;
 
     constructor(uuid: string, ns: string, name: string, nodeKey: string) {
         //let allowedNodes = [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, AnalysisNode, ResultNode];
@@ -1739,14 +1859,16 @@ export class AnalysisContext extends ResultsContext {
         this._refTable = new RefTable();
 
         this.refchangedHandle = this.refchangedHandle.bind(this);
-        //this.isReady().then(() => {
-        //    this.appendTable();
-        //});
     }
 
     protected onConnected() {
         super.onConnected();
         this._refTable.setup(this.references.getNumbers(this._ns), this.parent.refsMode);
+        this._analysis = new Analysis(this, this.modules);
+    }
+
+    public get analysis() : Analysis | null {
+        return this._analysis;
     }
 
     refchangedHandle(e: CustomEvent<Array<string>>) {
@@ -1833,26 +1955,6 @@ export class AnalysisContext extends ResultsContext {
 
         return byteArray;
     }
-
-    appendTable() {
-        this.editor.update(() => {
-            const root = $getRoot();
-
-            const headingNode = $createHeadingNode('h1');
-            headingNode.append($createTextNode('ANOVA'));
-            root.append(headingNode);
-
-            const paragraphNode1 = $createParagraphNode();
-            paragraphNode1.append($createTextNode('T-' + this._test.toString()));
-            root.append(paragraphNode1);
-            this._test += 1;
-
-            let hex = '0a046d61696e120b414e4f5641202d206c656e28013281050a3c0a046e616d651a04746578743a081a04646f736528013a061a04737570703a0d1a09646f73653a7375707028023a0d1a09526573696475616c7328030a480a027373120e53756d206f6620537175617265731a066e756d6265723a09117a4cf060def4a2403a09113c33333333ab69403a091130dbf97e6a145b403a0911032b8716d94086400a3d0a026466120264661a07696e74656765723a091100000000000000403a0911000000000000f03f3a091100000000000000403a09110000000000004b400a450a026d73120b4d65616e205371756172651a066e756d6265723a09117a4cf060def492403a09113c33333333ab69403a091130dbf97e6a144b403a0911469bcfe1d15f2a400a330a01461201461a066e756d6265723a0911cd00c06cffff56403a09115eeba47dda242f403a0911f828c7128f6d10403a021a000a3f0a01701201701a066e756d626572220a7a746f2c7076616c75653a0911aa06a27904a9523c3a0911c3c1f936354d2e3f3a0911c56424d18962963f3a021a000a410a0565746153711204ceb7c2b21a066e756d62657222037a746f3a0911036a450ddd7de63f3a0911897ea7f9a374ae3f3a09112c887ef69b10a03f3a021a0078010a430a066574615371501205ceb7c2b2701a066e756d62657222037a746f3a09113a94cd744fbde83f3a0911fc1512f14fa6cc3f3a0911f0c6e0664ae6c03f3a021a0078010a430a076f6d65676153711204cf89c2b21a066e756d62657222037a746f3a091107778df49a29e63f3a09117b1a0f533164ac3f3a0911fec3f1bccd36983f3a021a007801120622646f7365221206227375707022120f5b22646f7365222c2273757070225d1202222238ffffffffffffffffff01820103636172';
-            let resultNode = $createResultNode(this.hexToUint8Array(hex));
-            root.append(resultNode);
-        });
-    }
-
 }
 
 export class Analysis {
@@ -1914,6 +2016,8 @@ export class Analysis {
                 this.isReady = true;
             }
 
+            //this.setOptions(this.getOptions()); // initialising the extra options to the initial options
+
         })();
     }
 
@@ -1954,8 +2058,14 @@ export class Analysis {
         return true;
     }
 
-    setOptions(values) {
-        this._context.setOptions(values);
+    async setOptions(values) {
+        let options =  { 
+            ...this._context.extra, 
+            '.lang': await this.getCurrentI18nCode()
+        };
+        if (values !== null)
+            options = { ...options, ...values };
+        this._context.setOptions(options);
     }
 
     notifyColumnsRenamed(columnRenames) {

@@ -108,7 +108,7 @@ class Instance:
         self._coms = None
         self._perms = Permissions.retrieve()
         self._mod_tracker = ModTracker(self._data)
-        self._analyses_doc = AnalysesDoc()
+        self._analyses_doc = AnalysesDoc(self._data)
         self._analyses_doc.doc_changed += self._on_doc_changed
 
         now = monotonic()
@@ -316,24 +316,26 @@ class Instance:
 
         if request.op == OP_GET:
             if request.incDoc:
+                print('Server YDoc requested.')
                 vector, update = self._analyses_doc.get_changes()
                 # response.docVector = vector
                 response.docUpdate = update
         else:
             if request.incDoc:
+                print('Server YDoc Update recieved.')
                 update = request.docUpdate
                 self._analyses_doc.apply_changes(update)
 
         if self._coms is not None:
+            print('Reply sent')
             self._coms.send(response, self._instance_id, request)
 
     def _on_doc_changed(self, event):
         response = jcoms.ProjectRR()
         update = event.data.get_update()
-        print(update)
         # response.docVector = bytearray()
         response.docUpdate = update
-        print(response)
+        print('Server YDoc Changed - Update Sent to clients')
         if self._coms is not None:
             self._coms.send(response, self._instance_id)
 

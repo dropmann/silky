@@ -690,7 +690,7 @@ export const Instance = Backbone.Model.extend({
             this.set('blank',      info.blank);
         }
 
-        if (loadAnalyses) {
+        /*if (loadAnalyses) {
 
             let allAnalysesReady = [ ];
 
@@ -724,7 +724,7 @@ export const Instance = Backbone.Model.extend({
                 else
                     analysis.enabled = true;
             }
-        }
+        }*/
 
         return response;
     },
@@ -887,7 +887,7 @@ export const Instance = Backbone.Model.extend({
             }
         }
         else if (payloadType === 'AnalysisResponse') {
-            let id = response.analysisId;
+            /*let id = response.analysisId;
             let analysis = this._analyses.get(id);
 
             if ( ! analysis) {
@@ -936,7 +936,7 @@ export const Instance = Backbone.Model.extend({
                         enabled: response.enabled,
                         arbitraryCode: response.arbitraryCode,
                     });
-            }
+            }*/
         }
         else if (payloadType === 'DataSetRR') {
             this._dataSetModel._processDatasetRR(response);

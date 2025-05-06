@@ -44,8 +44,10 @@ export abstract class AnalysisElement extends ItemContext {
         this.appendChild(this.refs);
 
         this.ready = Promise.resolve();
+    }
 
-        
+    public setData(data) {
+        this.__data = data;
     }
 
     public abstract get type();
@@ -76,8 +78,11 @@ export abstract class AnalysisElement extends ItemContext {
     abstract _css(): string;
 
     render() {
+        if (! this.__data)
+            return;
+
         let error = this.__data.error;
-        if (error !== null) {
+        if (error) {
             if (this.classList.contains('jmv-results-error')) {
                 let msgElement = this.errorPlacement.querySelector('.jmv-results-error-message');
                 if (msgElement)

@@ -345,7 +345,7 @@ function setOptionsValues(data, editType) {
     
     if (analysis.View.isLoaded() === false) {
         setTimeout(() => {
-            setOptionsValues(data, contentType);
+            setOptionsValues(data, editType);
         }, 0);
         return;
     }

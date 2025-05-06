@@ -325,6 +325,8 @@ const ResultsPanel = Backbone.View.extend({
         this.model.settings().on('change:format',  () => this._updateAll());
         this.model.settings().on('change:devMode', () => this._updateAll());
         this.model.settings().on('change:syntaxMode', () => this._updateAll());
+        this.model.settings().on('change:theme', () => this._updateAll());
+        this.model.settings().on('change:palette', () => this._updateAll());
         this.model.settings().on('change:refsMode', () => this._updateRefsMode());
         //this.model.on('change:editState', () => this._updateEditState());
 
@@ -356,6 +358,9 @@ const ResultsPanel = Backbone.View.extend({
             this.resultsContext.refsMode = this.model.settings().getSetting('refsMode');
             this.resultsContext.editState = this.model.get('editState');
             this.resultsContext.devMode = this.model.settings().get('devMode');
+            this.resultsContext.ppi = Math.trunc(72 * (window.devicePixelRatio || 1));
+            this.resultsContext.theme = this.model.settings().getSetting('theme', 'default');
+            this.resultsContext.palette = this.model.settings().getSetting('palette', 'jmv');
 
 
             this.updateDoc();
@@ -750,6 +755,9 @@ const ResultsPanel = Backbone.View.extend({
         this.resultsContext.refsMode = this.model.settings().getSetting('refsMode');
         this.resultsContext.editState = this.model.get('editState');
         this.resultsContext.devMode = this.model.settings().get('devMode');
+        this.resultsContext.ppi = Math.trunc(72 * (window.devicePixelRatio || 1));
+        this.resultsContext.theme = this.model.settings().getSetting('theme', 'default');
+        this.resultsContext.palette = this.model.settings().getSetting('palette', 'jmv');
 
         /*for (let id in this.resources) {
             let resources = this.resources[id];

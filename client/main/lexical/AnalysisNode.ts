@@ -1,5 +1,3 @@
-
-
 import type {
   EditorConfig,
   LexicalEditor,
@@ -27,6 +25,15 @@ import { ResultsContext, AnalysisContext } from './editorcontext';
 
 import { RefDef } from './components/references'
 
+import OptionsPB from '../optionspb'
+
+import ProtoBuf from 'protobufjs';
+import PROTO_DEFN from '../../assets/coms.proto?raw';
+
+const builder = ProtoBuf.loadProto(PROTO_DEFN);
+
+const Messages = builder.build().jamovi.coms;
+
 export type SerializedAnalysisNode = Spread<
   {
     id: number | null;
@@ -35,7 +42,7 @@ export type SerializedAnalysisNode = Spread<
     uuid: string;
     title: string;
     references: Array<RefDef>;
-    options: any | null;
+    options: Uint8Array | null;
   },
   SerializedLexicalNode
 >;
@@ -47,7 +54,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
   __name: string;
   __title: string;
   private __references: Array<RefDef>;
-  __options: any | null;
+  __options: Uint8Array | null;
   __focusOnCreation: boolean;
 
   static getType(): string {
@@ -66,6 +73,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
       node.__key,
     );
   }
+
   static importJSON(serializedNode: SerializedAnalysisNode): AnalysisNode {
     return new AnalysisNode(
       serializedNode.ns,
@@ -90,7 +98,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
     name: string,
     uuid?: string,
     id?: number | null,
-    options?: any,
+    options?: Uint8Array,
     title?: string,
     references?: Array<RefDef>,
     key?: NodeKey,
@@ -129,12 +137,21 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
     };
   }
 
+  decodeOptions() {
+    console.log(this.__options)
+    if (this.__options === null || this.__options === undefined)
+      return null;
+
+    return OptionsPB.fromPB(Messages.AnalysisOptions.decode(this.__options), Messages);
+  }
+
   createDOM(config: EditorConfig, editor: LexicalEditor): HTMLElement {
     let div = document.createElement('div');
     div.classList.add('jmv-analysis-wrapper');
 
     setTimeout(() => {
       let analysis = new AnalysisContext(this.__uuid, this.__ns, this.__name, this.getKey());
+      //this.analysis = analysis;
       analysis.setAllowedNodes(HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, AnalysisNode, ResultNode);
       analysis.classList.add('analysis-content');
       div.append(analysis);
@@ -142,6 +159,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
 
     return div;
   }
+
 
   public set focusOnCreation(value: boolean) {
     this.__focusOnCreation = value;
@@ -161,7 +179,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
 
   public getDetails() {
     return {
-      options: this.__options,
+      options: this.decodeOptions(),
       name: this.__name,
       id: this.__id,
       ns: this.__ns,
@@ -172,8 +190,11 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
   }
 
   public setOptions(options: any) {
+    console.log('OPTIONS CHANGED for sending')
     const writable = this.getWritable();
-    writable.__options = { ...writable.__options, ...options };
+    let opts = { ...writable.decodeOptions(), ...options };
+    console.log(opts)
+    writable.__options = new Uint8Array(OptionsPB.toPB(opts, [], Messages).toArrayBuffer());
     console.log(writable.__options);
   }
 
@@ -225,9 +246,10 @@ export function $isAnalysisNode(
 export function $createAnalysisNode(
   ns: string,
   name: string,
+  options: any,
   uuid?: string,
   id?: number,
-  options?: any,
 ): AnalysisNode {
-  return new AnalysisNode(ns, name, uuid, id, options);
+  let optionsBytes = new Uint8Array(OptionsPB.toPB(options, [], Messages).toArrayBuffer());
+  return new AnalysisNode(ns, name, uuid, id, optionsBytes);
 }

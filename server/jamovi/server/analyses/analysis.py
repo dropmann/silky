@@ -59,6 +59,7 @@ class Analysis:
 
         self.dataset = dataset
         self.id = id
+        self.uuid = 0
         self.name = name
         self.ns = ns
         self.options = options
@@ -111,7 +112,7 @@ class Analysis:
             value['synced'] = synced
             self.options.set_value(output_name, value)
 
-        if not non_passive_changes and len(changes) == 0 and not wasnt_but_now_is_enabled:
+        if not non_passive_changes and len(changes) == 0 and not wasnt_but_now_is_enabled and self.results is not None:
             self.results.options.CopyFrom(self.options.as_pb())
             return
         self.complete = False

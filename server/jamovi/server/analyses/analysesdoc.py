@@ -1,47 +1,140 @@
 
+from jamovi.server.jamovi_pb2 import AnalysisOptions
+from jamovi.server.jamovi_pb2 import AnalysisStatus
 import y_py as Y
+import asyncio
+import typing
 import json
 import asyncio
+import binascii
 from jamovi.server.utils.event import EventHook, Event
+from .analyses import Analyses
+if typing.TYPE_CHECKING:
+    from jamovi.server.instancemodel import InstanceModel
 
-def from_ydoc_to_lexical(doc: Y.YDoc, root_name='root') -> dict:
-    d = {root_name: None}
-    yroot = doc.get_xml_fragment(root_name)
-    root = yroot.to_dict()
-    q: list = [root]
-    while q:
-        obj = q.pop()
-        if isinstance(obj, dict):
-            keys = list(obj.keys())
-            for key in keys:
-                val = obj.pop(key)
-                if isinstance(val, float) and val.is_integer():
-                    val = int(val)
-                if isinstance(val, bytearray):
-                    val = repr(val)
-                q.append(val)
-                #obj[_decode_yxml_key(key)] = val
-                obj[key] = val
-            if obj.get('__type', '') == 'analysis':
-                uuid = obj['__uuid']
-                d.update(from_ydoc_to_lexical(doc, uuid))
-        if isinstance(obj, list):
-            q += obj
-    d[root_name] = root
-    return d
+ANALYSIS_COMPLETE = AnalysisStatus.Value('ANALYSIS_COMPLETE')
+
+async def sync_ydoc_to_options(resources, target, ydoc_options_pb):
+    analysis_element = target
+    uuid = analysis_element.get_attribute('__uuid')
+    resources[uuid]['revision'] += 1
+    resources[uuid]['analysis'].set_options(ydoc_options_pb, [], resources[uuid]['revision'], True)
 
 class AnalysesDoc:
     '''Analyses document'''
 
     _doc: Y.YDoc
-    analyses = {}
+    resources = {}
+    _analyses: Analyses
     doc_changed: EventHook
+    _txn = None
+    _initialising_options = None
     _externalChanges = False
 
-    def __init__(self):
+    def __init__(self, instance_model):
         self._doc = Y.YDoc()
+        self._analyses = instance_model.analyses
+        self._analyses.add_options_changed_listener(self._options_changed_handler)
+        self._analyses.add_results_changed_listener(self._results_changed_handler)
         self._doc.observe_after_transaction(self.on_event)
         self.doc_changed = EventHook()
+
+    def _options_changed_handler(self, analysis):
+        if self._initialising_options == analysis.uuid:
+            return
+        
+        print('SERVER OPTIONS CHANGED')
+        analysis_xml = self.resources[analysis.uuid]["analysis_xml"]
+        options_bytes = bytearray(analysis.options.as_bytes())
+        hex = '0x' + binascii.hexlify(options_bytes).decode('ascii')
+        if hex != analysis_xml.get_attribute('__options'):
+            print('Out-going: OPTS Diff')
+            if (self._txn != None):
+                analysis_xml.set_attribute(self._txn, '__options', options_bytes)
+            else:
+                with self._doc.begin_transaction() as txn:
+                    analysis_xml.set_attribute(txn, '__options', options_bytes)
+        else:
+            print('Out-going: OPTS SAME')
+
+    def _results_changed_handler(self, analysis):
+        print('RESULTS CHANGED')
+        if analysis.has_results:
+            resources = self.resources[analysis.uuid]
+            results = analysis.results.results
+            if results.status == ANALYSIS_COMPLETE:
+                title = results.title
+                group = results.group
+                if (self._txn != None):
+                    self.create_analysis_title(self._txn, title, resources)
+                    self.findElements(self._txn, group, 'root', resources)
+                else:
+                    with self._doc.begin_transaction() as txn:
+                        self.create_analysis_title(txn, title, resources)
+                        self.findElements(txn, group, 'root', resources)
+
+    def findElements(self, txn, group, base_path, analysis_resources):
+        for element in group.elements:
+            if element.HasField('table') or element.HasField('image'):
+                path = base_path + ':' + element.name
+                if path not in analysis_resources['result_items']:
+                    self.create_result_item(txn, path, element, analysis_resources)
+                else:
+                    xlm_element = analysis_resources['result_items'][path]
+                    result_bytes = bytearray(element.SerializeToString())
+                    hex = '0x' + binascii.hexlify(result_bytes).decode('ascii')
+                    if hex != xlm_element.get_attribute('__data'):
+                        print('updating item - ' + path)
+                        xlm_element.set_attribute(txn, '__data', result_bytes)
+            elif element.HasField('group'):
+                 self.findElements(txn, element.group, base_path + '.' + element.name, analysis_resources)
+            elif element.HasField('array'):
+                 self.findElements(txn, element.group, base_path + '.' + element.name, analysis_resources)
+
+    def create_empty_paragraph(self, txn, analysis_resource):
+        content_root = analysis_resource['analysis_content_xml']
+        empty_paragraph = content_root.push_xml_text(txn)
+        empty_paragraph.set_attribute(txn, '__type', 'paragraph')
+        empty_paragraph.set_attribute(txn, '__format', 0)
+        empty_paragraph.set_attribute(txn, '__style', '')
+        empty_paragraph.set_attribute(txn, '__indent', 0)
+        empty_paragraph.set_attribute(txn, '__dir', 'ltr')
+        empty_paragraph.set_attribute(txn, '__textFormat', 0)
+        empty_paragraph.set_attribute(txn, '__textStyle', '')
+
+    def create_result_item(self, txn, path, element, analysis_resource):
+        content_root = analysis_resource['analysis_content_xml']
+        print('making item - ' + path)
+        xlm_element = content_root.push_xml_element(txn, path)
+        xlm_element.set_attribute(txn, '__type', 'result')
+        xlm_element.set_attribute(txn, '__data', bytearray(element.SerializeToString()))
+        analysis_resource['result_items'][path] = xlm_element
+
+        self.create_empty_paragraph(txn, analysis_resource)
+
+    def create_analysis_title(self, txn, title, analysis_resources):
+        path = '__analysis_title'
+        if path not in analysis_resources['result_items']:
+            heading = analysis_resources['analysis_content_xml'].push_xml_text(txn)
+            heading.set_attribute(txn, '__type', 'heading')
+            heading.set_attribute(txn, '__format', 0)
+            heading.set_attribute(txn, '__style', '')
+            heading.set_attribute(txn, '__indent', 0)
+            heading.set_attribute(txn, '__dir', 'ltr')
+            heading.set_attribute(txn, '__textFormat', 0)
+            heading.set_attribute(txn, '__textStyle', '')
+            heading.set_attribute(txn, '__tag', 'h1')
+            heading.push_attributes(txn, {
+                '__type': 'text',
+                '__format': 0,
+                '__style': '',
+                '__mode': 0,
+                '__detail': 0,
+            })
+            heading.push(txn, title)
+            analysis_resources['result_items'][path] = heading
+        # else:
+        #    heading.push(txn, title)
 
     def get_changes(self, state_vector: bytes | None = None) -> tuple[bytes, bytes]:
         """return the state of the document"""
@@ -50,96 +143,58 @@ class AnalysesDoc:
         return (vector, update)
     
     def on_event(self, event: Y.AfterTransactionEvent) -> None:
-        if self._externalChanges == False:
+        if self._externalChanges == False and event.before_state != event.after_state:
+            print(event.before_state)
+            print(event.after_state)
             doc_changed_event = Event(self, 'doc_changed', event)
             self.doc_changed(doc_changed_event)
 
-    def populateNewAnalyses(self, root):
+    def ydoc_analysis_changed(self, event):
+        if '__options' in event.keys:
+            optionDets = event.keys['__options']
+            if optionDets['action'] == 'update':
+                if (optionDets['newValue'] != optionDets['oldValue']):
+                    print('YDOC ANALYSIS OPTIONS CHANGED')
+                    ydoc_options_pb = AnalysisOptions()
+                    ydoc_options_pb.ParseFromString(optionDets['newValue'])
+                    asyncio.create_task(sync_ydoc_to_options(self.resources, event.target, ydoc_options_pb))
+
+    def create_new_analyses(self, root):
         """populate any new analyses with tables and plots"""
         child = root.first_child
-
         while child is not None:
             if type(child).__name__ == 'YXmlElement':
                 uuid = child.get_attribute('__uuid')
                 if uuid is not None:
-                    analysis = self._doc.get_xml_fragment(uuid)
-                    if uuid not in self.analyses:
-                        self.analyses[uuid] = analysis
-
-                        ana_root = self._doc.get_xml_text(uuid)
+                    if uuid not in self.resources:
+                        analysis_content_xml = self._doc.get_xml_fragment(uuid)
+                        analysis_content_text_xml = self._doc.get_xml_text(uuid)
                         with self._doc.begin_transaction() as txn:
+                            self._txn = txn
 
-                            ana_root.set_attribute(txn, '__dir', 'ltr')
-                            print('making!')
-                            heading = ana_root.push_xml_text(txn)
-                            heading.set_attribute(txn, '__type', 'heading')
-                            heading.set_attribute(txn, '__format', 0)
-                            heading.set_attribute(txn, '__style', '')
-                            heading.set_attribute(txn, '__indent', 0)
-                            heading.set_attribute(txn, '__dir', 'ltr')
-                            heading.set_attribute(txn, '__textFormat', 0)
-                            heading.set_attribute(txn, '__textStyle', '')
-                            heading.set_attribute(txn, '__tag', 'h1')
-                            heading.push_attributes(txn, {
-                                '__type': 'text',
-                                '__format': 0,
-                                '__style': '',
-                                '__mode': 0,
-                                '__detail': 0,
-                            })
-                            heading.push(txn, 'ANOVA')
+                            name = child.get_attribute('__name')
+                            ns = child.get_attribute('__ns')
 
-                            empty_paragraph = ana_root.push_xml_text(txn)
-                            empty_paragraph.set_attribute(txn, '__type', 'paragraph')
-                            empty_paragraph.set_attribute(txn, '__format', 0)
-                            empty_paragraph.set_attribute(txn, '__style', '')
-                            empty_paragraph.set_attribute(txn, '__indent', 0)
-                            empty_paragraph.set_attribute(txn, '__dir', 'ltr')
-                            empty_paragraph.set_attribute(txn, '__textFormat', 0)
-                            empty_paragraph.set_attribute(txn, '__textStyle', '')
+                            bytes = binascii.unhexlify(child.get_attribute('__options')[2:])
+                            ydoc_options_pb = AnalysisOptions()
+                            ydoc_options_pb.ParseFromString(bytes)
+                            
+                            self._initialising_options = uuid
+                            analysis = self._analyses.create(0, name, ns, ydoc_options_pb)
+                            
+                            analysis.uuid = uuid
+                            observer_id = child.observe(self.ydoc_analysis_changed)
 
-                            table = ana_root.push_xml_element(txn, 'tony')
-                            # this is strongly typed as 'table' and it will create a table node,
-                            # can also use __type as 'result' and it will figure it out. (but at the moment can only figure out table)
-                            # it won't be a tablenode but it will render a table all the same.
-                            # I made the flexibility because one might be easier now and the other might be necessary later.
-                            # although it might cause backwards compatibility issues. I prefer the strong typing because i feel like it is safer
-                            # in regards to lexical and interactions re type like menus or resizing.
-
-                            table_bytes = bytearray.fromhex('0a046d61696e120b414e4f5641202d206c656e28013281050a3c0a046e616d651a04746578743a081a04646f736528013a061a04737570703a0d1a09646f73653a7375707028023a0d1a09526573696475616c7328030a480a027373120e53756d206f6620537175617265731a066e756d6265723a09117a4cf060def4a2403a09113c33333333ab69403a091130dbf97e6a145b403a0911032b8716d94086400a3d0a026466120264661a07696e74656765723a091100000000000000403a0911000000000000f03f3a091100000000000000403a09110000000000004b400a450a026d73120b4d65616e205371756172651a066e756d6265723a09117a4cf060def492403a09113c33333333ab69403a091130dbf97e6a144b403a0911469bcfe1d15f2a400a330a01461201461a066e756d6265723a0911cd00c06cffff56403a09115eeba47dda242f403a0911f828c7128f6d10403a021a000a3f0a01701201701a066e756d626572220a7a746f2c7076616c75653a0911aa06a27904a9523c3a0911c3c1f936354d2e3f3a0911c56424d18962963f3a021a000a410a0565746153711204ceb7c2b21a066e756d62657222037a746f3a0911036a450ddd7de63f3a0911897ea7f9a374ae3f3a09112c887ef69b10a03f3a021a0078010a430a066574615371501205ceb7c2b2701a066e756d62657222037a746f3a09113a94cd744fbde83f3a0911fc1512f14fa6cc3f3a0911f0c6e0664ae6c03f3a021a0078010a430a076f6d65676153711204cf89c2b21a066e756d62657222037a746f3a091107778df49a29e63f3a09117b1a0f533164ac3f3a0911fec3f1bccd36983f3a021a007801120622646f7365221206227375707022120f5b22646f7365222c2273757070225d1202222238ffffffffffffffffff01820103636172')
-
-                            image_bytes = bytearray.fromhex('0a07656d6d506c6f7428013a100a08585858582e706e6710f60318de02')
-
-                            table.set_attribute(txn, '__type', 'result')
-                            table.set_attribute(txn, '__data', table_bytes)
-
-                            image = ana_root.push_xml_element(txn, 'fred')
-                            image.set_attribute(txn, '__type', 'result')
-                            image.set_attribute(txn, '__data', image_bytes)
-
-                            empty_paragraph = ana_root.push_xml_text(txn)
-                            empty_paragraph.set_attribute(txn, '__type', 'paragraph')
-                            empty_paragraph.set_attribute(txn, '__format', 0)
-                            empty_paragraph.set_attribute(txn, '__style', '')
-                            empty_paragraph.set_attribute(txn, '__indent', 0)
-                            empty_paragraph.set_attribute(txn, '__dir', 'ltr')
-                            empty_paragraph.set_attribute(txn, '__textFormat', 0)
-                            empty_paragraph.set_attribute(txn, '__textStyle', '')
-
-                            table = ana_root.push_xml_element(txn, 'table')
-                            table.set_attribute(txn, '__type', 'result')
-                            table.set_attribute(txn, '__data', table_bytes)
-
-                            empty_paragraph = ana_root.push_xml_text(txn)
-                            empty_paragraph.set_attribute(txn, '__type', 'paragraph')
-                            empty_paragraph.set_attribute(txn, '__format', 0)
-                            empty_paragraph.set_attribute(txn, '__style', '')
-                            empty_paragraph.set_attribute(txn, '__indent', 0)
-                            empty_paragraph.set_attribute(txn, '__dir', 'ltr')
-                            empty_paragraph.set_attribute(txn, '__textFormat', 0)
-                            empty_paragraph.set_attribute(txn, '__textStyle', '')
+                            resource = { "result_items": {}, "observer_id": observer_id, "analysis": analysis, "analysis_content_xml": analysis_content_xml, "analysis_xml": child, "revision": 0 }
+                            self.resources[uuid] = resource
+                            
+                            analysis.run()
+                            self._initialising_options = None
+                            analysis_content_text_xml.set_attribute(txn, '__dir', 'ltr')
+                        self._txn = None
                     else:
-                        self.populateNewAnalyses(analysis)
+                        analysis_content_xml = self._doc.get_xml_fragment(uuid)
+                        self.create_new_analyses(analysis_content_xml)
             child = child.next_sibling
 
     def apply_changes(self, changes: bytes):
@@ -148,5 +203,6 @@ class AnalysesDoc:
         Y.apply_update(self._doc, changes)
         self._externalChanges = False
         root = self._doc.get_xml_fragment('root')
-        self.populateNewAnalyses(root)
+        self.create_new_analyses(root)
+        print('YDoc Update applied to server.')
         

@@ -73,6 +73,9 @@ export class Image extends AnalysisElement {
     render() {
         super.render();
 
+        if (! this.__data)
+            return;
+
         if (this.__title) {
             if (this.__data.title) {
                 this.__title.innerText = this.__data.title;

@@ -123,7 +123,6 @@ export class Table extends AnalysisElement {
         this.__titleCell.appendChild(titleTextElement);
         this.__titleText = titleTextElement;
 
-
         let statusElement = document.createElement('div');
         statusElement.classList.add(`jmv-results-table-status-indicator`);
         this.__titleCell.appendChild(statusElement);
@@ -157,6 +156,40 @@ export class Table extends AnalysisElement {
             super.registerEvents(),
             this._context.refTable.addEventListener('changed', this.render),
         );
+    }
+
+    public setData(data) {
+        super.setData(data);
+
+        this.__columnHeaderRowSuper = null;
+        this.__sortTransform = [];
+
+        let table = this.__data.table;
+        let cells = table.columns.map(column => column.cells);
+
+        if (table.sortSelected) {
+
+            let sortBy = table.sortSelected.sortBy;
+            let sortDesc = table.sortSelected.sortDesc;
+
+            this.sort(sortBy, sortDesc ? 'desc' : 'asc');
+
+        } else {
+
+            if (cells.length > 0 && cells[0].length > 0) {
+                let trans = new Array(cells[0].length);
+                for (let i = 0; i < trans.length; i++)
+                    trans[i] = i;
+                this.__sortTransform = trans;
+            }
+
+            this.__sortedCells = cells;
+        }
+
+        if (table.rowSelect)
+            this.__table.classList.add(`row-selectable`);
+        else
+            this.__table.classList.remove(`row-selectable`);
     }
 
     _css() {
@@ -386,6 +419,9 @@ export class Table extends AnalysisElement {
     render() {
 
         super.render();
+
+        if (! this.__data)
+            return;
 
         let table = this.__data.table;
         let columns = table.columns;
@@ -1020,8 +1056,6 @@ export class Table extends AnalysisElement {
 
         //window.setOption(table.sortSelect, { sortBy: by, sortDesc: dir === 'desc' });
     }
-
-
 }
 
 customElements.define('analysis-table', Table);
