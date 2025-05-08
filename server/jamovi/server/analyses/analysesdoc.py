@@ -93,7 +93,11 @@ class AnalysesDoc:
         group = analysis.results.results.group
 
         # self.create_analysis_title(txn, title, 'h1', resources)
-        self.create_heading(txn, 'root:heading', 0, title, 'h1', resources)
+        title_path = 'root:heading'
+        if title_path not in resources['result_items']:
+            self.create_heading(txn, title_path, 0, title, 'h1', resources)
+        else:
+            resources['result_items'][title_path]['processed'] = True
         self.findElements(txn, group, 1, 0, 1, 'root', resources)
 
         self.post_analysis_update_cleanup(txn, resources)
@@ -161,8 +165,7 @@ class AnalysesDoc:
         return item
 
     def is_valid_item_path(self, path):
-
-        return True
+        return path.startswith('root')
 
     def findElements(self, txn, group, level, visible, current_index, base_path, analysis_resources):
         items = analysis_resources['result_items']
@@ -191,8 +194,9 @@ class AnalysesDoc:
                 items[path]['processed'] = True
                 current_index += 1
             elif element.HasField('group'):
-                group_path = base_path + '.' + element.name
-                current_index = self.create_result_group(txn, group_path, element, element.group, current_index, level + 1, analysis_resources)
+                group_path = base_path + ':' + element.name
+                print('Into group' + group_path)
+                current_index = self.create_result_group(txn, group_path, element, element.group, current_index, level+1, analysis_resources)
                 # dets = self.findElements(txn, element.group, level + 1, element.visible, current_index, group_path, analysis_resources)
                 # if dets['visible_children']:  # has visible children
                 #     if element.title != '' and el_vis:
@@ -200,8 +204,9 @@ class AnalysesDoc:
                 #         dets['current_index'] += 1
                 # current_index = dets['current_index']
             elif element.HasField('array'):
-                group_path = base_path + '.' + element.name
-                current_index = self.create_result_group(txn, group_path, element, element.array, current_index, level + 1, analysis_resources)
+                group_path = base_path + ':' + element.name
+                print('Into array' + group_path)
+                current_index = self.create_result_group(txn, group_path, element, element.array, current_index, level+1, analysis_resources)
                 # dets = self.findElements(txn, element.array, level + 1, element.visible, current_index, group_path, analysis_resources)
                 # if dets['visible_children']:  # has visible children
                 #     if element.title != '' and el_vis:
@@ -215,8 +220,13 @@ class AnalysesDoc:
         dets = self.findElements(txn, group, level, element.visible, index, group_path, analysis_resources)
         if dets['visible_children']:  # has visible children
             if element.title != '' and el_vis:
-                self.create_heading(txn, group_path + ':heading', index, element.title, 'h' + str(level + 1), analysis_resources)
-                dets['current_index'] += 1
+                heading_path = group_path + ':heading'
+                if heading_path not in analysis_resources['result_items']:
+                    self.create_heading(txn, heading_path, index, element.title, 'h' + str(level), analysis_resources)
+                    dets['current_index'] += 1
+                else:
+                    analysis_resources['result_items'][heading_path]['processed'] = True
+
         return dets['current_index']
 
 
@@ -260,29 +270,27 @@ class AnalysesDoc:
 
     def create_heading(self, txn, path, index, title, tag, analysis_resources):
         print(path + ' ' + str(index))
-        if path not in analysis_resources['result_items']:
-            heading = analysis_resources['analysis_content_xml'].insert_xml_text(txn, index)
-            heading.set_attribute(txn, '__type', 'heading')
-            heading.set_attribute(txn, '__format', 0)
-            heading.set_attribute(txn, '__style', '')
-            heading.set_attribute(txn, '__indent', 0)
-            heading.set_attribute(txn, '__dir', 'ltr')
-            heading.set_attribute(txn, '__textFormat', 0)
-            heading.set_attribute(txn, '__textStyle', '')
-            heading.set_attribute(txn, '__tag', tag)
-            heading.set_attribute(txn, '__path', path)
-            heading.push_attributes(txn, {
-                '__type': 'text',
-                '__format': 0,
-                '__style': '',
-                '__mode': 0,
-                '__detail': 0,
-            })
-            heading.push(txn, title)
-            analysis_resources['result_items'][path] = { 'xml_element': heading, 'processed': True, 'index': index, 'path': path }
-
-        analysis_resources['result_items'][path]['processed'] = True
-        return analysis_resources['result_items'][path]['index']
+        heading = analysis_resources['analysis_content_xml'].insert_xml_text(txn, index)
+        heading.set_attribute(txn, '__type', 'heading')
+        heading.set_attribute(txn, '__format', 0)
+        heading.set_attribute(txn, '__style', '')
+        heading.set_attribute(txn, '__indent', 0)
+        heading.set_attribute(txn, '__dir', 'ltr')
+        heading.set_attribute(txn, '__textFormat', 0)
+        heading.set_attribute(txn, '__textStyle', '')
+        heading.set_attribute(txn, '__tag', tag)
+        heading.set_attribute(txn, '__path', path)
+        heading.push_attributes(txn, {
+            '__type': 'text',
+            '__format': 0,
+            '__style': '',
+            '__mode': 0,
+            '__detail': 0,
+        })
+        heading.push(txn, title)
+        analysis_resources['result_items'][path] = { 'xml_element': heading, 'processed': True, 'index': index, 'path': path }
+        
+        return index
 
 
 
