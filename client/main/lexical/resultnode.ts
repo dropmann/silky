@@ -118,46 +118,51 @@ export class ResultNode extends DecoratorNode<HTMLElement> {
     //div.inert = true;
     div.classList.add('results-item');
     let decoded = this.decodeData();
+    if (decoded !== null) {
 
-    let result: AnalysisElement | null = null;
+      let result: AnalysisElement | null = null;
 
-    const writable = this.getWritable();
-    if ('table' in decoded && decoded.table !== null) {
-      writable.__dataType = 'table';
-      result = new Table(decoded, this.getKey());
+      const writable = this.getWritable();
+      if ('table' in decoded && decoded.table !== null) {
+        writable.__dataType = 'table';
+        result = new Table(decoded, this.getKey());
+      }
+      else if ('image' in decoded && decoded.image !== null) {
+        writable.__dataType = 'image';
+        result = new Image(decoded, this.getKey());
+      }
+
+      if (result === null)
+        throw 'Unknown result type';
+
+      result.classList.add('content');
+      div.setAttribute('data-type', result.type);
+
+      /*result.addEventListener('click', () => {
+        result.parent.setFocus();
+        result.parent.editor.update(() => {
+            let nodeKey = this.getKey();
+            const selection = $createNodeSelection();
+            selection.add(nodeKey); // Select the node
+            $setSelection(selection);
+        });
+      });*/
+
+      div.append(result);
     }
-    else if ('image' in decoded && decoded.image !== null) {
-      writable.__dataType = 'image';
-      result = new Image(decoded, this.getKey());
-    }
-
-    if (result === null)
-      throw 'Unknown result type';
-
-    result.classList.add('content');
-    div.setAttribute('data-type', result.type);
-
-    /*result.addEventListener('click', () => {
-      result.parent.setFocus();
-      result.parent.editor.update(() => {
-          let nodeKey = this.getKey();
-          const selection = $createNodeSelection();
-          selection.add(nodeKey); // Select the node
-          $setSelection(selection);
-      });
-    });*/
-
-    div.append(result);
  
     return div;
   }
 
   updateDOM(prevNode, div, config) {
     let result = div.querySelector('.content');
-    let decoded = this.decodeData();
-    result.setData(decoded);
-    result.render();
-    return false;
+    if (result) {
+      let decoded = this.decodeData();
+      result.setData(decoded);
+      result.render();
+      return false;
+    }
+    return true;
   }
 
   updateData(data: Uint8Array): boolean {

@@ -43,6 +43,7 @@ export type SerializedAnalysisNode = Spread<
     title: string;
     references: Array<RefDef>;
     options: Uint8Array | null;
+    dets: Uint8Array | null;
   },
   SerializedLexicalNode
 >;
@@ -55,6 +56,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
   __title: string;
   private __references: Array<RefDef>;
   __options: Uint8Array | null;
+  __dets: Uint8Array | null;
   __focusOnCreation: boolean;
 
   static getType(): string {
@@ -68,6 +70,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
       node.__uuid,
       node.__id,
       node.__options,
+      node.__dets,
       node.__title,
       node.__references,
       node.__key,
@@ -81,6 +84,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
       serializedNode.uuid,
       serializedNode.id,
       serializedNode.options,
+      serializedNode.dets,
       serializedNode.title,
       serializedNode.references,
     ).updateFromJSON(serializedNode);
@@ -99,6 +103,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
     uuid?: string,
     id?: number | null,
     options?: Uint8Array,
+    dets?: Uint8Array,
     title?: string,
     references?: Array<RefDef>,
     key?: NodeKey,
@@ -110,9 +115,12 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
     this.__uuid = uuid || crypto.randomUUID();
     this.__focusOnCreation = false;
 
+    this.__dets = dets || null;
+
+
     this.__title = title || name;
     this.__options = options || null;
-    this.__references = references || [{
+    this.__references = references || null; /* [{
       name: `Damo ${this.__title}`,
       type: 'Manware',
       authors: { complete: 'Damian Dropmann' },
@@ -121,7 +129,7 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
       publisher: '(Version 7.7) [Computer software]. Retrieved from https://cran.r-project.org',
       url: 'https://damo-is-cool.org',
       extra: 'He is good looking'
-    }];
+    }];*/
   }
 
   exportJSON(): SerializedAnalysisNode {
@@ -133,8 +141,17 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
       ns: this.__ns,
       name: this.__name,
       options: this.__options,
+      dets: this.__dets,
       references: this.__references,
     };
+  }
+
+  decodeDets() {
+    console.log(this.__dets)
+    if (this.__dets === null || this.__dets === undefined)
+      return null;
+
+    return Messages.AnalysisResponse.decode(this.__dets);
   }
 
   decodeOptions() {
@@ -151,7 +168,6 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
 
     setTimeout(() => {
       let analysis = new AnalysisContext(this.__uuid, this.__ns, this.__name, this.getKey());
-      //this.analysis = analysis;
       analysis.setAllowedNodes(HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, AnalysisNode, ResultNode);
       analysis.classList.add('analysis-content');
       div.append(analysis);
@@ -170,11 +186,19 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
   }
 
   public get references() {
-    return this.__references;
+    let dets = this.decodeDets();
+    if (dets)
+      return dets.references;
+
+    return [];
   }
 
   public get ns() {
     return this.__ns;
+  }
+
+  public get AnalysisId() {
+    return this.__id;
   }
 
   public getDetails() {

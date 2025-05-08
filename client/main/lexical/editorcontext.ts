@@ -150,232 +150,6 @@ abstract class EditorFeature extends Feature<EditorContext> {
     public abstract registerEditor(): () => void;
 }
 
-export class YDocSupport extends EditorFeature {
-    private _binding: Binding | null = null;
-    private _syncing = false;
-    private _provider;
-    private _uuid: string;
-
-    constructor(item: ResultsContext, uuid: string) {
-        super(item);
-        this._uuid = uuid;
-    }
-
-    public registerEvents() {
-        return () => {
-
-        };
-    }
-
-    isReady() {
-        return Promise.resolve();
-    }
-
-    public get binding() : Binding {
-        return this._binding;
-    }
-
-    //local
-    public get uuid(): string {
-        return this._uuid;
-    }
-
-    //local
-    public get doc() {
-        if (this.item instanceof ResultsContext)
-            return this.item.doc;
-
-        throw 'Only ResultsContext can be used with YDoc';
-    }
-
-    public applyUpdate(update: Uint8Array) {
-        //let initialisingBinding = this._initialisingBinding;
-        if (this.doc) {
-            Y.applyUpdate(this.doc, update);
-        }
-
-        //if ( ! initialisingBinding) {
-            const event = new CustomEvent<Uint8Array>('updateApplied', { detail: update });
-            this.item.dispatchEvent(event);
-        //}
-    }
-
-    private onAwarenessChanged() {
-        //console.log(this._provider.awareness.getLocalState());
-    }
-
-    private registerBindings() {
-        this._provider = this.createNoOpProvider(this.doc);
-
-        this._provider.awareness.on('change', this.onAwarenessChanged);
-
-        // The original yjsroot node needs to be stored so that the right collabNode is given to the right yjsNode
-        let originalyjsRootNode = this.doc.get('root', Y.XmlText);
-        let rootCollabNode = originalyjsRootNode._collabNode; //store root collab node for future repair.
-
-        this._binding = createBinding(this.item.editor, this._provider, this.uuid, this.doc, {});
-
-        if (this.uuid) {
-            // Modify the binding to use the uuid root node in the yjs doc as the root node for lexical
-            const yjsRootNode = this.doc.get(this.uuid, Y.XmlText);
-            this._binding.root._xmlText = yjsRootNode;
-            this._binding.root._key = this.uuid;
-            yjsRootNode._collabNode = this._binding.root
-
-            
-
-            originalyjsRootNode._collabNode = rootCollabNode; //repair root collab node
-        }
-
-        let unregisterListeners = this.registerCollaborationListeners(this.item.editor, this._provider, this._binding);
-        //this.doc.on('update', this.yDocUpdateHandle);
-
-        if (this.item.parent) {
-            this.item.editor.update(() => {
-                const xmlText = this._binding.root._xmlText;
-                this._binding.root.syncPropertiesFromYjs(this._binding, null);
-                this._binding.root.applyChildrenYjsDelta(this._binding, xmlText.toDelta());
-                this._binding.root.syncChildrenFromYjs(this._binding);
-            });
-            //syncYjsChangesToLexical(this._binding, this._provider, events, false);
-            //let parentYDocSupport = this.item.parent.getFeature(YDocSupport)
-            //if (parentYDocSupport) {
-                //this._initialisingBinding = true;
-                //Y.applyUpdate(this.doc, Y.encodeStateAsUpdate(this.doc));
-            //}
-        }
-
-        return () => {
-            unregisterListeners();
-            this._provider.awareness.off('change', this.onAwarenessChanged);
-            //this.doc.off('update', this.yDocUpdateHandle);
-        };
-    }
-
-    /*private yDocUpdateHandle(update: Uint8Array, origin, doc) {
-        if (this._initialisingBinding) {
-            //force an update after the inital update has occured and delcare ready.
-            this.item.editor.update(() => { }, {
-                discrete: true, onUpdate: () => {
-                    this._resolve();
-                }
-            });
-            return;
-        }
-
-        if (origin && origin.root._key === this._binding.root._key)
-            this.onUpdate(update);
-    }*/
-
-    private registerCollaborationListeners(editor: LexicalEditor, provider, binding: Binding) {
-        const unsubscribeUpdateListener = editor.registerUpdateListener(
-            ({
-                dirtyElements,
-                dirtyLeaves,
-                editorState,
-                normalizedNodes,
-                prevEditorState,
-                tags,
-            }) => {
-                if (tags.has('skip-collab') === false && !this._syncing /*&& !this._initialisingBinding*/) {
-                    if (this.uuid) {
-                        // Copy the root lexicalNode to update the reference as the 'root' has seemingly be replaced
-                        // This allows the binder to use the uuid node in the lexical to update the jys doc.
-                        let nodeMap = editorState._nodeMap;
-                        const proto = Object.getPrototypeOf(nodeMap);
-                        let rootNode = nodeMap.get('root');
-                        proto.set.call(nodeMap, this.uuid, rootNode);
-
-                        // also do to prevEditorState.
-                        let prevNodeMap = prevEditorState._nodeMap;
-                        const prevProto = Object.getPrototypeOf(prevNodeMap);
-                        let preRootNode = prevNodeMap.get('root');
-                        prevProto.set.call(prevNodeMap, this.uuid, preRootNode);
-                    }
-                    syncLexicalUpdateToYjs(
-                        binding,
-                        provider,
-                        prevEditorState,
-                        editorState,
-                        dirtyElements,
-                        dirtyLeaves,
-                        normalizedNodes,
-                        tags,
-                    );
-                }
-                //this._initialisingBinding = false;
-            },
-        );
-
-        const observer = (events, transaction) => {
-            if (transaction.origin !== binding) {
-                this._syncing = true;
-                syncYjsChangesToLexical(binding, provider, events, false);
-                this._syncing = false;
-            }
-        };
-
-        binding.root.getSharedType().observeDeep(observer);
-
-        return () => {
-            unsubscribeUpdateListener();
-            binding.root.getSharedType().unobserveDeep(observer);
-        };
-    }
-
-    private createNoOpProvider(doc: Y.Doc) {
-        const emptyFunction = () => { };
-        let awareness = new Awareness(doc);
-        awareness.setLocalStateField("anchorPos", null);
-        awareness.setLocalStateField("focusPos", null);
-        return {
-            awareness: awareness,
-            connect: emptyFunction,
-            disconnect: emptyFunction,
-            off: emptyFunction,
-            on: emptyFunction,
-        };
-    }
-
-    /*private onUpdate(update: Uint8Array) {
-        const event = new CustomEvent<Uint8Array>('nextUpdate', { detail: update, bubbles: true, composed: true });
-        this.item.dispatchEvent(event);
-    }*/
-
-    public onEditorFinalisation(editor: LexicalEditor): void {
-
-        if (this.uuid) {
-            // Copy the root lexicalNode and make a reference to it in lexical using the uuid as the key
-            // This allows the binder to use the uuid node in the jys doc as the root in lexical
-            let nodeMap = editor.getEditorState()._nodeMap;
-            let rootNode = nodeMap.get('root');
-            if (rootNode)
-                nodeMap.set(this.uuid, rootNode);
-            else
-                throw 'Root node should never be null';
-            ////////////////////////
-        }
-    }
-
-    public registerEditor() {
-        return this.registerBindings();
-    }
-
-    /*public registerEvents() {
-        if (!this.item.isRoot)
-            this.item.parent.addEventListener('updateApplied', this.updateHandler);
-
-        return () => {
-            if (!this.item.isRoot)
-                this.item.parent.removeEventListener('updateApplied', this.updateHandler);
-        }
-    }*/
-
-    //private updateHandler(event: CustomEvent<Uint8Array>) {
-        // let update: Uint8Array = event.detail;
-        // this.applyUpdate(update);
-    //}
-}
 
 export class Locked extends Feature<ItemContext> {
     constructor(item: ItemContext) {
@@ -1453,22 +1227,26 @@ export class ResultsContext extends ParentContext implements IEnterable {
     private _persistantSelectedAnalysis = false;
 
     private _doc: Y.Doc = null;
+    private _binding: Binding | null = null;
+    private _syncing = false;
+    private _provider;
+    private _uuid: string;
+    private _instanceId
 
     constructor(uuid?: string, nodeKey?: string) {
         super(nodeKey);
+        this._instanceId = null;
+        this._uuid = uuid;
         this._selectedAnalysis = null;
         this.onAnalysesChanged = this.onAnalysesChanged.bind(this);
-
-        this.yDocUpdateHandle = this.yDocUpdateHandle.bind(this);
-
         this.addFeatures(
-            new YDocSupport(this, uuid),
             //new Removable(this), 
             new Selectable(this),
             //new Enterable(this)
         );
     }
 
+    // global
     public get doc() : Y.Doc {
         if (this.parent && this.parent instanceof ResultsContext)
             return this.parent.doc;
@@ -1479,25 +1257,139 @@ export class ResultsContext extends ParentContext implements IEnterable {
         return this._doc;
     }
 
-    private yDocUpdateHandle(update: Uint8Array, origin, doc) {
-        /*if (this._initialisingBinding) {
-            //force an update after the inital update has occured and delcare ready.
-            this.editor.update(() => { }, {
-                discrete: true, onUpdate: () => {
-                    this._resolve();
-                }
-            });
-            return;
-        }*/
-
-        let binding = this.getFeature(YDocSupport).binding;
-        if (origin && origin.root._key === binding.root._key)
-            this.onUpdate(update);
+    public applyUpdate(update: Uint8Array) {
+        Y.applyUpdate(this.doc, update);
     }
 
-    private onUpdate(update: Uint8Array) {
-        const event = new CustomEvent<Uint8Array>('nextUpdate', { detail: update, bubbles: true, composed: true });
-        this.dispatchEvent(event);
+    private onAwarenessChanged() {
+        //console.log(this._provider.awareness.getLocalState());
+    }
+
+    private registerBindings() {
+        this._provider = this.createNoOpProvider(this.doc);
+
+        this._provider.awareness.on('change', this.onAwarenessChanged);
+
+        // The original yjsroot node needs to be stored so that the right collabNode is given to the right yjsNode
+        let originalyjsRootNode = this.doc.get('root', Y.XmlText);
+        let rootCollabNode = originalyjsRootNode._collabNode; //store root collab node for future repair.
+
+        this._binding = createBinding(this.editor, this._provider, this.uuid, this.doc, {});
+
+        if (this.uuid) {
+            // Modify the binding to use the uuid root node in the yjs doc as the root node for lexical
+            const yjsRootNode = this.doc.get(this.uuid, Y.XmlText);
+            this._binding.root._xmlText = yjsRootNode;
+            this._binding.root._key = this.uuid;
+            yjsRootNode._collabNode = this._binding.root
+
+            originalyjsRootNode._collabNode = rootCollabNode; //repair root collab node
+        }
+
+        if (this.parent) {
+            this.editor.update(() => {
+                const xmlText = this._binding.root._xmlText;
+                this._binding.root.syncPropertiesFromYjs(this._binding, null);
+                this._binding.root.applyChildrenYjsDelta(this._binding, xmlText.toDelta());
+                this._binding.root.syncChildrenFromYjs(this._binding);
+            }, { discrete: true, });
+        }
+
+        let unregisterListeners = this.registerCollaborationListeners(this.editor, this._provider, this._binding);
+
+        return () => {
+            unregisterListeners();
+            this._provider.awareness.off('change', this.onAwarenessChanged);
+        };
+    }
+
+    private registerCollaborationListeners(editor: LexicalEditor, provider, binding: Binding) {
+        const unsubscribeUpdateListener = editor.registerUpdateListener(
+            ({
+                dirtyElements,
+                dirtyLeaves,
+                editorState,
+                normalizedNodes,
+                prevEditorState,
+                tags,
+            }) => {
+                if (tags.has('skip-collab') === false && !this._syncing) {
+                    if (this.uuid) {
+                        // Copy the root lexicalNode to update the reference as the 'root' has seemingly be replaced
+                        // This allows the binder to use the uuid node in the lexical to update the jys doc.
+                        let nodeMap = editorState._nodeMap;
+                        const proto = Object.getPrototypeOf(nodeMap);
+                        let rootNode = nodeMap.get('root');
+                        proto.set.call(nodeMap, this.uuid, rootNode);
+
+                        // also do to prevEditorState.
+                        let prevNodeMap = prevEditorState._nodeMap;
+                        const prevProto = Object.getPrototypeOf(prevNodeMap);
+                        let preRootNode = prevNodeMap.get('root');
+                        prevProto.set.call(prevNodeMap, this.uuid, preRootNode);
+                    }
+                    syncLexicalUpdateToYjs(
+                        binding,
+                        provider,
+                        prevEditorState,
+                        editorState,
+                        dirtyElements,
+                        dirtyLeaves,
+                        normalizedNodes,
+                        tags,
+                    );
+                }
+            },
+        );
+
+        const observer = (events, transaction) => {
+            if (transaction.origin !== binding) {
+                this._syncing = true;
+                syncYjsChangesToLexical(binding, provider, events, false);
+                this._syncing = false;
+            }
+        };
+
+        binding.root.getSharedType().observeDeep(observer);
+
+        return () => {
+            unsubscribeUpdateListener();
+            binding.root.getSharedType().unobserveDeep(observer);
+        };
+    }
+
+    private createNoOpProvider(doc: Y.Doc) {
+        const emptyFunction = () => { };
+        let awareness = new Awareness(doc);
+        awareness.setLocalStateField("anchorPos", null);
+        awareness.setLocalStateField("focusPos", null);
+        return {
+            awareness: awareness,
+            connect: emptyFunction,
+            disconnect: emptyFunction,
+            off: emptyFunction,
+            on: emptyFunction,
+        };
+    }
+
+    // local
+    public get uuid() {
+        return this._uuid;
+    }
+
+    public editorFinalisation(editor: LexicalEditor): void {
+        super.editorFinalisation(editor);
+        if (this.uuid) {
+            // Copy the root lexicalNode and make a reference to it in lexical using the uuid as the key
+            // This allows the binder to use the uuid node in the jys doc as the root in lexical
+            let nodeMap = editor.getEditorState()._nodeMap;
+            let rootNode = nodeMap.get('root');
+            if (rootNode)
+                nodeMap.set(this.uuid, rootNode);
+            else
+                throw 'Root node should never be null';
+            ////////////////////////
+        }
     }
 
     public onEnter() {
@@ -1511,6 +1403,20 @@ export class ResultsContext extends ParentContext implements IEnterable {
         console.log('entered!!!!!!!!!!!!')
     }
 
+    public setInstanceId(instanceId) {
+        if (this.parent && this.parent instanceof ResultsContext)
+            throw 'Instance id can only be changed on the root context';
+
+        this._instanceId = instanceId;
+    }
+
+    public get instanceId() {
+        if (this.parent && this.parent instanceof ResultsContext)
+            return this.parent.instanceId;
+
+        return this._instanceId;
+    }
+
     public onLeave() {
         //this._editorElement.setAttribute('contenteditable', 'false');
         //this._editorElement.classList.add('content-not-selectable');
@@ -1518,10 +1424,9 @@ export class ResultsContext extends ParentContext implements IEnterable {
     }
 
     protected registerEditor() {
-
-        this.doc.on('update', this.yDocUpdateHandle);
         return mergeRegister(
             super.registerEditor(),
+            this.registerBindings(),
             this.editor.registerMutationListener(AnalysisNode, this.onAnalysesChanged),
             this.editor.registerUpdateListener(({ editorState }) => {  // this isn't great and should change
                 editorState.read(() => {
@@ -1531,10 +1436,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
                     if (textContent.trim() === '')
                         this.initialiseContent();
                 });
-            }),
-            () => {
-                this.doc.off('update', this.yDocUpdateHandle);
-            }
+            })
         );
     }
 
@@ -1676,7 +1578,8 @@ export class ResultsContext extends ParentContext implements IEnterable {
             if (this._selectedAnalysis) {
                 let oldEditor = this._selectedAnalysis._context.parent.editor;
                 let element = oldEditor.getElementByKey(this._selectedAnalysis._context.nodeKey);
-                element.classList.remove('analysis-selected');
+                if (element)
+                    element.classList.remove('analysis-selected');
             }
         }
 

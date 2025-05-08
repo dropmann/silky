@@ -1,6 +1,7 @@
 
 from jamovi.server.jamovi_pb2 import AnalysisOptions
 from jamovi.server.jamovi_pb2 import AnalysisStatus
+
 import y_py as Y
 import asyncio
 import typing
@@ -57,43 +58,171 @@ class AnalysesDoc:
         else:
             print('Out-going: OPTS SAME')
 
+
     def _results_changed_handler(self, analysis):
         print('RESULTS CHANGED')
         if analysis.has_results:
-            resources = self.resources[analysis.uuid]
             results = analysis.results.results
             if results.status == ANALYSIS_COMPLETE:
-                title = results.title
-                group = results.group
                 if (self._txn != None):
-                    self.create_analysis_title(self._txn, title, resources)
-                    self.findElements(self._txn, group, 'root', resources)
+                    self.update_analysis(self._txn, analysis)
                 else:
                     with self._doc.begin_transaction() as txn:
-                        self.create_analysis_title(txn, title, resources)
-                        self.findElements(txn, group, 'root', resources)
+                        self.update_analysis(txn, analysis)
 
-    def findElements(self, txn, group, base_path, analysis_resources):
+
+    def update_analysis(self, txn, analysis):
+
+        resources = self.resources[analysis.uuid]
+        # print(analysis.results.results)
+
+        resources['result_items'] = self.initalise_items_for_update(resources)
+
+        # update analysis id
+        if analysis.id != resources['analysis_xml'].get_attribute('__id'):
+            resources['analysis_xml'].set_attribute(txn, '__id', analysis.id)
+
+        # send the AnalysisResponse as a quicka and cheap way to get references
+        # because i was having trouble sending them another way
+        dets_bytes = bytearray(analysis.results.SerializeToString())
+        dets_hex = '0x' + binascii.hexlify(dets_bytes).decode('ascii')
+        if dets_hex != resources['analysis_xml'].get_attribute('__dets'):
+            resources['analysis_xml'].set_attribute(txn, '__dets', dets_bytes)
+
+        title = analysis.results.results.title
+        group = analysis.results.results.group
+
+        # self.create_analysis_title(txn, title, 'h1', resources)
+        self.create_heading(txn, 'root:heading', 0, title, 'h1', resources)
+        self.findElements(txn, group, 1, 0, 1, 'root', resources)
+
+        self.post_analysis_update_cleanup(txn, resources)
+
+
+    def post_analysis_update_cleanup(self, txn, analysis_resources):
+        items = analysis_resources['result_items']
+        
+        index = 0
+        begin_index = -1
+        length = 0
+        clip = False
+
+        content_root = analysis_resources['analysis_content_xml']
+        child = content_root.first_child
+        while child is not None:
+            item = self.get_result_item(items, child)
+            if item != None:
+                if item['index'] == -1:
+                    item['index'] = index
+                if item['processed'] == False:
+                    print('DELETEING ' + item['path'])
+                    del items[item['path']]
+                    if begin_index == -1:
+                        begin_index = index
+                    length += 1
+                elif begin_index != -1:
+                    clip = True
+            elif begin_index != -1:
+                clip = True
+                
+            if clip:
+                print('deleteing - ' + str(begin_index)+':'+str(length))
+                content_root.delete(txn, begin_index, length)
+                begin_index = -1
+                length = 0
+                clip = False
+
+            child = child.next_sibling
+            index += 1
+
+        if begin_index != -1:
+            print('deleteing - ' + str(begin_index)+':'+str(length))
+            content_root.delete(txn, begin_index, length) 
+
+
+    def get_result_item(self, items, xmlItem):
+        item = None
+
+        if type(xmlItem).__name__ == 'YXmlElement':
+                path = xmlItem.name
+                if path in items:
+                    item = items[path]
+                elif self.is_valid_item_path(path):
+                    item = { 'xml_element': xmlItem, 'processed': False, 'index': -1, 'path': path }
+                    items[path] = item
+        elif type(xmlItem).__name__ == 'YXmlText':
+                path = xmlItem.get_attribute('__path')
+                if path in items:
+                    item = items[path]
+                elif self.is_valid_item_path(path):
+                    item = { 'xml_element': xmlItem, 'processed': False, 'index': -1, 'path': path }
+                    items[path] = item
+
+        return item
+
+    def is_valid_item_path(self, path):
+
+        return True
+
+    def findElements(self, txn, group, level, visible, current_index, base_path, analysis_resources):
+        items = analysis_resources['result_items']
+        has_visible_children = False
+        group_vis = visible == 0 or visible == 2
         for element in group.elements:
+            el_vis = element.visible == 0 or element.visible == 2
+            if has_visible_children == False and el_vis == True:
+                has_visible_children = True
+            if group_vis == False and el_vis == True:
+                element.visible = visible
             if element.HasField('table') or element.HasField('image'):
                 path = base_path + ':' + element.name
-                if path not in analysis_resources['result_items']:
-                    self.create_result_item(txn, path, element, analysis_resources)
+                if path not in items:
+                    print(path + ' inserted at ' + str(current_index) )
+                    current_index = self.create_result_item(txn, current_index, path, element, analysis_resources)
                 else:
-                    xlm_element = analysis_resources['result_items'][path]
+                    item = items[path]
+                    current_index = item['index']
+                    xlm_element = item['xml_element']
                     result_bytes = bytearray(element.SerializeToString())
                     hex = '0x' + binascii.hexlify(result_bytes).decode('ascii')
                     if hex != xlm_element.get_attribute('__data'):
                         print('updating item - ' + path)
                         xlm_element.set_attribute(txn, '__data', result_bytes)
+                items[path]['processed'] = True
+                current_index += 1
             elif element.HasField('group'):
-                 self.findElements(txn, element.group, base_path + '.' + element.name, analysis_resources)
+                group_path = base_path + '.' + element.name
+                current_index = self.create_result_group(txn, group_path, element, element.group, current_index, level + 1, analysis_resources)
+                # dets = self.findElements(txn, element.group, level + 1, element.visible, current_index, group_path, analysis_resources)
+                # if dets['visible_children']:  # has visible children
+                #     if element.title != '' and el_vis:
+                #         self.create_heading(txn, group_path + ':heading', current_index, element.title, 'h' + str(level + 1), analysis_resources)
+                #         dets['current_index'] += 1
+                # current_index = dets['current_index']
             elif element.HasField('array'):
-                 self.findElements(txn, element.group, base_path + '.' + element.name, analysis_resources)
+                group_path = base_path + '.' + element.name
+                current_index = self.create_result_group(txn, group_path, element, element.array, current_index, level + 1, analysis_resources)
+                # dets = self.findElements(txn, element.array, level + 1, element.visible, current_index, group_path, analysis_resources)
+                # if dets['visible_children']:  # has visible children
+                #     if element.title != '' and el_vis:
+                #         self.create_heading(txn, group_path + ':heading', current_index, element.title, 'h' + str(level + 1), analysis_resources)
+                #         dets['current_index'] += 1
+                # current_index = dets['current_index']
+        return { 'current_index': current_index, 'visible_children': has_visible_children }
 
-    def create_empty_paragraph(self, txn, analysis_resource):
+    def create_result_group(self, txn, group_path, element, group, index, level, analysis_resources):
+        el_vis = element.visible == 0 or element.visible == 2
+        dets = self.findElements(txn, group, level, element.visible, index, group_path, analysis_resources)
+        if dets['visible_children']:  # has visible children
+            if element.title != '' and el_vis:
+                self.create_heading(txn, group_path + ':heading', index, element.title, 'h' + str(level + 1), analysis_resources)
+                dets['current_index'] += 1
+        return dets['current_index']
+
+
+    def create_empty_paragraph(self, txn, index, analysis_resource):
         content_root = analysis_resource['analysis_content_xml']
-        empty_paragraph = content_root.push_xml_text(txn)
+        empty_paragraph = content_root.insert_xml_text(txn, index)
         empty_paragraph.set_attribute(txn, '__type', 'paragraph')
         empty_paragraph.set_attribute(txn, '__format', 0)
         empty_paragraph.set_attribute(txn, '__style', '')
@@ -101,18 +230,63 @@ class AnalysesDoc:
         empty_paragraph.set_attribute(txn, '__dir', 'ltr')
         empty_paragraph.set_attribute(txn, '__textFormat', 0)
         empty_paragraph.set_attribute(txn, '__textStyle', '')
+        return index
 
-    def create_result_item(self, txn, path, element, analysis_resource):
+    def create_result_item(self, txn, index, path, element, analysis_resource):
         content_root = analysis_resource['analysis_content_xml']
         print('making item - ' + path)
-        xlm_element = content_root.push_xml_element(txn, path)
+        xlm_element = content_root.insert_xml_element(txn, index, path)
         xlm_element.set_attribute(txn, '__type', 'result')
         xlm_element.set_attribute(txn, '__data', bytearray(element.SerializeToString()))
-        analysis_resource['result_items'][path] = xlm_element
+        analysis_resource['result_items'][path] = { 'xml_element': xlm_element, 'processed': True, 'index': index, 'path': path }
 
-        self.create_empty_paragraph(txn, analysis_resource)
+        return index # self.create_empty_paragraph(txn, index + 1, analysis_resource)
+    
+    def initalise_items_for_update(self, analysis_resources):
+        items = { }
 
-    def create_analysis_title(self, txn, title, analysis_resources):
+        content_root = analysis_resources['analysis_content_xml']
+        child = content_root.first_child
+        index = 0
+        while child is not None:
+            item = self.get_result_item(items, child)
+            if item != None:
+                item['index'] = index
+
+            child = child.next_sibling
+            index += 1
+        
+        return items
+
+    def create_heading(self, txn, path, index, title, tag, analysis_resources):
+        print(path + ' ' + str(index))
+        if path not in analysis_resources['result_items']:
+            heading = analysis_resources['analysis_content_xml'].insert_xml_text(txn, index)
+            heading.set_attribute(txn, '__type', 'heading')
+            heading.set_attribute(txn, '__format', 0)
+            heading.set_attribute(txn, '__style', '')
+            heading.set_attribute(txn, '__indent', 0)
+            heading.set_attribute(txn, '__dir', 'ltr')
+            heading.set_attribute(txn, '__textFormat', 0)
+            heading.set_attribute(txn, '__textStyle', '')
+            heading.set_attribute(txn, '__tag', tag)
+            heading.set_attribute(txn, '__path', path)
+            heading.push_attributes(txn, {
+                '__type': 'text',
+                '__format': 0,
+                '__style': '',
+                '__mode': 0,
+                '__detail': 0,
+            })
+            heading.push(txn, title)
+            analysis_resources['result_items'][path] = { 'xml_element': heading, 'processed': True, 'index': index, 'path': path }
+
+        analysis_resources['result_items'][path]['processed'] = True
+        return analysis_resources['result_items'][path]['index']
+
+
+
+    def create_analysis_title(self, txn, title, tag, analysis_resources):
         path = '__analysis_title'
         if path not in analysis_resources['result_items']:
             heading = analysis_resources['analysis_content_xml'].push_xml_text(txn)
@@ -123,7 +297,7 @@ class AnalysesDoc:
             heading.set_attribute(txn, '__dir', 'ltr')
             heading.set_attribute(txn, '__textFormat', 0)
             heading.set_attribute(txn, '__textStyle', '')
-            heading.set_attribute(txn, '__tag', 'h1')
+            heading.set_attribute(txn, '__tag', tag)
             heading.push_attributes(txn, {
                 '__type': 'text',
                 '__format': 0,
@@ -132,7 +306,7 @@ class AnalysesDoc:
                 '__detail': 0,
             })
             heading.push(txn, title)
-            analysis_resources['result_items'][path] = heading
+            analysis_resources['result_items'][path] = { 'xml_element': heading, 'processed': True, 'index': 0, 'path': path }
         # else:
         #    heading.push(txn, title)
 

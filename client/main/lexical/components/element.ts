@@ -50,6 +50,20 @@ export abstract class AnalysisElement extends ItemContext {
         this.__data = data;
     }
 
+    public get analysisId() {
+        if (this.parent instanceof AnalysisContext)
+            return this.parent.analysis.id;
+
+        throw 'Id not avialable';
+    }
+
+    public get instanceId() {
+        if (this.parent instanceof AnalysisContext)
+            return this.parent.instanceId;
+
+        throw 'Id not avialable';
+    }
+
     public abstract get type();
 
     protected onConnected(): void {
@@ -78,8 +92,13 @@ export abstract class AnalysisElement extends ItemContext {
     abstract _css(): string;
 
     render() {
-        if (! this.__data)
-            return;
+        let visible = this.__data && (this.__data.visible === 0 || this.__data.visible === 2);
+        if ( ! visible) {
+            this.style.display = 'none';
+            return false;
+        }
+        else
+            this.style.display = '';
 
         let error = this.__data.error;
         if (error) {
@@ -112,5 +131,7 @@ export abstract class AnalysisElement extends ItemContext {
             this.errorPlacement.innerHTML = '';
             this.removeAttribute('aria-invalid');
         }
+
+        return true;
     }
 }

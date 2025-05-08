@@ -3,6 +3,7 @@ import { determFormat, format } from '../../../common/formatting';
 import { AnalysisElement } from './element';
 import focusLoop from '../../../common/focusloop';
 import { mergeRegister } from '@lexical/utils';
+import { AnalysisContext } from '../editorcontext';
 
 const SUPSCRIPTS = ["\u1D43", "\u1D47", "\u1D48", "\u1D49", "\u1DA0", "\u1D4D", "\u02B0", "\u2071",
     "\u02B2", "\u1D4F", "\u02E1", "\u1D50", "\u207F", "\u1D52", "\u1D56", "\u02B3", "\u02E2",
@@ -160,6 +161,9 @@ export class Table extends AnalysisElement {
 
     public setData(data) {
         super.setData(data);
+
+        if ( ! this.__data)
+            return;
 
         this.__columnHeaderRowSuper = null;
         this.__sortTransform = [];
@@ -418,7 +422,8 @@ export class Table extends AnalysisElement {
 
     render() {
 
-        super.render();
+        if (super.render() === false)
+            return false;
 
         if (! this.__data)
             return;

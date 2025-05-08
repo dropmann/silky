@@ -29,7 +29,7 @@ const { contextMenuListener } = require('../common/utils');
 
 const path = require('path');
 
-import { ResultsContext, Analysis, YDocSupport } from './lexical/editorcontext'
+import { ResultsContext, Analysis } from './lexical/editorcontext'
 //import { ResultsEditor } from './resultseditor';
 import { References } from './lexical/components/references';
 
@@ -330,9 +330,24 @@ const ResultsPanel = Backbone.View.extend({
         this.model.settings().on('change:refsMode', () => this._updateRefsMode());
         //this.model.on('change:editState', () => this._updateEditState());
 
-        this.resultsContext.addEventListener("nextUpdate", (event: CustomEvent<Uint8Array>) => {
-            this.sendUpdate(event.detail);
-          }, false);
+        this.resultsContext.doc.on('update', (update: Uint8Array, origin, doc) => {
+            /*if (this._initialisingBinding) {
+                //force an update after the inital update has occured and delcare ready.
+                this.editor.update(() => { }, {
+                    discrete: true, onUpdate: () => {
+                        this._resolve();
+                    }
+                });
+                return;
+            }*/
+    
+            if (origin){
+                this.sendUpdate(update);
+            }
+        });
+        /*this.resultsContext.addEventListener("nextUpdate", (event: CustomEvent<Uint8Array>) => {
+            this.sendUpdate(update);
+          }, false);*/
 
         this.model.on('projectChanged', event => {
             console.log(event);
@@ -362,7 +377,7 @@ const ResultsPanel = Backbone.View.extend({
             this.resultsContext.theme = this.model.settings().getSetting('theme', 'default');
             this.resultsContext.palette = this.model.settings().getSetting('palette', 'jmv');
 
-
+            this.resultsContext.setInstanceId(this.model.instanceId());
             this.updateDoc();
             this._updateRefsMode();
         }, 1000)
@@ -411,10 +426,6 @@ const ResultsPanel = Backbone.View.extend({
 
         return coms.send(request).then(response => {
             let docPB = coms.Messages.ProjectRR.decode(response.payload);
-            // let update = docPB.docUpdate.toBuffer();
-            // update = new Uint8Array(update);
-            // let ydocSupport = this.resultsContext.getFeature(YDocSupport);
-            // ydocSupport.applyUpdate(update);
             this._processProjectRRResponse(docPB);
         });
     },
@@ -430,8 +441,7 @@ const ResultsPanel = Backbone.View.extend({
         if (update.length > 0) {
             console.log('Process Project RR')
             console.log(update)
-            let ydocSupport = this.resultsContext.getFeature(YDocSupport);
-                ydocSupport.applyUpdate(update);
+            this.resultsContext.applyUpdate(update);
         }
     },
 

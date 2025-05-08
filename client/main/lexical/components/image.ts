@@ -2,6 +2,7 @@
 import { AnalysisElement } from './element';
 import focusLoop from '../../../common/focusloop';
 import { EditorContext }  from '../editorcontext';
+import host from '../../host';
 
 
 export class Image extends AnalysisElement {
@@ -33,8 +34,6 @@ export class Image extends AnalysisElement {
         imageElement.classList.add(`jmv-results-image-image`);
         this.appendChild(imageElement);
         this.__image = imageElement;
-
-        //this.render();
     }
 
     public get type() {
@@ -71,7 +70,8 @@ export class Image extends AnalysisElement {
     }
 
     render() {
-        super.render();
+        if (super.render() === false)
+            return false;
 
         if (! this.__data)
             return;
@@ -102,7 +102,7 @@ export class Image extends AnalysisElement {
         if (image.path) {
             let url = 'res/' + image.path;
             url = url.replace(/\"/g, '&quot;');
-            backgroundImage = "url('" + url + "')";
+            backgroundImage = "url('" + host.resultsViewUrl + this.instanceId + '/' + this.analysisId + '/' + url + "')";
         }
 
         this.__image.style.backgroundImage = backgroundImage;
