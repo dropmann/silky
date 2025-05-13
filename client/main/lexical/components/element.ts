@@ -94,11 +94,11 @@ export abstract class AnalysisElement extends ItemContext {
     render() {
         let visible = this.__data && (this.__data.visible === 0 || this.__data.visible === 2);
         if ( ! visible) {
-            this.style.display = 'none';
+            //this.style.display = 'none';
             return false;
         }
-        else
-            this.style.display = '';
+        //else
+        //    this.style.display = '';
 
         let error = this.__data.error;
         if (error) {

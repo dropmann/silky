@@ -15,6 +15,7 @@ import { LinkNode } from '@lexical/link';
 import { ListNode, ListItemNode } from '@lexical/list';
 import { ResultNode } from './resultnode';
 import { $generateHtmlFromNodes } from '@lexical/html';
+import { ResultHeadingNode, $createResultHeadingNode } from './headingNode'
 
 import {
   DecoratorNode,
@@ -168,7 +169,8 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
 
     setTimeout(() => {
       let analysis = new AnalysisContext(this.__uuid, this.__ns, this.__name, this.getKey());
-      analysis.setAllowedNodes(HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, AnalysisNode, ResultNode);
+      analysis.setAllowedNodes(HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, CodeNode, AnalysisNode, ResultNode, ResultHeadingNode);
+
       analysis.classList.add('analysis-content');
       div.append(analysis);
     }, 0);

@@ -95,7 +95,7 @@ class AnalysesDoc:
         # self.create_analysis_title(txn, title, 'h1', resources)
         title_path = 'root:heading'
         if title_path not in resources['result_items']:
-            self.create_heading(txn, title_path, 0, title, 'h1', resources)
+            self.create_heading(txn, title_path, 0, title, 'h1', True, resources)
         else:
             resources['result_items'][title_path]['processed'] = True
         self.findElements(txn, group, 1, 0, 1, 'root', resources)
@@ -143,29 +143,16 @@ class AnalysesDoc:
             print('deleteing - ' + str(begin_index)+':'+str(length))
             content_root.delete(txn, begin_index, length) 
 
-
     def get_result_item(self, items, xmlItem):
         item = None
 
-        if type(xmlItem).__name__ == 'YXmlElement':
-                path = xmlItem.name
-                if path in items:
-                    item = items[path]
-                elif self.is_valid_item_path(path):
-                    item = { 'xml_element': xmlItem, 'processed': False, 'index': -1, 'path': path }
-                    items[path] = item
-        elif type(xmlItem).__name__ == 'YXmlText':
-                path = xmlItem.get_attribute('__path')
-                if path in items:
-                    item = items[path]
-                elif self.is_valid_item_path(path):
-                    item = { 'xml_element': xmlItem, 'processed': False, 'index': -1, 'path': path }
-                    items[path] = item
-
+        path = xmlItem.get_attribute('__path')
+        if path in items:
+            item = items[path]
+        elif path != None:
+            item = { 'xml_element': xmlItem, 'processed': False, 'index': -1, 'path': path }
+            items[path] = item
         return item
-
-    def is_valid_item_path(self, path):
-        return path.startswith('root')
 
     def findElements(self, txn, group, level, visible, current_index, base_path, analysis_resources):
         items = analysis_resources['result_items']
@@ -195,37 +182,38 @@ class AnalysesDoc:
                 current_index += 1
             elif element.HasField('group'):
                 group_path = base_path + ':' + element.name
-                print('Into group' + group_path)
                 current_index = self.create_result_group(txn, group_path, element, element.group, current_index, level+1, analysis_resources)
-                # dets = self.findElements(txn, element.group, level + 1, element.visible, current_index, group_path, analysis_resources)
-                # if dets['visible_children']:  # has visible children
-                #     if element.title != '' and el_vis:
-                #         self.create_heading(txn, group_path + ':heading', current_index, element.title, 'h' + str(level + 1), analysis_resources)
-                #         dets['current_index'] += 1
-                # current_index = dets['current_index']
             elif element.HasField('array'):
                 group_path = base_path + ':' + element.name
-                print('Into array' + group_path)
                 current_index = self.create_result_group(txn, group_path, element, element.array, current_index, level+1, analysis_resources)
-                # dets = self.findElements(txn, element.array, level + 1, element.visible, current_index, group_path, analysis_resources)
-                # if dets['visible_children']:  # has visible children
-                #     if element.title != '' and el_vis:
-                #         self.create_heading(txn, group_path + ':heading', current_index, element.title, 'h' + str(level + 1), analysis_resources)
-                #         dets['current_index'] += 1
-                # current_index = dets['current_index']
         return { 'current_index': current_index, 'visible_children': has_visible_children }
 
     def create_result_group(self, txn, group_path, element, group, index, level, analysis_resources):
+        current_index = index
         el_vis = element.visible == 0 or element.visible == 2
-        dets = self.findElements(txn, group, level, element.visible, index, group_path, analysis_resources)
-        if dets['visible_children']:  # has visible children
-            if element.title != '' and el_vis:
-                heading_path = group_path + ':heading'
-                if heading_path not in analysis_resources['result_items']:
-                    self.create_heading(txn, heading_path, index, element.title, 'h' + str(level), analysis_resources)
-                    dets['current_index'] += 1
-                else:
-                    analysis_resources['result_items'][heading_path]['processed'] = True
+        heading_path = group_path + ':heading'
+        visible = element.title != '' and el_vis
+        items = analysis_resources['result_items']
+        if heading_path not in items:
+            current_index = self.create_heading(txn, heading_path, index, element.title, 'h' + str(level), visible, analysis_resources)
+        else:
+            item = items[heading_path]
+            xlm_element = item['xml_element']
+            xlm_element.set_attribute(txn, '__visible', visible)
+        current_index += 1
+
+        dets = self.findElements(txn, group, level, element.visible, current_index, group_path, analysis_resources)
+
+        if dets['visible_children'] == False:
+            items[heading_path]['xml_element'].set_attribute(txn, '__visible', False)
+        
+        # if dets['visible_children']:  # has visible children
+        #     if element.title != '' and el_vis:
+        #         if heading_path not in analysis_resources['result_items']:
+        #            self.create_heading(txn, heading_path, index, element.title, 'h' + str(level), visible, analysis_resources)
+        #            dets['current_index'] += 1
+
+        items[heading_path]['processed'] = True
 
         return dets['current_index']
 
@@ -247,6 +235,7 @@ class AnalysesDoc:
         print('making item - ' + path)
         xlm_element = content_root.insert_xml_element(txn, index, path)
         xlm_element.set_attribute(txn, '__type', 'result')
+        xlm_element.set_attribute(txn, '__path', path)
         xlm_element.set_attribute(txn, '__data', bytearray(element.SerializeToString()))
         analysis_resource['result_items'][path] = { 'xml_element': xlm_element, 'processed': True, 'index': index, 'path': path }
 
@@ -268,10 +257,10 @@ class AnalysesDoc:
         
         return items
 
-    def create_heading(self, txn, path, index, title, tag, analysis_resources):
+    def create_heading(self, txn, path, index, title, tag, visible, analysis_resources):
         print(path + ' ' + str(index))
         heading = analysis_resources['analysis_content_xml'].insert_xml_text(txn, index)
-        heading.set_attribute(txn, '__type', 'heading')
+        heading.set_attribute(txn, '__type', 'result-heading')
         heading.set_attribute(txn, '__format', 0)
         heading.set_attribute(txn, '__style', '')
         heading.set_attribute(txn, '__indent', 0)
@@ -280,6 +269,8 @@ class AnalysesDoc:
         heading.set_attribute(txn, '__textStyle', '')
         heading.set_attribute(txn, '__tag', tag)
         heading.set_attribute(txn, '__path', path)
+        heading.set_attribute(txn, '__visible', visible)
+        heading.set_attribute(txn, '__defaultValie', title)
         heading.push_attributes(txn, {
             '__type': 'text',
             '__format': 0,

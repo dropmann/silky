@@ -1798,8 +1798,22 @@ export class AnalysisContext extends ResultsContext {
     protected _css(): string {
         let css = super._css();
         css += `
+
+            .results-item.result_item_hidden {
+                visibility: hidden;
+                height: 0px !important;
+                opacity: 0;
+                padding: 0px !important;
+                margin: 0px !important;
+            }
+
             .results-item {
                 width: fit-content;
+                visibility: visible;
+                height: auto;
+                opacity: 1;
+                transition: all 0.2s
+                overflow: hidden;
             }
 
             .results-item[data-type='table'] {
