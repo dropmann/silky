@@ -1537,7 +1537,8 @@ export class ResultsContext extends ParentContext implements IEnterable {
 
     protected onChildAdded(childContext) {
         if (this._selectionPending !== null && childContext.nodeKey === this._selectionPending) {
-            this._setSelectedAnalysis(childContext);
+            this._selectionPending = null;
+            this.focusedContext = childContext;
         }
     }
 
@@ -1546,7 +1547,8 @@ export class ResultsContext extends ParentContext implements IEnterable {
         //if (focusedContext instanceof EditorContext) {
             focusedContext.editor.update(() => {
                 let analysisNode = $createAnalysisNode(opts.ns, opts.name, this.extra);
-                this._selectionPending = analysisNode.getKey();
+                if (focusedContext instanceof ResultsContext)
+                    focusedContext._selectionPending = analysisNode.getKey();
                 analysisNode.focusOnCreation = true;
 
                 //let paragraphNode = $createParagraphNode();
@@ -1647,7 +1649,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
             this._selectedAnalysis = null;
         //////////////////
 
-        const event = new CustomEvent<Analysis>('selectedAnalysisChanged', { detail: this._selectedAnalysis });
+        const event = new CustomEvent<Analysis>('selectedAnalysisChanged', { detail: this._selectedAnalysis, bubbles: true, composed: true });
         this.dispatchEvent(event);
     }
 
