@@ -21,6 +21,12 @@ async def sync_ydoc_to_options(resources, target, ydoc_options_pb):
     resources[uuid]['revision'] += 1
     resources[uuid]['analysis'].set_options(ydoc_options_pb, [], resources[uuid]['revision'], True)
 
+async def set_heading(doc, xml_element, text):
+    print('DAMO!!!!!!!!!!!!!!1')
+    print('DAMO' + text)
+    with doc.begin_transaction() as txn:
+        xml_element.insert(txn, 0, text)
+
 class AnalysesDoc:
     '''Analyses document'''
 
@@ -198,20 +204,24 @@ class AnalysesDoc:
             current_index = self.create_heading(txn, heading_path, index, element.title, 'h' + str(level), visible, analysis_resources)
         else:
             item = items[heading_path]
-            xlm_element = item['xml_element']
-            xlm_element.set_attribute(txn, '__visible', visible)
+            xml_element = item['xml_element']
+            if xml_element.get_attribute('__visible') != visible:
+                xml_element.set_attribute(txn, '__visible', visible)
+            if xml_element.get_attribute('__defaultValue') != element.title:
+                xml_element.set_attribute(txn, '__defaultValue', element.title)
+            # print('tom' + xml_element.__str__() + 'tom')
+            # print('LEN' + str(xml_element.__len__()) + 'LEN')
+            # print('STP' + str(len(xml_element.__str__().strip())) + 'STP')
+            # if xml_element.__len__() < 3: # xml_element.__str__().strip() == '':
+                # xml_element.delete(txn, 0, xml_element.__len__())
+                # default_value = xml_element.get_attribute('__defaultValue')
+                # xml_element.push(txn, default_value)
         current_index += 1
 
         dets = self.findElements(txn, group, level, element.visible, current_index, group_path, analysis_resources)
 
-        if dets['visible_children'] == False:
+        if dets['visible_children'] == False and visible == True:
             items[heading_path]['xml_element'].set_attribute(txn, '__visible', False)
-        
-        # if dets['visible_children']:  # has visible children
-        #     if element.title != '' and el_vis:
-        #         if heading_path not in analysis_resources['result_items']:
-        #            self.create_heading(txn, heading_path, index, element.title, 'h' + str(level), visible, analysis_resources)
-        #            dets['current_index'] += 1
 
         items[heading_path]['processed'] = True
 
@@ -270,7 +280,7 @@ class AnalysesDoc:
         heading.set_attribute(txn, '__tag', tag)
         heading.set_attribute(txn, '__path', path)
         heading.set_attribute(txn, '__visible', visible)
-        heading.set_attribute(txn, '__defaultValie', title)
+        heading.set_attribute(txn, '__defaultValue', title)
         heading.push_attributes(txn, {
             '__type': 'text',
             '__format': 0,

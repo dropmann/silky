@@ -70,8 +70,9 @@ export class ResultHeadingNode extends HeadingNode {
   }
 
   updateDOM(prevNode, div, config) {
+    let value = super.updateDOM(prevNode, div, config);
     this.updateVisibility(div);
-    return false;
+    return value;
   }
 
   exportJSON() {

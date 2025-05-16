@@ -3,7 +3,7 @@ import { mergeRegister, $getNearestNodeOfType } from '@lexical/utils';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $createResultNode } from './resultnode';
 import { $isPlaceholderNode, $createPlaceholderNode, PlaceholderNode } from './placeholdernode';
-
+import { ResultHeadingNode } from './headingNode';
 
 import {
     LexicalEditor,
@@ -40,7 +40,11 @@ import {
     DELETE_CHARACTER_COMMAND,
     COMMAND_PRIORITY_CRITICAL,
     $createNodeSelection,
-    $setSelection
+    $setSelection,
+    KEY_ARROW_LEFT_COMMAND,
+    KEY_ARROW_UP_COMMAND,
+    KEY_ARROW_DOWN_COMMAND,
+    KEY_ARROW_RIGHT_COMMAND
 } from 'lexical';
 
 const TEXT_COLOR_COMMAND = 'text-color';
@@ -264,9 +268,11 @@ export class Locked extends Feature<ItemContext> {
 }
 
 export class Selectable extends Feature<ItemContext> {
-    constructor(item: ItemContext) {
-        super(item);
+    _enterable: boolean;
 
+    constructor(item: ItemContext, enterable: boolean = false) {
+        super(item);
+        this._enterable = enterable;
         this.onClick = this.onClick.bind(this);
     }
 
@@ -275,13 +281,15 @@ export class Selectable extends Feature<ItemContext> {
     }
 
     onClick(event) {
-        this.item.parent.setFocus();
-        this.item.parent.editor.update(() => {
-            let nodeKey = this.item.nodeKey;
-            const selection = $createNodeSelection();
-            selection.add(nodeKey); // Select the node
-            $setSelection(selection);
-        });
+        if (this._enterable === false) {
+            this.item.parent.setFocus();
+            this.item.parent.editor.update(() => {
+                let nodeKey = this.item.nodeKey;
+                const selection = $createNodeSelection();
+                selection.add(nodeKey); // Select the node
+                $setSelection(selection);
+            });
+        }
     }
 
     public registerEvents() {
@@ -1044,11 +1052,44 @@ export abstract class EditorContext extends ItemContext {
             this.editor.registerCommand(
                 FOCUS_COMMAND,
                 () => {
-                    this.focusedContext = this;
+                    if (this.focusedContext != this) 
+                        this.focusedContext = this;
                     return true;
                 },
                 COMMAND_PRIORITY_HIGH
             ),
+            /*this.editor.registerCommand(
+                KEY_ARROW_LEFT_COMMAND,
+                (payload) => {
+                    console.log('SSSTTTUUUFFFF');
+                    return true;
+                },
+                COMMAND_PRIORITY_LOW,
+            ),
+            this.editor.registerCommand(
+                KEY_ARROW_UP_COMMAND,
+                (payload) => {
+                    console.log('SSSTTTUUUFFFF');
+                    return true;
+                },
+                COMMAND_PRIORITY_LOW,
+            ),
+            this.editor.registerCommand(
+                KEY_ARROW_RIGHT_COMMAND,
+                (payload) => {
+                    console.log('SSSTTTUUUFFFF');
+                    return true;
+                },
+                COMMAND_PRIORITY_LOW,
+            ),
+            this.editor.registerCommand(
+                KEY_ARROW_DOWN_COMMAND,
+                (payload) => {
+                    console.log('SSSTTTUUUFFFF');
+                    return false;
+                },
+                COMMAND_PRIORITY_LOW,
+            ),*/
             // Toggle link command callback
             this.editor.registerCommand(
                 TOGGLE_LINK_COMMAND,
@@ -1241,7 +1282,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
         this.onAnalysesChanged = this.onAnalysesChanged.bind(this);
         this.addFeatures(
             //new Removable(this), 
-            new Selectable(this),
+            new Selectable(this, true),
             //new Enterable(this)
         );
     }
@@ -1262,7 +1303,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
     }
 
     private onAwarenessChanged() {
-        //console.log(this._provider.awareness.getLocalState());
+        console.log('damo'/*this._provider.awareness.getLocalState()*/);
     }
 
     private registerBindings() {
@@ -1439,8 +1480,6 @@ export class ResultsContext extends ParentContext implements IEnterable {
             })
         );
     }
-
-//18v makita auto feed DFR450ZX 418.45 + battery - 25mm fine thread screw wall - 32mm cieling  600mm centers
 
 
     protected _css() {
@@ -1791,7 +1830,26 @@ export class AnalysisContext extends ResultsContext {
     protected registerEditor() {
         return mergeRegister(
             super.registerEditor(),
-            this.registerReferences()
+            this.registerReferences(),
+            this.editor.registerMutationListener(ResultHeadingNode, (mutatedNodes) => {  // If a result heading is cleared then the default value is re applied
+                for (const [nodeKey, mutation] of mutatedNodes) {
+                    if (mutation === 'updated')
+                    {
+                        this.editor.update(() => {
+                            let node = $getNodeByKey(nodeKey);
+                            if (node instanceof ElementNode) {
+                                let text = node.getTextContent();
+                                if (text.trim() == ''){
+                                    node.clear();
+                                    let newText = $createTextNode(node.__defaultValue);
+                                    node.append(newText);
+                                }
+                            }
+
+                        });
+                    }
+                }
+            })
         );
     }
 
@@ -1812,7 +1870,7 @@ export class AnalysisContext extends ResultsContext {
                 visibility: visible;
                 height: auto;
                 opacity: 1;
-                transition: all 0.2s
+                transition: all 0.2s;
                 overflow: hidden;
             }
 
