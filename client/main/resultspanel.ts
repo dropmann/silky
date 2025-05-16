@@ -25,12 +25,9 @@ import { AnalysisNode } from './lexical/analysisnode'
 const { flatten, unflatten } = require('../common/utils/addresses');
 const { contextMenuListener } = require('../common/utils');
 
-//require('./references');
-
 const path = require('path');
 
 import { ResultsContext, Analysis } from './lexical/editorcontext'
-//import { ResultsEditor } from './resultseditor';
 import { References } from './lexical/components/references';
 
 

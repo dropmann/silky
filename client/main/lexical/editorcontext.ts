@@ -1241,9 +1241,15 @@ export abstract class ParentContext extends EditorContext {
         super.onConnected();
 
         if (!this.isRoot) {
-            if (this.parent instanceof ParentContext && this instanceof ItemContext)
+            if (this.parent instanceof ParentContext && this instanceof ItemContext) {
                 this.parent._nestedContexts[this.id] = this;
+                this.parent.onChildAdded(this);
+            }
         }
+    }
+
+    protected onChildAdded(childContext: ItemContext) {
+
     }
 
     public removeItem(item: ItemContext) {
@@ -1272,7 +1278,8 @@ export class ResultsContext extends ParentContext implements IEnterable {
     private _syncing = false;
     private _provider;
     private _uuid: string;
-    private _instanceId
+    private _instanceId;
+    private _selectionPending: string | null = null;
 
     constructor(uuid?: string, nodeKey?: string) {
         super(nodeKey);
@@ -1281,9 +1288,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
         this._selectedAnalysis = null;
         this.onAnalysesChanged = this.onAnalysesChanged.bind(this);
         this.addFeatures(
-            //new Removable(this), 
-            new Selectable(this, true),
-            //new Enterable(this)
+            new Selectable(this, true)
         );
     }
 
@@ -1530,11 +1535,18 @@ export class ResultsContext extends ParentContext implements IEnterable {
         this.dispatchEvent(event);
     }
 
+    protected onChildAdded(childContext) {
+        if (this._selectionPending !== null && childContext.nodeKey === this._selectionPending) {
+            this._setSelectedAnalysis(childContext);
+        }
+    }
+
     insertAnalysis(opts: CreateAnalysisOptions) {
         let focusedContext = this.focusedContext || this;
         //if (focusedContext instanceof EditorContext) {
             focusedContext.editor.update(() => {
                 let analysisNode = $createAnalysisNode(opts.ns, opts.name, this.extra);
+                this._selectionPending = analysisNode.getKey();
                 analysisNode.focusOnCreation = true;
 
                 //let paragraphNode = $createParagraphNode();
@@ -1591,14 +1603,6 @@ export class ResultsContext extends ParentContext implements IEnterable {
 
         if (this.isRoot && this._references)
             this._references.setRootContext(this);
-        else {
-
-            //if (applyFocus) {
-            //    setTimeout(() => {
-            //        this.focusedContext = context;
-            //    }, 0);
-            //}
-        }
     }
 
     public get selectedAnalysis(): Analysis {
@@ -1804,9 +1808,10 @@ export class AnalysisContext extends ResultsContext {
     }
 
     protected onConnected() {
+        this._analysis = new Analysis(this, this.modules); // needs to come before the super call so that the options panel can be opened
+
         super.onConnected();
         this._refTable.setup(this.references.getNumbers(this._ns), this.parent.refsMode);
-        this._analysis = new Analysis(this, this.modules);
     }
 
     public get analysis() : Analysis | null {
