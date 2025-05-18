@@ -4,6 +4,7 @@ import { $isHeadingNode } from '@lexical/rich-text';
 import { $createResultNode } from './resultnode';
 import { $isPlaceholderNode, $createPlaceholderNode, PlaceholderNode } from './placeholdernode';
 import { ResultHeadingNode } from './headingNode';
+import OptionTypes from './analysisoptions';
 
 import {
     LexicalEditor,
@@ -1053,6 +1054,11 @@ export abstract class EditorContext extends ItemContext {
                 FOCUS_COMMAND,
                 () => {
                     if (this.focusedContext != this) 
+                        if (this.focusedContext) {
+                            this.focusedContext.editor.update(() => {
+                                $setSelection(null);
+                            });
+                        }
                         this.focusedContext = this;
                     return true;
                 },
@@ -1258,6 +1264,10 @@ export abstract class ParentContext extends EditorContext {
 
     public get items() {
         return this._nestedContexts;
+    }
+
+    public getChild(uuid: string) {
+        return this.parent._nestedContexts[uuid];
     }
 }
 
@@ -1482,6 +1492,20 @@ export class ResultsContext extends ParentContext implements IEnterable {
                     if (textContent.trim() === '')
                         this.initialiseContent();
                 });
+            }),
+            this.editor.registerMutationListener(AnalysisNode, (mutatedNodes) => {  // If analysisnode changes the assumption is that the options have changed
+                for (const [nodeKey, mutation] of mutatedNodes) {
+                    if (mutation === 'updated')
+                    {
+                        this.editor.update(() => {
+                            let node = $getNodeByKey(nodeKey);
+                            if (node instanceof AnalysisNode) {
+                                let analysisContext = this.getChild(node.__uuid);
+                                analysisContext.updateAnalysisDetails(node.getDetails());
+                            }
+                        });
+                    }
+                }
             })
         );
     }
@@ -1879,10 +1903,11 @@ export class AnalysisContext extends ResultsContext {
                 opacity: 1;
                 transition: all 0.2s;
                 overflow: hidden;
+                margin: 15px 0;
             }
 
             .results-item[data-type='table'] {
-                padding: 10px;
+                padding: 15px;
             }
         `;
         return css;
@@ -1952,6 +1977,7 @@ export class Analysis {
 
     ready: Promise<void>;
     details: any;
+    options: Options = null;
 
     _context: AnalysisContext;
 
@@ -1984,6 +2010,7 @@ export class Analysis {
                     let defn = await this.modules.getDefn(this.ns, this.name);
                     let i18nDefn = await this.modules.getI18nDefn(this.ns);
                     this.i18n = i18nDefn;
+                    this.options = new Options(defn.options);
                     this.uijs = defn.uijs;
                     return defn;
                 })();
@@ -2076,6 +2103,138 @@ export class Analysis {
 
     getUsingOutputs() {
         //return this.options.getAssignedOutputs();
+    }
+}
+
+export class Options {
+    _options = { };
+    _changingHandles = [];
+    
+    constructor(def=[]) {
+
+        this._options = {};
+        this._changingHandles = [ ];
+    
+        for (var i = 0; i < def.length; i++) {
+            var template = def[i];
+            let defaultValue = template.default;
+            var option = OptionTypes.create(template, defaultValue);
+            this._options[template.name] = option;
+        }
+    }
+    
+    addValueChangingHandler(handle) {
+        this._changingHandles.push(handle);
+    }
+    
+    getAssignedColumns() {
+        let r = [];
+        for (let name in this._options) {
+            let option = this._options[name];
+            r = r.concat(option.getAssignedColumns());
+        }
+        r = [...new Set(r)];
+        return r;
+    }
+
+    clearColumnUse(columnName) {
+        for (let name in this._options) {
+            let option = this._options[name];
+            option.clearColumnUse(columnName);
+        }
+    }
+
+    renameColumn(oldName, newName) {
+        for (let name in this._options) {
+            let option = this._options[name];
+            option.renameColumn(oldName, newName);
+        }
+    }
+
+    renameLevel(variable, oldLabel, newLabel) {
+        for (let name in this._options) {
+            let option = this._options[name];
+            option.renameLevel(variable, oldLabel, newLabel, this.getOption);
+        }
+    }
+
+    getOption(name) {
+        return this._options[name];
+    };
+
+    setProperty(name, property, key, value) {
+        let option = this._options[name];
+
+        for (let i = 0; i < key.length; i++) {
+            if ( ! option.getChild)
+                return false;
+
+            option = option.getChild(key[i]);
+            if ( ! option)
+                return false;
+        }
+
+        option.setProperty(property, value);
+
+        return true;
+    }
+
+    setValues(values, initializeOnly) {
+        let changed = false;
+        for (let name in values) {
+            let value = values[name];
+            if (value === undefined) {
+                console.log("option '" + name + "' not set!");
+                continue;
+            }
+            else if (name.startsWith('results/')) {  // results options
+                if (name in this._options) {
+                    // results options / params are notified as cleared by
+                    // having values of null
+                    if (value === null) {
+                        delete this._options[name];
+                        changed = true;
+                    }
+                    else
+                        changed = this._options[name].setValue(value) || changed;
+                }
+                else {
+                    if (value !== null) {
+                        this._options[name] = new OptionTypes.Option({}, value, true);
+                        changed = true;
+                    }
+                }
+            }
+            else if (name in this._options) {
+                let option = this._options[name];
+                let apply = true;
+                for (let handle of this._changingHandles) {
+                    let result = handle(option, value, initializeOnly);
+                    if (result.cancel) {
+                        apply = ! result.cancel;
+                        break;
+                    }
+
+                    value = result.value;
+                }
+                if (apply) {
+                    changed = this._options[name].setValue(value) || changed;
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    getValues() {
+        var values = { };
+        for (let name in this._options) {
+            let value = this._options[name].getValue();
+            if (value !== undefined)
+                values[name] = value;
+        }
+
+        return values;
     }
 }
 

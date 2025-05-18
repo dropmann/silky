@@ -420,6 +420,9 @@ function View() {
     };
 
     this.valuesToItems = function(values, format) {
+        if (values === null)
+            return [];
+
         let list = [];
         for (let i = 0; i < values.length; i++) {
             if (format == FormatDef.variable && Array.isArray(values[i]))
