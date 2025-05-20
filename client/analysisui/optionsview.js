@@ -2,9 +2,10 @@
 
 const $ = require('jquery');
 
-const OptionControlBase = require('./optioncontrolbase');
-const ControlContainer = require('./controlcontainer').container;
+import { createOptionControlBase } from './optioncontrolbase';
+import { ControlContainer } from './controlcontainer';
 const DefaultControls = require('./defaultcontrols');
+import { Label, OptionedLabel } from './layoutgroupview';
 const Backbone = require('backbone');
 const Opt = require('./option');
 const ApplyMagicEventsForCtrl = require('./applymagicevents').applyMagicEventsForCtrl;
@@ -42,7 +43,7 @@ const OptionsView = function(uiModel) {
                 if (this.layoutActionManager.exists(name) === false) {
                     let ctrlDef = { name: name, typeName: '_hiddenOption', _parentControl: null };
                     ApplyMagicEventsForCtrl(ctrlDef, this.layoutActionManager._view);
-                    let backgroundOption = new OptionControlBase(ctrlDef);
+                    let backgroundOption = createOptionControlBase(ctrlDef);
                     backgroundOption.setOption(this._getOption(name));
                     this.layoutActionManager.addResource(name, backgroundOption);
                 }
@@ -291,8 +292,6 @@ const OptionsView = function(uiModel) {
                 throw "Type has not been defined for control '"+ uiDef.name + "'";
         }
 
-        
-
         let name = uiDef.name === undefined ? null :  uiDef.name;
 
         uiDef.DefaultControls = DefaultControls;
@@ -311,7 +310,14 @@ const OptionsView = function(uiModel) {
             throw 'This control definition has already been assigned a control id. It has already been used by a control';
 
         uiDef.controlID = this._nextControlID++;
-        let ctrl = new uiDef.type(uiDef);
+        let ctrl = null;
+        if (uiDef.type.create)
+            ctrl = uiDef.type.create(uiDef);
+        else
+            ctrl = new uiDef.type(uiDef);
+
+        if (ctrl === null)
+            throw "shouldn't get here";
 
         if (ctrl.getPropertyValue("stage") > this.model.currentStage)
             return null;
@@ -353,15 +359,13 @@ const OptionsView = function(uiModel) {
             resourceId = this.model.actionManager.addResource(name, ctrl);
         }
 
-        ctrl._override("onDisposed", (baseFunction) => {
-            if (baseFunction !== null)
-                baseFunction.call(this);
-
+        ctrl.on('disposing', () => {
             if (this._ctrlListValid === true) {
                 this._ctrlListValid = false;
                 setTimeout(() => { this._validateControlList(); }, 0);
             }
         });
+
 
         this._allCtrls.push( { ctrl: ctrl, resourceId: resourceId } );
         return ctrl;

@@ -1,14 +1,14 @@
 'use strict';
 
 const LayoutCollapseView = require('./layoutcollapseview');
-const LayoutGroupView = require('./layoutgroupview');
+const Label = require('./layoutgroupview');
 const LayoutSupplierView = require('./layoutsupplierview');
 const LayoutVariablesView = require('./layoutvariablesview');
 const GridCheckbox = require('./gridcheckbox');
 const GridRadioButton = require('./gridradiobutton');
 const GridTextbox = require('./gridtextbox');
 const GridCombobox = require('./gridcombobox');
-const GridOptionListControl = require('./gridoptionlistcontrol');
+const GridOptionListControl = require('./optionlistcontrol');
 const ControlContainer = require('./controlcontainer').container;
 const RMAnovaFactorsControl = require('./rmanovafactorscontrol');
 const VariableLabel = require('./variablelabel');
@@ -37,7 +37,7 @@ const DefaultControls = {
     Supplier: LayoutSupplierView,
     VariableSupplier: LayoutVariablesView,
     CollapseBox: LayoutCollapseView,
-    Label: LayoutGroupView,
+    Label: Label,
     LayoutBox: ControlContainer,
     VariableLabel: VariableLabel,
     TermLabel: TermLabel,
@@ -53,7 +53,7 @@ const DefaultControls = {
         ComboBox: GridCombobox, //Not to be used, no longer supported
         TermLabel: TermLabel, //Not to be used, no longer supported
         VariableLabel:VariableLabel, //Not to be used, no longer supported
-        Label: LayoutGroupView //Not to be used, no longer supported
+        Label: Label //Not to be used, no longer supported
     }
 };
 

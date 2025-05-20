@@ -1492,7 +1492,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
                     if (textContent.trim() === '')
                         this.initialiseContent();
                 });
-            }),
+            })/*,
             this.editor.registerMutationListener(AnalysisNode, (mutatedNodes) => {  // If analysisnode changes the assumption is that the options have changed
                 for (const [nodeKey, mutation] of mutatedNodes) {
                     if (mutation === 'updated')
@@ -1506,7 +1506,7 @@ export class ResultsContext extends ParentContext implements IEnterable {
                         });
                     }
                 }
-            })
+            })*/
         );
     }
 
@@ -1943,6 +1943,11 @@ export class AnalysisContext extends ResultsContext {
         });
     }
 
+    public updateAnalysisDetails(details) {
+        this.analysis.applyDetails(details);
+        console.log('TODO: NEEDS TO PUSH ANALYSIS DETAILS TO ANALYSIS OBJECT');
+    }
+
     hexToUint8Array(hexString) {
         // Remove potential "0x" prefix
         if (hexString.startsWith("0x")) {
@@ -1977,7 +1982,7 @@ export class Analysis {
 
     ready: Promise<void>;
     details: any;
-    options: Options = null;
+    optionsTemplate: Options = null;
 
     _context: AnalysisContext;
 
@@ -2010,7 +2015,7 @@ export class Analysis {
                     let defn = await this.modules.getDefn(this.ns, this.name);
                     let i18nDefn = await this.modules.getI18nDefn(this.ns);
                     this.i18n = i18nDefn;
-                    this.options = new Options(defn.options);
+                    //this.optionsTemplate = new Options(defn.options);
                     this.uijs = defn.uijs;
                     return defn;
                 })();
