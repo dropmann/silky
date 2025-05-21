@@ -8,28 +8,28 @@ services:
     profiles:
       - donotstart
 
-  # vite:
-  #   image: jonathonlove/vite:1.0
-  #   container_name: vite
-  #   privileged: true
-  #   command: [ 'mkdir -p /source/merged && unionfs-fuse -o cow /source/server:/source/client=RW /source/merged && cd /source/merged && echo installing npm deps && npm install && echo starting vite server && vite --host' ]
-  #   volumes:
-  #     - './client/main:/source/client/main'
-  #     - './client/resultsview:/source/client/resultsview'
-  #     - './client/analysisui:/source/client/analysisui'
-  #     - './client/lib:/source/client/lib'
-  #     - './client/assets:/source/client/assets'
-  #     - './client/common:/source/client/common'
-  #     - './client/index.html:/source/client/index.html'
-  #     - './client/resultsview.html:/source/client/resultsview.html'
-  #     - './client/analysisui.html:/source/client/analysisui.html'
-  #     - './client/tsconfig.json:/source/client/tsconfig.json'
-  #     - './client/vite.config.ts:/source/client/vite.config.ts'
-  #     - './client/package.json:/source/client/package.json'
-  #     - './server/jamovi/server/jamovi.proto:/source/server/assets/coms.proto'
-  #   ports:
-  #     - '5173:5173'
-  #     - '24678:24678'
+  vite:
+    image: jonathonlove/vite:latest
+    container_name: vite
+    privileged: true
+    command: [ 'mkdir -p /source/merged && unionfs-fuse -o cow /source/server:/source/client=RW /source/merged && cd /source/merged && echo installing npm deps && npm install && echo starting vite server && vite --host' ]
+    volumes:
+      - './client/main:/source/client/main'
+      - './client/resultsview:/source/client/resultsview'
+      - './client/analysisui:/source/client/analysisui'
+      - './client/lib:/source/client/lib'
+      - './client/assets:/source/client/assets'
+      - './client/common:/source/client/common'
+      - './client/index.html:/source/client/index.html'
+      - './client/resultsview.html:/source/client/resultsview.html'
+      - './client/analysisui.html:/source/client/analysisui.html'
+      - './client/tsconfig.json:/source/client/tsconfig.json'
+      - './client/vite.config.ts:/source/client/vite.config.ts'
+      - './client/package.json:/source/client/package.json'
+      - './server/jamovi/server/jamovi.proto:/source/server/assets/coms.proto'
+    ports:
+      - '5173:5173'
+      - '24678:24678'
 
   tests:
     image: jamovi/jamovi:2.6
@@ -58,7 +58,7 @@ services:
 
         # for development, use the vite dev server
         # (uncomment/enable the vite service above too)
-        # JAMOVI_DEV_SERVER: "http://vite:5173"
+        JAMOVI_DEV_SERVER: "http://vite:5173"
 
         # block Rj - don't enable unless you understand the risks!
         JAMOVI_ALLOW_ARBITRARY_CODE: 'false'
@@ -85,7 +85,7 @@ services:
         # then access jamovi with ?access_key=yourpasswordhere added to the url
         # i.e. 127.0.0.1:41337/?access_key=yourpasswordhere
         # or alternatively, remove the password requirement:
-        # JAMOVI_ACCESS_KEY: ''
+        JAMOVI_ACCESS_KEY: ''
 
     volumes:
       - $HOME/Documents:/root/Documents
