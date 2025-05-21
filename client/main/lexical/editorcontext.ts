@@ -42,10 +42,7 @@ import {
     COMMAND_PRIORITY_CRITICAL,
     $createNodeSelection,
     $setSelection,
-    KEY_ARROW_LEFT_COMMAND,
-    KEY_ARROW_UP_COMMAND,
-    KEY_ARROW_DOWN_COMMAND,
-    KEY_ARROW_RIGHT_COMMAND
+    SKIP_DOM_SELECTION_TAG
 } from 'lexical';
 
 const TEXT_COLOR_COMMAND = 'text-color';
@@ -1940,6 +1937,8 @@ export class AnalysisContext extends ResultsContext {
         this.parent.editor.update(() => {
             let node = $getNodeByKey(this.nodeKey);
             node.setOptions(options);
+        }, {
+            tag: SKIP_DOM_SELECTION_TAG
         });
     }
 
