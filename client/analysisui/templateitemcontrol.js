@@ -1,5 +1,6 @@
 'use strict';
 
+const ControlBase = require('./controlbase');
 const SuperClass = require('../common/superclass');
 
 const TemplateItemControl = function() {

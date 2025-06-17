@@ -224,14 +224,6 @@ export class AnalysisNode extends DecoratorNode<HTMLElement> {
     console.log(writable.__options);
   }
 
-  updateDOM(prevNode, dom) {
-    // Handles attribute update when node selection changes
-    /*dom.setAttribute(
-      'data-lexical-selected',
-      this.isSelected() ? 'true' : 'false'
-    );*/
-    return false;
-  }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
     let dom = editor.getElementByKey(this.getKey());

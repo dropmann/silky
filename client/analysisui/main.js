@@ -23,6 +23,7 @@ const OptionControl = require('./optioncontrol');
 const GridOptionControl = require('./gridoptioncontrol');
 const LayoutActionManager = require('./layoutactionmanager');
 const RequestDataSupport = require('./requestdatasupport');
+const GridOptionListControl = require('./gridoptionlistcontrol');
 const ApplyMagicEvents = require('./applymagicevents').applyMagicEvents;
 const Keyboard = require('../common/focusloop');
 
