@@ -176,9 +176,6 @@ export const LayoutGrid = function() {
     };
 
     this.updateGridProperties = function() {
-        if (this.updateCustomGridProperties && this.updateCustomGridProperties() === false)
-            return;
-
         this.$el.css('grid-template-rows', 'repeat(' + (this._rowCount)  + ', max-content)');
 
         let repeat = 0;

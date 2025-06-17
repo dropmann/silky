@@ -275,10 +275,8 @@ export class LayoutSupplierView extends ControlContainer {
         }, 0);
     }
 
-    
-    updateCustomGridProperties(): boolean {
+    updateGridProperties() {
         this.$el.css('grid-template-rows', 'repeat(' + (this._rowCount)  + ', auto) 1fr');
-        return false;
     }
 
     rowTransform(row, column) {
