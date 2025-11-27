@@ -43,6 +43,10 @@ import type { InfoBox } from './infobox';
 
 import keyboardJS  from 'keyboardjs';
 import HighContrast from '../common/highcontrast';
+import HelpPanel from './help/helppanel';
+
+import './help/servicebar';
+import { VerticalIconToolbar } from './help/servicebar';
 
 window._ = I18ns.get('app')._;
 window.n_ = I18ns.get('app')._n;
@@ -481,6 +485,17 @@ ready(async() => {
         instance.set('editState', tabName === 'annotation');
     });
 
+    const sidebar = document.querySelector('#vbar') as VerticalIconToolbar;
+
+  // Simple SVG icons (replace with your own)
+  //const boldSVG = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 4h6a3 3 0 0 1 0 6H7zM7 10h7a3 3 0 0 1 0 6H7z" fill="currentColor"/></svg>';
+  //const italicSVG = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M10 4h10v2h-4.5l-3.5 12H16v2H6v-2h4.5l3.5-12H10z" fill="currentColor"/></svg>';
+  //const underlineSVG = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 3v7a6 6 0 0 0 12 0V3h-2v7a4 4 0 0 1-8 0V3zM5 20v-2h14v2z" fill="currentColor"/></svg>';
+  sidebar.addItem({ label: 'Summary', id: 'summary' });
+  sidebar.addItem({ label: 'Table of contents', id: 'toc' });
+  sidebar.addItem({ label: 'Assistant', id: 'assistant' });
+
+
     let splitPanel = document.querySelector('#main-view') as SplitPanel;
 
     splitPanel.addEventListener('mode-changed', () => {
@@ -534,6 +549,19 @@ ready(async() => {
     resultsView.setAttribute('aria-live', 'polite');
     resultsPanel.append(resultsView);
 
+    sidebar.addEventListener('toolbar-select', (ev) => {
+        helpView.selectMode(ev.detail.item.id);
+        splitPanel.setAuxPanelVisibility(true);
+    });
+
+    let helpPanel = splitPanel.addPanel('help', { adjustable: true, fixed: true, anchor: 'right' });
+    const helpView = new HelpPanel(instance);
+    helpPanel.append(helpView);
+
+    helpPanel.addEventListener('assistant-closed', () => {
+        splitPanel.setAuxPanelVisibility(false);
+    });
+
     let $mainTable = document.querySelector('#main-table');
     $mainTable.setAttribute('role', 'region');
     $mainTable.setAttribute('aria-label', 'Spreadsheet');
@@ -546,7 +574,7 @@ ready(async() => {
                 if (analysis.hasUserOptions()) {
                     //TODO: Needs to accomodate plots
                     _annotationReturnTab = 'analyses';
-                    splitPanel.setVisibility('main-options', true);
+                    splitPanel.setVisibility(true);
                     optionspanel.setAnalysis(analysis);
                     if (ribbonModel.get('selectedTab') === 'data' || ribbonModel.get('selectedTab') === 'variables')
                         ribbonModel.set('selectedTab', 'analyses');

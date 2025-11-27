@@ -10,6 +10,7 @@ export class SplitPanel extends EventDistributor {
     _allResults: boolean = false;
     mode: ('mixed' | 'data' | 'results') = 'mixed';
     _optionsVisible: boolean = false;
+    _auxPanelVisible: boolean = true;
     _allowDocking: { left: boolean, right: boolean, both: boolean } = { left: false, right: false, both: false };
     _transition: Promise<void>;
     _initialWidthsSaved: boolean = false;
@@ -18,6 +19,7 @@ export class SplitPanel extends EventDistributor {
     _sectionsList: SplitPanelSection[] = [];
     widths: number[];
     optionsChanging: 'opening' | 'closing' | null;
+    auxChanging: 'opening' | 'closing' | null;
     _resultsWidth: string | null;
     _otherWidth: number;
     transitionCheckActive: boolean;
@@ -59,7 +61,7 @@ export class SplitPanel extends EventDistributor {
         this._sections[section.name] = section;
 
         section.addEventListener("splitpanel-hide", (event) => {
-            this.setVisibility(section, false);
+            this.setVisibility(false);
         });
 
         this.append(section);
@@ -81,9 +83,60 @@ export class SplitPanel extends EventDistributor {
         return section;
     }
 
-    async setVisibility(i, value) {
+    async setAuxPanelVisibility(value: boolean) {
+        if (this._auxPanelVisible === value)
+            return;
 
-        let callId = Math.floor(Math.random() * 1000);
+        this._auxPanelVisible = value;
+
+        this._transition = this._transition.then(() => {
+            return new Promise(async (resolve) => {
+
+                let auxSection = this.getSection(-1);
+                if (auxSection.getVisibility() === value) {
+                    resolve();
+                    return;
+                }
+
+                auxSection.adjustable = value;
+
+                auxSection.classList.add('initialised');
+
+                this.auxChanging = value ? 'opening' : 'closing';
+
+                if (value) {
+                    let columnTemplates = getComputedStyle(this).gridTemplateColumns.split(' ');
+                    this._resultsWidth = columnTemplates[columnTemplates.length - 3];
+                    this._otherWidth = parseInt(columnTemplates[0]) + parseInt(columnTemplates[1]) + parseInt(columnTemplates[2]);
+                    this.allowDocking('left');
+                }
+
+                if (this.resetState())
+                   this.normalise();
+
+                auxSection.setVisibility(value);
+                this.onTransitioning();
+
+                auxSection.addEventListener('transitionend', async () => {
+                    await this.checkDockConditions(false);
+                    if (value === false) {
+                        this.suspendDocking('left');
+                        this._resultsWidth = null;
+                    }
+                    this.auxChanging = null;
+                    if (this.resetState())
+                       this.normalise(true);
+
+                    if (value === false)
+                        this._saveWidths();
+
+                    resolve();
+                }, { once:true });
+            });
+        });
+    }
+
+    async setVisibility(value: boolean) {
 
         if (this._optionsVisible === value)
             return;
@@ -105,7 +158,7 @@ export class SplitPanel extends EventDistributor {
 
                 if (value) {
                     let columnTemplates = getComputedStyle(this).gridTemplateColumns.split(' ');
-                    this._resultsWidth = columnTemplates[columnTemplates.length - 1];
+                    this._resultsWidth = columnTemplates[columnTemplates.length - 3];
                     this._otherWidth = parseInt(columnTemplates[0]) + parseInt(columnTemplates[1]) + parseInt(columnTemplates[2]);
                     this.allowDocking('left');
                 }
@@ -147,10 +200,17 @@ export class SplitPanel extends EventDistributor {
         }
 
         if (this.getSection(-1).adjustable) {
-            if ((this._allowDocking.right === false && this._allowDocking.both === false) && ! this._allData)
+            //if ((this._allowDocking.right === false && this._allowDocking.both === false) && ! this._allData)
                 columnTemplates[columnTemplates.length - 1] = `minmax(200px, ${columnTemplates[columnTemplates.length - 1]} )`;
+            //else
+            //    columnTemplates[columnTemplates.length - 1] = `minmax(auto, ${columnTemplates[columnTemplates.length - 1]} )`;
+        }
+
+        if (this.getSection(-2).adjustable) {
+            if ((this._allowDocking.right === false && this._allowDocking.both === false) && ! this._allData)
+                columnTemplates[columnTemplates.length - 3] = `minmax(200px, ${columnTemplates[columnTemplates.length - 3]} )`;
             else
-                columnTemplates[columnTemplates.length - 1] = `minmax(auto, ${columnTemplates[columnTemplates.length - 1]} )`;
+                columnTemplates[columnTemplates.length - 3] = `minmax(auto, ${columnTemplates[columnTemplates.length - 3]} )`;
         }
 
         this.style.gridTemplateColumns = columnTemplates.join(' ');
@@ -294,7 +354,7 @@ export class SplitPanel extends EventDistributor {
 
             if (this._resultsWidth) {
                 let newOtherWidth = parseInt(columnTemplates[0]) + parseInt(columnTemplates[1]) + parseInt(columnTemplates[2]);
-                this._resultsWidth = `${ parseInt(columnTemplates[columnTemplates.length - 1]) + (newOtherWidth  - this._otherWidth) }px`;
+                this._resultsWidth = `${ parseInt(columnTemplates[columnTemplates.length - 3]) + (newOtherWidth  - this._otherWidth) }px`;
                 this._dataWidth = newOtherWidth;
             }
         }
@@ -303,7 +363,7 @@ export class SplitPanel extends EventDistributor {
     _normaliseWidths(columnTemplates, clean) {
 
         if (this._resultsWidth)
-            columnTemplates[columnTemplates.length - 1] = this._resultsWidth;
+            columnTemplates[columnTemplates.length - 3] = this._resultsWidth;
 
         let total = 0;
         let widthValues = [];
@@ -324,7 +384,7 @@ export class SplitPanel extends EventDistributor {
 
         for (let i = 0; i < widthValues.length; i++) {
             if (widthValues[i] !== null) {
-                if (clean && ((i === 0 && this._allResults) || (i === widthValues.length - 1 && this._allData)))
+                if (clean && ((i === 0 && this._allResults) || (i === widthValues.length - 2 && this._allData)))
                         columnTemplates[i*2] = '0fr';
                 else if (typeof widthValues[i] === 'string')
                     columnTemplates[i*2] = widthValues[i];
@@ -345,11 +405,11 @@ export class SplitPanel extends EventDistributor {
 
     resetState() {
 
-        if (this._sectionsList.length !== 3)
+        if (this._sectionsList.length !== 4)
             return false;
 
         let dataPanel = this.getSection(0);
-        let resultsPanel = this.getSection(-1);
+        let resultsPanel = this.getSection(-2);
 
         if (this.mode === 'data' || (this.mode === 'mixed' && this.optionsChanging)) {
             resultsPanel.fixed = true;
@@ -390,12 +450,12 @@ export class SplitPanel extends EventDistributor {
                 let columnTemplates = getComputedStyle(this).gridTemplateColumns.split(' ');
                 if (mode === 'results') {
 
-                    let section = this.getSection(-1);
+                    let section = this.getSection(-2);
                     section.style.width = '';
                     section.style.opacity = '';
 
                     // Set layout grid state ///
-                    this.getSection(-1).fixed = false;
+                    this.getSection(-2).fixed = false;
                     this.getSection(0).adjustable = false;
 
                     let $dataPanel = this.getSection(0);
@@ -425,12 +485,12 @@ export class SplitPanel extends EventDistributor {
                     section.style.opacity = '';
 
                     // Set layout grid state ///
-                    this.getSection(-1).adjustable = false;
-                    this.getSection(-1).fixed = false;
+                    this.getSection(-2).adjustable = false;
+                    this.getSection(-2).fixed = false;
                     this.getSection(0).fixed = false;
 
-                    let $resultsPanel = this.getSection(-1);
-                    $resultsPanel.style.width = columnTemplates[columnTemplates.length - 1];
+                    let $resultsPanel = this.getSection(-2);
+                    $resultsPanel.style.width = columnTemplates[columnTemplates.length - 3];
 
                     this._applyColumnTemplates(columnTemplates, true);
                     //////////////////
@@ -460,18 +520,18 @@ export class SplitPanel extends EventDistributor {
                             section.style.opacity = '';
 
                             // Set layout grid state ///
-                            this.getSection(-1).adjustable = false;
-                            this.getSection(-1).fixed = false;
+                            this.getSection(-2).adjustable = false;
+                            this.getSection(-2).fixed = false;
                             this.getSection(0).fixed = false;
 
-                            let $resultsPanel = this.getSection(-1);
-                            $resultsPanel.style.width = `${columnTemplates[columnTemplates.length - 1]}px`;
+                            let $resultsPanel = this.getSection(-2);
+                            $resultsPanel.style.width = `${columnTemplates[columnTemplates.length - 3]}px`;
 
                             this._applyColumnTemplates(columnTemplates, true);
                             //////////////////
 
                             setTimeout(() => {
-                                let width = this.getSection(-1).lastWidth;
+                                let width = this.getSection(-2).lastWidth;
                                 $resultsPanel.style.width = `${width}px`;
                                 setTimeout(() => {  //Normalises the columnTemplate after transition
                                     this.onTransitioning();
@@ -484,7 +544,7 @@ export class SplitPanel extends EventDistributor {
                             }, transitionDelay);
                         }
                         else if (prevMode === 'data') {
-                            let section = this.getSection(-1);
+                            let section = this.getSection(-2);
                             section.style.width = '';
                             section.style.opacity = '';
 
@@ -620,17 +680,17 @@ export class SplitPanel extends EventDistributor {
                 }
 
                 this._allResults = this.widths[0] <= 40 && (wideCount <= 1 || this._allResults);
-                this._allData = this.widths[this.widths.length-1] <= 40 && wideCount <= 1;
+                this._allData = this.widths[this.widths.length-2] <= 40 && wideCount <= 1;
 
                 if (this.widths[0] <= 40)
                     this._sectionsList[0].style.opacity = '0';
                 else
                     this._sectionsList[0].style.opacity = '';
 
-                if (this.widths[this.widths.length-1] <= 40)
-                    this._sectionsList[this._sectionsList.length-1].style.opacity = '0';
+                if (this.widths[this.widths.length-2] <= 40)
+                    this._sectionsList[this._sectionsList.length-2].style.opacity = '0';
                 else
-                    this._sectionsList[this._sectionsList.length-1].style.opacity = '';
+                    this._sectionsList[this._sectionsList.length-2].style.opacity = '';
 
                 if (updateMode) {
                     if (this._allResults)

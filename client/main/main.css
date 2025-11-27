@@ -59,3 +59,5 @@
 @import "../common/focusloop.css";
 @import "../common/menu.css";
 @import "../common/icon.css";
+
+@import "./help/sidebar.css";
