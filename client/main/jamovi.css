@@ -52,7 +52,7 @@ jmv-safari-button:focus {
     display: grid;
     height: 100%;
     grid-template-rows: auto min-content 1fr;
-    grid-template-columns: 100%;
+    grid-template-columns: 1fr auto;
 }
 
 body.windows.electron {
@@ -79,6 +79,7 @@ hr {
     text-align: center ;
     min-height: 6px ;
     height: 0px;
+    grid-area: 1 / 1 / span 1 / span 2;
 }
 
 .upgrade-button {
@@ -249,6 +250,10 @@ body.windows.electron #header-buttons {
     min-width: 0px;
 }
 
+.silky-ribbon {
+    grid-area: 2 / 1 / span 1 / span 2;
+}
+
 #main-view {
     padding-top: 6px ;
     border-top: 1px solid #D0D0D0 ;
@@ -257,6 +262,7 @@ body.windows.electron #header-buttons {
     display: grid;
     grid-template-rows: minmax(0px, min-content) 1fr;
     grid-template-columns: 599px auto 0px auto 1fr;
+    grid-area: 3 / 1 / span 1 / span 1;
 }
 
 #main-options {
@@ -303,11 +309,16 @@ body.windows.electron #header-buttons {
 }
 
 #help {
-    overflow: auto;
-    border: 1px solid #555555 ;
-    border-radius: 5px ;
-    padding: 5px ;
-    background-color: white;
+  overflow: auto;
+  border: 1px solid #555555;
+  /*padding: 5px;*/
+  background-color: white;
+  border: 1px solid #ACACAC;
+  grid-area: 2 / 7 / span 1 / span 1;
+  position: relative;
+  opacity: 1;
+  transition: opacity 0.1s, width 0.2s;
+  min-width: 0px;
 }
 
 .silky-splitpanel-splitter {

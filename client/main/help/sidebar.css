@@ -1,0 +1,79 @@
+    :host {
+      display: inline-block;
+      user-select: none;
+      -webkit-user-select: none;
+      --item-size: 40px;
+      --gap: 6px;
+      --bg: transparent;
+      --hover-bg: rgba(0,0,0,0.06);
+      --focus-outline: 2px solid rgba(0,120,212,0.6);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background-color: #f0f0f0;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
+      background: var(--bg);
+      padding: 6px;
+      border-radius: 6px;
+      align-items: center;
+    }
+
+    .item {
+      width: var(--item-size);
+      height: var(--item-size);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      background-color: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+      outline: none;
+      color:#9f9f9f
+    }
+
+    .item:hover {
+      background-color: var(--hover-bg);
+    }
+
+    .item:focus {
+      box-shadow: var(--focus-outline);
+    }
+
+    /* icon sizing: keep icons readable but compact */
+    .item ::slotted(svg) {
+      width: calc(var(--item-size) * 0.6);
+      height: calc(var(--item-size) * 0.6);
+      display: block;
+    }
+
+    .item > div {
+        width: calc(var(--item-size) * 0.6);
+         height: calc(var(--item-size) * 0.6);
+    }
+
+    .item svg path {
+        fill: currentColor;
+    }
+
+    /* show a subtle selected state */
+    .item[selected] {
+      background-color: rgba(0,0,0,0.08);
+    }
+
+    /* hide textual content (this is an icon-only toolbar) */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      border: 0;
+    }

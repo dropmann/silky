@@ -612,6 +612,20 @@ export class Options {
         }
     }
 
+    [Symbol.iterator](): Iterator<Option> {
+            let index = 0;
+            const data = Object.values(this._options);
+    
+            return {
+                next(): IteratorResult<Option> {
+                    if (index < data.length)
+                        return { value: data[index++], done: false };
+                    else
+                        return { value: undefined as any, done: true };
+                }
+            };
+        }
+
     addValueChangingHandler(handle: ValueChangedHandle) {
         this._changingHandles.push(handle);
     }
