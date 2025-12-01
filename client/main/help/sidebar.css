@@ -21,7 +21,7 @@
       align-items: center;
     }
 
-    .item {
+    .sidebar .item {
       width: var(--item-size);
       height: var(--item-size);
       display: inline-flex;
@@ -37,32 +37,32 @@
       color:#9f9f9f
     }
 
-    .item:hover {
+    .sidebar .item:hover {
       background-color: var(--hover-bg);
     }
 
-    .item:focus {
+    .sidebar .item:focus {
       box-shadow: var(--focus-outline);
     }
 
     /* icon sizing: keep icons readable but compact */
-    .item ::slotted(svg) {
+    .sidebar .item ::slotted(svg) {
       width: calc(var(--item-size) * 0.6);
       height: calc(var(--item-size) * 0.6);
       display: block;
     }
 
-    .item > div {
+    .sidebar .item > div {
         width: calc(var(--item-size) * 0.6);
          height: calc(var(--item-size) * 0.6);
     }
 
-    .item svg path {
+    .sidebar .item svg path {
         fill: currentColor;
     }
 
     /* show a subtle selected state */
-    .item[selected] {
+    .sidebar .item[selected] {
       background-color: rgba(0,0,0,0.08);
     }
 
