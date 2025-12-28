@@ -563,6 +563,10 @@ table.row-selectable tr.selected th[scope=rowgroup] {
 .jmv-results-image:focus > .jmv-results-image-image {
     resize: both;
     overflow: auto;
+    min-height: 50px;
+    max-height: 2000px;
+    min-width: 50px;
+    max-width: 2000px;
 }
 
 .jmv-results-image-status-indicator {
