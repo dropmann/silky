@@ -53,6 +53,8 @@ export class View extends Elem.View<Model> {
     widthOfImage = -1;
     heightOfImage = -1;
     initalised = false;
+    ctrlDown = false;
+    atomicChange: NodeJS.Timeout;
 
 
     constructor(model: Model, data: ElementData) {
@@ -77,31 +79,87 @@ export class View extends Elem.View<Model> {
         this.$image = HTML.parse(`<div class="jmv-results-image-image" data-address="${ encodeURI(address) }">`);
         this.append(this.$image);
 
+        this.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (event.ctrlKey) {
+                if (this.initalised === false)
+                    this.resizeObserver.observe(this.$image);
+
+                if (event.key === 'ArrowUp') {
+                    this.atomicSizeChange(parseInt(this.$image.style.width), parseInt(this.$image.style.height) - 10);
+                    event.stopPropagation();
+                }
+                else if (event.key === 'ArrowDown') {
+                    this.atomicSizeChange(parseInt(this.$image.style.width), parseInt(this.$image.style.height) + 10);
+                    event.stopPropagation();
+                }
+                else if (event.key === 'ArrowLeft') {
+                    this.atomicSizeChange(parseInt(this.$image.style.width) - 10, parseInt(this.$image.style.height));
+                    event.stopPropagation();
+                }
+                else if (event.key === 'ArrowRight') {
+                    this.atomicSizeChange(parseInt(this.$image.style.width) + 10, parseInt(this.$image.style.height));
+                    event.stopPropagation();
+                }
+                
+            }
+        });
+
         this.$size = HTML.parse('<div class="size-display"></div>');
         this.append(this.$size);
 
+        window.addEventListener('keydown', e => {
+            if (e.key === 'Control') 
+                this.ctrlDown = true;
+        });
+
+        window.addEventListener('keyup', e => {
+            if (e.key === 'Control') 
+                this.ctrlDown = false;
+        });
+
         this.resizeObserver = new ResizeObserver((entries) => {
+            const step = 10;
             for (const entry of entries) {
-                if (entry.contentBoxSize) {
-                    const contentBoxSize = entry.contentBoxSize[0];
+                if (this.ctrlDown === false && (entry.contentRect.width % step !== 0 || entry.contentRect.height % step !== 0)) {
+                    const width  = Math.round(entry.contentRect.width  / step) * step;
+                    const height = Math.round(entry.contentRect.height / step) * step;
+
+                    this.$image.style.width  = width  + 'px';
+                    this.$image.style.height = height + 'px';
+                }
+                else {
                     this.$image.style.backgroundSize = '';
 
                     const different = this.widthOfImage !== entry.contentRect.width || this.heightOfImage !== entry.contentRect.height;
                     this.widthOfImage = entry.contentRect.width;
                     this.heightOfImage = entry.contentRect.height;
                     
-                    if (this.initalised && different)
-                        this.updating = true;
+                    if (this.initalised) {
+                        this.$size.style.opacity = '1';
+                        this.updateSizeDisplay();
+                        if (different) {
+                            //focusLoop.speakMessage(_('Image size {width} by {height}', { width: this.widthOfImage, height: this.heightOfImage }));
+                            this.updating = true;
+                        }
+                    }
 
                     this.initalised = true;
-
-                    this.updateSizeDisplay();
                 }
             }
         });
 
         this.applyScaleValues = this.applyScaleValues.bind(this);
         this.imagePointerDown = this.imagePointerDown.bind(this);
+    }
+
+    atomicSizeChange(width: number, height: number) {
+        this.$image.style.height = `${height}px`;
+        this.$image.style.width = `${width}px`;
+        if (this.atomicChange)
+            clearTimeout(this.atomicChange);
+        this.atomicChange = setTimeout(() => {
+            this.applyScaleValues();
+        }, 500);
     }
 
     disconnectedCallback() {
@@ -119,9 +177,6 @@ export class View extends Elem.View<Model> {
     imagePointerDown() {
         if (this.initalised === false)
             this.resizeObserver.observe(this.$image);
-
-        this.$size.style.opacity = '1';
-        this.updateSizeDisplay();
     }
 
     updateSizeDisplay() {
@@ -147,7 +202,7 @@ export class View extends Elem.View<Model> {
 
         window.setParam(this.address(), { widthScale, heightScale });
 
-        //console.log(`${widthScale}, ${heightScale}`);
+        focusLoop.speakMessage(_('Image resized to {width} by {height}', { width: widthOfImage, height: heightOfImage }));
     }
 
     type() {
