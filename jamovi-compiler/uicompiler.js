@@ -837,6 +837,7 @@ const constructors = {
             let ctrl = {};
             ctrl.type = 'ActionButton';
             CheckTemplateState(item, ctrl, isTemplate);
+            ctrl.action = item.action;
             return ctrl
         },
         toRaw: function (obj, key) {

@@ -406,6 +406,15 @@ VariablesListBox:
             minItems: 1
             uniqueItems: true
 
+ActionControl:
+    type: object
+    properties:
+        action:
+            type: string
+            enum:
+                - open
+                - run
+
 CollapseBox:
     type: object
     properties:
@@ -545,6 +554,7 @@ ControlInheritance:
         - ControlBase
         - GridControl
         - OptionControl
+        - ActionControl
     CheckBox:
         - ControlBase
         - GridControl
