@@ -56,6 +56,7 @@ export class View extends Elem.View<Model> {
     ctrlDown = false;
     atomicChange: NodeJS.Timeout;
     hideSize: NodeJS.Timeout;
+    manualResize = false;
 
 
     constructor(model: Model, data: ElementData) {
@@ -80,26 +81,39 @@ export class View extends Elem.View<Model> {
         this.$image = HTML.parse(`<div class="jmv-results-image-image" data-address="${ encodeURI(address) }">`);
         this.append(this.$image);
 
+        this.addEventListener('keyup', (event: KeyboardEvent) => {
+            if (event.ctrlKey) 
+                this.manualResize = false;
+        })
+
         this.addEventListener('keydown', (event: KeyboardEvent) => {
             if (event.ctrlKey) {
                 if (this.initalised === false)
                     this.resizeObserver.observe(this.$image);
 
                 if (event.key === 'ArrowUp') {
+                    this.manualResize = true;
                     this.atomicSizeChange(parseInt(this.$image.style.width), parseInt(this.$image.style.height) - 10);
                     event.stopPropagation();
+                    event.preventDefault();
                 }
                 else if (event.key === 'ArrowDown') {
+                    this.manualResize = true;
                     this.atomicSizeChange(parseInt(this.$image.style.width), parseInt(this.$image.style.height) + 10);
                     event.stopPropagation();
+                    event.preventDefault();
                 }
                 else if (event.key === 'ArrowLeft') {
+                    this.manualResize = true;
                     this.atomicSizeChange(parseInt(this.$image.style.width) - 10, parseInt(this.$image.style.height));
                     event.stopPropagation();
+                    event.preventDefault();
                 }
                 else if (event.key === 'ArrowRight') {
+                    this.manualResize = true;
                     this.atomicSizeChange(parseInt(this.$image.style.width) + 10, parseInt(this.$image.style.height));
                     event.stopPropagation();
+                    event.preventDefault();
                 }
                 
             }
@@ -127,15 +141,18 @@ export class View extends Elem.View<Model> {
                 this.heightOfImage = entry.contentRect.height;
                 
                 if (this.initalised) {
-                    this.$size.style.opacity = '1';
+                    if (this.manualResize)
+                        this.$size.style.opacity = '1';
+
                     if (this.hideSize)
                         clearTimeout(this.hideSize);
                     this.hideSize = setTimeout(() => {
                         this.$size.style.opacity = '0';
                     }, 1000);
+                    
 
                     this.updateSizeDisplay();
-                    if (different) {
+                    if (different && this.manualResize) {
                         //focusLoop.speakMessage(_('Image size {width} by {height}', { width: this.widthOfImage, height: this.heightOfImage }));
                         this.updating = true;
                     }
@@ -172,6 +189,7 @@ export class View extends Elem.View<Model> {
     }
 
     imagePointerDown() {
+        this.manualResize = true;
         if (this.initalised === false)
             this.resizeObserver.observe(this.$image);
     }
@@ -184,16 +202,18 @@ export class View extends Elem.View<Model> {
     }
 
     applyScaleValues() {
-        const step = 10;
-        if (this.ctrlDown === false && (this.widthOfImage % step !== 0 || this.heightOfImage % step !== 0)) {
-            
-            this.widthOfImage  = Math.round(this.widthOfImage  / step) * step;
-            this.heightOfImage = Math.round(this.heightOfImage / step) * step;
-
-            this.$image.style.width  = this.widthOfImage  + 'px';
-            this.$image.style.height = this.heightOfImage + 'px';
-        }
+        this.manualResize = false;
+        
         if (this.updating) {
+            const step = 10;
+            if (this.ctrlDown === false && (this.widthOfImage % step !== 0 || this.heightOfImage % step !== 0)) {
+                
+                this.widthOfImage  = Math.round(this.widthOfImage  / step) * step;
+                this.heightOfImage = Math.round(this.heightOfImage / step) * step;
+
+                this.$image.style.width  = this.widthOfImage  + 'px';
+                this.$image.style.height = this.heightOfImage + 'px';
+            }
             this.updateScaleValues(this.widthOfImage, this.heightOfImage);
             this.updating = false;
         }

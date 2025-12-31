@@ -590,6 +590,7 @@ table.row-selectable tr.selected th[scope=rowgroup] {
 .size-display {
     position: absolute;
     top: 0px;
+    opacity: 0;
     right: 0px;
     background-color: #ededed;
     padding: 3px 5px;
