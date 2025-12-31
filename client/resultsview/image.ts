@@ -55,6 +55,7 @@ export class View extends Elem.View<Model> {
     initalised = false;
     ctrlDown = false;
     atomicChange: NodeJS.Timeout;
+    hideSize: NodeJS.Timeout;
 
 
     constructor(model: Model, data: ElementData) {
@@ -118,33 +119,29 @@ export class View extends Elem.View<Model> {
         });
 
         this.resizeObserver = new ResizeObserver((entries) => {
-            const step = 10;
             for (const entry of entries) {
-                if (this.ctrlDown === false && (entry.contentRect.width % step !== 0 || entry.contentRect.height % step !== 0)) {
-                    const width  = Math.round(entry.contentRect.width  / step) * step;
-                    const height = Math.round(entry.contentRect.height / step) * step;
+                this.$image.style.backgroundSize = '';
 
-                    this.$image.style.width  = width  + 'px';
-                    this.$image.style.height = height + 'px';
-                }
-                else {
-                    this.$image.style.backgroundSize = '';
+                const different = this.widthOfImage !== entry.contentRect.width || this.heightOfImage !== entry.contentRect.height;
+                this.widthOfImage = entry.contentRect.width;
+                this.heightOfImage = entry.contentRect.height;
+                
+                if (this.initalised) {
+                    this.$size.style.opacity = '1';
+                    if (this.hideSize)
+                        clearTimeout(this.hideSize);
+                    this.hideSize = setTimeout(() => {
+                        this.$size.style.opacity = '0';
+                    }, 1000);
 
-                    const different = this.widthOfImage !== entry.contentRect.width || this.heightOfImage !== entry.contentRect.height;
-                    this.widthOfImage = entry.contentRect.width;
-                    this.heightOfImage = entry.contentRect.height;
-                    
-                    if (this.initalised) {
-                        this.$size.style.opacity = '1';
-                        this.updateSizeDisplay();
-                        if (different) {
-                            //focusLoop.speakMessage(_('Image size {width} by {height}', { width: this.widthOfImage, height: this.heightOfImage }));
-                            this.updating = true;
-                        }
+                    this.updateSizeDisplay();
+                    if (different) {
+                        //focusLoop.speakMessage(_('Image size {width} by {height}', { width: this.widthOfImage, height: this.heightOfImage }));
+                        this.updating = true;
                     }
-
-                    this.initalised = true;
                 }
+
+                this.initalised = true;
             }
         });
 
@@ -180,11 +177,22 @@ export class View extends Elem.View<Model> {
     }
 
     updateSizeDisplay() {
-        this.$size.innerText = `${this.widthOfImage} x ${this.heightOfImage}`;
+        const step = 10;
+        const width  = Math.round(this.widthOfImage  / step) * step;
+        const height = Math.round(this.heightOfImage / step) * step;
+        this.$size.innerText = `${width} x ${height}`;
     }
 
     applyScaleValues() {
-        this.$size.style.opacity = '0';
+        const step = 10;
+        if (this.ctrlDown === false && (this.widthOfImage % step !== 0 || this.heightOfImage % step !== 0)) {
+            
+            this.widthOfImage  = Math.round(this.widthOfImage  / step) * step;
+            this.heightOfImage = Math.round(this.heightOfImage / step) * step;
+
+            this.$image.style.width  = this.widthOfImage  + 'px';
+            this.$image.style.height = this.heightOfImage + 'px';
+        }
         if (this.updating) {
             this.updateScaleValues(this.widthOfImage, this.heightOfImage);
             this.updating = false;
