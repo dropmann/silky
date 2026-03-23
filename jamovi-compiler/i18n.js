@@ -1,27 +1,69 @@
 
 'use strict';
 
-const path = require('path');
-const fs = require('fs');
-const yaml = require('js-yaml');
-const utils = require('./utils');
-const po2json = require('po2json');
-const { GettextExtractor, JsExtractors } = require('gettext-extractor');
+import path from 'path';
+import yaml from 'js-yaml';
+import utils from './utils.js';
+import gettextParser from 'gettext-parser';
+import fs from 'fs';
+import { GettextExtractor, JsExtractors } from 'gettext-extractor';
 
-const matchAll = require("match-all"); // str.matchAll() not available pre node 12
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+import matchAll from "match-all"; // str.matchAll() not available pre node 12
 
 let untranslatableSymbols = [];
 
-const loadUntranslatableSymbols = function() {
+const loadUntranslatableSymbols = function () {
     const excludePath = path.join(__dirname, 'untranslatable.txt');
     const contents = fs.readFileSync(excludePath, 'utf8');
     untranslatableSymbols = contents.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
 }
 
-const translations = { };
+const translations = {};
 
 const getTranslation = function(msg, context, code, source) {
-    let key = msg;
+
+    context = context === null ? '' : context;
+    source = source.replaceAll('\\', '/');
+
+    if (translations[code]['translations'][context] === undefined)
+        translations[code]['translations'][context] = {};
+
+    let item = translations[code]['translations'][context][msg];
+    if (item === undefined) {
+        const item = {
+            "msgctxt": context,
+            "msgid": msg,
+            "comments": {
+                "reference": source
+            }
+        }
+        translations[code]['translations'][context][msg] = item;
+        return item;
+    }
+
+    if (source) {
+        if (item.comments === undefined)
+            item.comments = {};
+
+        if ( ! item.comments.reference)
+            item.comments.reference = source;
+        else {
+            let refs = item.comments.reference.split('\n');
+            if (refs.includes(source) === false)
+                refs.push(source);
+            item.comments.reference = refs.join('\n');
+        }
+    }
+
+    return item;
+
+
+    /*let key = msg;
     if (context)
         key = context + '\u0004' + msg;
 
@@ -72,7 +114,7 @@ const getTranslation = function(msg, context, code, source) {
     }
 
 
-    return data;
+    return data;*/
 };
 
 const updateEntry = function(key, context, source) {
@@ -84,16 +126,18 @@ const updateEntry = function(key, context, source) {
 
 const finalise = function(verbose) {
     for (let code in translations) {
-        for (let k in translations[code].locale_data.messages) {
-            let data = translations[code]._data[k];
-            if (data && data._inUse) {
-                if (verbose && data._clash && data._clash.length > 0)
-                    console.log(` !! TRANSLATION WARNING: '${data._clash.join(', ')}' and '${ data.msg }' have been added as seperate strings.`)
-                data._inUse = false;
-            }
-            else {
-                if (k !== '')
-                    delete translations[code].locale_data.messages[k];
+        for (let context in translations[code]['translations']) {
+            for (let k in translations[code]['translations'][context]) {
+                let data = translations[code]['translations'][context][k];
+                if (data && data._inUse) {
+                    //if (verbose && data._clash && data._clash.length > 0)
+                    //    console.log(` !! TRANSLATION WARNING: '${data._clash.join(', ')}' and '${ data.msg }' have been added as seperate strings.`)
+                    delete data._inUse;
+                }
+                else {
+                    if (k !== '')
+                        delete translations[code]['translations'][context][k];
+                }
             }
         }
     }
@@ -114,7 +158,7 @@ const canBeTranslated = function(value) {
     if (value === '$key')
         return false;
 
-    if ( /^\([^\)]*\)$/g.test(value))
+    if (/^\([^\)]*\)$/g.test(value))
         return false;
 
     if (/^\$\{[^\}]*\}$/g.test(value))
@@ -143,7 +187,7 @@ const parseContext = function(value) {
     return data;
 }
 
-const extract = function(obj, address, filter, exclude=[]) {
+const extract = function(obj, address, filter, exclude = []) {
 
     for (let property in obj) {
         let include = ( ! filter || filter.includes(property)) && ! exclude.includes(property);
@@ -172,24 +216,24 @@ const extractDefaultValueStrings = function(item, itemAddress, defaultValue, bas
 
     switch (item.type) {
         case 'String':
-                let dValue = defaultValue.trim();
-                if (canBeTranslated(dValue)) {
-                    let value = parseContext(dValue);
-                    updateEntry(value.key, value.context, `${itemAddress}.${basePath}`);
-                }
+            let dValue = defaultValue.trim();
+            if (canBeTranslated(dValue)) {
+                let value = parseContext(dValue);
+                updateEntry(value.key, value.context, `${itemAddress}.${basePath}`);
+            }
             break;
         case 'Group':
-                for (let element of item.elements)
-                    extractDefaultValueStrings(element, itemAddress, defaultValue[element.name], `${basePath}.${element.name}`);
+            for (let element of item.elements)
+                extractDefaultValueStrings(element, itemAddress, defaultValue[element.name], `${basePath}.${element.name}`);
             break;
         case 'Array':
-            for (let i = 0; i  < defaultValue.length; i++)
+            for (let i = 0; i < defaultValue.length; i++)
                 extractDefaultValueStrings(item.template, itemAddress, defaultValue[i], `${basePath}[${i}]`);
             break;
     }
 }
 
-const checkItem = function(item, address, customFilter, exclude=['usage']) {
+const checkItem = function(item, address, customFilter, exclude = ['usage']) {
 
     if (customFilter === undefined)
         customFilter = [];
@@ -261,18 +305,17 @@ const load = function(defDir, code, create) {
 
     if (code && create) {
         translations[code] = {
-            "domain": "messages",
-            "locale_data": {
-                "messages": {
-                    "": {
-                        "domain": "messages",
-                        "plural_forms": 'nplurals=2; plural=(n != 1)',
-                        "lang": code
-                    }
-                }
+            "headers": {
+                "MIME-Version": "1.0",
+                "Content-Type": "text/plain; charset=utf-8",
+                "Content-Transfer-Encoding": "8bit",
+                "POT-Creation-Date": "2021-07-26 12:08:06+01000",
+                "Plural-Forms": "nplurals=2; plural=(n!=1);",
+                "Language": code
             },
-            _data: { },
-            code: code
+
+            "translations": {
+            }
         }
     }
 
@@ -300,12 +343,12 @@ const load = function(defDir, code, create) {
 
         let langPath = path.join(transDir, file);
 
-        let translation = po2json.parseFileSync(langPath, { format: 'jed1.x', fuzzy: true });
-        if (translation.locale_data.messages[""].lang !== '') {
-            if (! code || code === translation.locale_data.messages[""].lang) {
-                translation.code = translation.locale_data.messages[""].lang.toLowerCase();
+        const po = gettextParser.po.parse(fs.readFileSync(langPath));
 
-                translations[translation.code] = translation;
+        if (po.headers.language !== '') {
+            if ( ! code || code === po.headers.Language) {
+                po.headers.Language = po.headers.Language.toLowerCase();
+                translations[po.headers.Language] = po;
                 translationLoaded = true;
             }
         }
@@ -318,30 +361,79 @@ Try using:    jmc --i18n path  --create ${code}`;
     return transDir;
 }
 
+const createTranslationJSON = function(code, domain = 'messages') {
+
+    const parsed = this.translations[code];
+    const locale_data = {};
+    const jed = {
+        domain,
+        locale_data: {
+            [domain]: locale_data
+        }
+    };
+
+    const headers = parsed.headers || {};
+
+    locale_data[""] = {
+        domain,
+        lang: headers.language || headers.lang || '',
+        plural_forms: headers['plural-forms'] || ''
+    };
+
+    const translations = parsed.translations || {};
+
+    for (const [context, entries] of Object.entries(translations)) {
+        for (const [msgid, entry] of Object.entries(entries)) {
+
+            if (msgid === '')
+                continue;
+
+            if (entry.comments?.flag?.includes('fuzzy'))
+                continue;
+
+            const ctx = entry.msgctxt || context || '';
+            const key = ctx ? `${ctx}\u0004${msgid}` : msgid;
+
+            const isPlural = !!entry.msgid_plural;
+
+            let value;
+
+            if (isPlural)
+                value = [entry.msgid_plural, ...(entry.msgstr || [])];
+            else
+                value = entry.msgstr;
+
+            locale_data[key] = value;
+        }
+    }
+
+    return jed;
+}
+
 const scanAnalyses = function(defDir, srcDir) {
 
     console.log('Extracting strings from js files...');
     let extractor = new GettextExtractor();
 
     extractor.createJsParser([
-            JsExtractors.callExpression('_', {
-                arguments: {
-                    text: 0
-                }
-            }),
-            JsExtractors.callExpression('n_', {
-                arguments: {
-                    text: 0,
-                    textPlural: 1
-                }
-            }),
-            JsExtractors.callExpression('_p', {
-                arguments: {
-                    context: 0,
-                    text: 1
-                }
-            })
-        ])
+        JsExtractors.callExpression('_', {
+            arguments: {
+                text: 0
+            }
+        }),
+        JsExtractors.callExpression('n_', {
+            arguments: {
+                text: 0,
+                textPlural: 1
+            }
+        }),
+        JsExtractors.callExpression('_p', {
+            arguments: {
+                context: 0,
+                text: 1
+            }
+        })
+    ])
         .parseFilesGlob(`${defDir}/js/**/*.@(ts|js|tsx|jsx)`);
 
     let items = extractor.getPofileItems();
@@ -365,7 +457,7 @@ const scanAnalyses = function(defDir, srcDir) {
         if ( ! fileName.endsWith('.R') || fileName.endsWith('.h.R'))
             continue;
         let filePath = path.join(rDir, fileName);
-        let content = fs.readFileSync(filePath, 'UTF-8').replace(/\\u[0-9A-Fa-f]{4}/g, (x) => JSON.parse(`"${ x }"`));
+        let content = fs.readFileSync(filePath, 'UTF-8').replace(/\\u[0-9A-Fa-f]{4}/g, (x) => JSON.parse(`"${x}"`));
 
         // to support node < 12, we're using matchAll() rather than
         // str.matchAll()
@@ -422,12 +514,6 @@ const scanAnalyses = function(defDir, srcDir) {
     }
 }
 
-const escStr = function(str) {
-    if (typeof str !== 'string')
-        return str;
-
-    return str.replace(/"/g, '\\"').replace(/(\r\n|\n|\r)/gm, '\\n"\n"');
-}
 
 const saveAsPO = function(transDir) {
     finalise(false);
@@ -438,45 +524,24 @@ const saveAsPO = function(transDir) {
             filename = 'catalog';
 
         let transOutPath = null;
-        if (filename === 'catalog' )
+        if (filename === 'catalog')
             transOutPath = path.join(transDir, `${filename}.pot`);
         else
             transOutPath = path.join(transDir, `${filename}.po`);
 
 
-        let poText = `msgid ""
-msgstr ""
-"MIME-Version: 1.0\\n"
-"Content-Type: text/plain; charset=utf-8\\n"
-"Content-Transfer-Encoding: 8bit\\n"
-"POT-Creation-Date: 2021-07-26 12:08:06+01000\\n"
-"PO-Revision-Date: 2021-07-29 16:59:59+01000\\n"
-"Language: ${code}\\n"
-"Plural-Forms: ${translations[code].locale_data.messages[""].plural_forms}\\n"\n`;
-
-        let keys = Object.keys(translations[code].locale_data.messages).sort(function (a, b) {
-            return a.toLowerCase().localeCompare(b.toLowerCase());
+        var output = gettextParser.po.compile(translations[code], {
+            foldLength: 77, sort: (a, b) => {
+                let aa = a.msgid.toLowerCase();
+                if (a.msgctxt)
+                    aa = `${a.msgctxt.toLowerCase()} ${aa}`;
+                let bb = b.msgid.toLowerCase();
+                if (b.msgctxt)
+                    bb = `${b.msgctxt.toLowerCase()} ${bb}`;
+                return aa.localeCompare(bb);
+            }
         });
-
-        let count = 0;
-        for (let key of keys) {
-            if (key === '')
-                continue;
-            let val =   translations[code].locale_data.messages[key];
-            let data = translations[code]._data[key];
-            let poEntry = `\n`;
-            for (let source of data.source)
-                poEntry = `${poEntry}#: ${source}\n`;
-            if (data.context)
-                poEntry += `msgctxt "${escStr(data.context)}"\n`;
-            poEntry = `${poEntry}msgid "${escStr(data.msg)}"\n`;
-            poEntry += `msgstr "${val === null ? '' : escStr(val[0]) }"\n`;
-            poText = poText + poEntry;
-            count += 1;
-        }
-
-        fs.writeFileSync(transOutPath,  poText);
-        console.log('wrote: ' + `${count} unique strings found`);
+        fs.writeFileSync(transOutPath, output);
         console.log('wrote: ' + path.basename(transOutPath));
     }
 }
@@ -510,7 +575,7 @@ const list = function(defDir) {
         console.log(`    ${transfiles.length} language code file was found:`);
     else
         console.log(`    ${transfiles.length} language code files were found:`);
-        console.log('');
+    console.log('');
 
     for (let file of transfiles)
         console.log(`      ${file}`);
@@ -527,4 +592,4 @@ To create a new language code file use:
     jmc --i18n path  --create code`);
 }
 
-module.exports = { create, update, load, finalise, list, translations };
+export default { create, update, load, finalise, list, translations, createTranslationJSON };
