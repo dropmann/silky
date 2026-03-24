@@ -25,7 +25,7 @@ const loadUntranslatableSymbols = function () {
 
 const translations = {};
 
-const getTranslation = function(msg, context, code, source) {
+const getTranslation = function(msg, plural, context, code, source) {
 
     context = context === null ? '' : context;
     source = source.replaceAll('\\', '/');
@@ -41,6 +41,9 @@ const getTranslation = function(msg, context, code, source) {
             "comments": {
                 "reference": source
             }
+        }
+        if (plural !== null) {
+            item.msgid_plural = plural;
         }
         translations[code]['translations'][context][msg] = item;
         return item;
@@ -117,9 +120,9 @@ const getTranslation = function(msg, context, code, source) {
     return data;*/
 };
 
-const updateEntry = function(key, context, source) {
+const updateEntry = function(key, plural, context, source) {
     for (let code in translations) {
-        let pair = getTranslation(key, context, code, source);
+        let pair = getTranslation(key, plural, context, code, source);
         pair._inUse = true;
     }
 };
@@ -198,9 +201,9 @@ const extract = function(obj, address, filter, exclude = []) {
                 if (canBeTranslated(value)) {
                     value = parseContext(value);
                     if (Array.isArray(obj))
-                        updateEntry(value.key, value.context, `${address}[${property}]`);
+                        updateEntry(value.key, null, value.context, `${address}[${property}]`);
                     else
-                        updateEntry(value.key, value.context, `${address}.${property}`);
+                        updateEntry(value.key, null, value.context, `${address}.${property}`);
                 }
             }
             else if (Array.isArray(value) || typeof value === 'object') {
@@ -219,7 +222,7 @@ const extractDefaultValueStrings = function(item, itemAddress, defaultValue, bas
             let dValue = defaultValue.trim();
             if (canBeTranslated(dValue)) {
                 let value = parseContext(dValue);
-                updateEntry(value.key, value.context, `${itemAddress}.${basePath}`);
+                updateEntry(value.key, null, value.context, `${itemAddress}.${basePath}`);
             }
             break;
         case 'Group':
@@ -345,9 +348,10 @@ const load = function(defDir, code, create) {
 
         const po = gettextParser.po.parse(fs.readFileSync(langPath));
 
-        if (po.headers.language !== '') {
-            if ( ! code || code === po.headers.Language) {
-                po.headers.Language = po.headers.Language.toLowerCase();
+        const lang = po.headers.Language || po.headers.language || po.headers.lang;
+        if (lang !== '') {
+            if ( ! code || code === lang) {
+                po.headers.Language = lang.toLowerCase();
                 translations[po.headers.Language] = po;
                 translationLoaded = true;
             }
@@ -376,8 +380,8 @@ const createTranslationJSON = function(code, domain = 'messages') {
 
     locale_data[""] = {
         domain,
-        lang: headers.language || headers.lang || '',
-        plural_forms: headers['plural-forms'] || ''
+        lang: headers.Language || headers.language || headers.lang || '',
+        plural_forms: headers['plural-forms'] || headers['Plural-Forms'] || ''
     };
 
     const translations = parsed.translations || {};
@@ -413,6 +417,23 @@ const createTranslationJSON = function(code, domain = 'messages') {
 const scanAnalyses = function(defDir, srcDir) {
 
     console.log('Extracting strings from js files...');
+
+    ////////////////////////////////////
+    // clear file references so they are clear and will be added back when updated
+    ////////////////////////////////////
+
+    for (let code in translations) {
+        for (const context of Object.values(translations[code].translations))
+            for (const entry of Object.values(context))
+                if (entry.comments)
+                    delete entry.comments.reference;
+    }
+
+
+    ////////////////////////////////////
+    // Extract strings from files
+    ////////////////////////////////////
+
     let extractor = new GettextExtractor();
 
     extractor.createJsParser([
@@ -442,7 +463,8 @@ const scanAnalyses = function(defDir, srcDir) {
         if (item.obsolete === false) {
             for (let ref of item.references) {
                 ref = path.relative(srcDir, ref);
-                updateEntry(item.msgid, item.msgctxt, ref);
+                console.log(item.msgid_plural)
+                updateEntry(item.msgid, item.msgid_plural, item.msgctxt, ref);
             }
         }
     }
@@ -471,7 +493,7 @@ const scanAnalyses = function(defDir, srcDir) {
         for (let match of matchAll(content, re).toArray()) {
             let value = parseContext(match);
             let rel = path.relative(srcDir, filePath);
-            updateEntry(value.key, value.context, rel);
+            updateEntry(value.key, null, value.context, rel);
         }
     }
 
