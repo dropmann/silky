@@ -35,7 +35,7 @@ const getTranslation = function(msg, plural, context, code, source) {
 
     let item = translations[code]['translations'][context][msg];
     if (item === undefined) {
-        const item = {
+        const newItem = {
             "msgctxt": context,
             "msgid": msg,
             "comments": {
@@ -43,10 +43,10 @@ const getTranslation = function(msg, plural, context, code, source) {
             }
         }
         if (plural !== null) {
-            item.msgid_plural = plural;
+            newItem.msgid_plural = plural;
         }
-        translations[code]['translations'][context][msg] = item;
-        return item;
+        translations[code]['translations'][context][msg] = newItem;
+        return newItem;
     }
 
     if (source) {
@@ -459,7 +459,6 @@ const scanAnalyses = function(defDir, srcDir) {
         if (item.obsolete === false) {
             for (let ref of item.references) {
                 ref = path.relative(srcDir, ref);
-                console.log(item.msgid_plural)
                 updateEntry(item.msgid, item.msgid_plural, item.msgctxt, ref);
             }
         }
@@ -548,7 +547,7 @@ const saveAsPO = function(transDir) {
             transOutPath = path.join(transDir, `${filename}.po`);
 
 
-        var output = gettextParser.po.compile(translations[code], {
+        const output = gettextParser.po.compile(translations[code], {
             foldLength: 77, sort: (a, b) => {
                 let aa = a.msgid.toLowerCase();
                 if (a.msgctxt)
@@ -564,13 +563,13 @@ const saveAsPO = function(transDir) {
     }
 }
 
-const create = function(code, defDir, srcDir, verbose, list) {
+const create = function(code, defDir, srcDir, verbose) {
     let transDir = load(defDir, code, true);
     scanAnalyses(defDir, srcDir);
     saveAsPO(transDir, verbose);
 }
 
-const update = function(code, defDir, srcDir, verbose, list) {
+const update = function(code, defDir, srcDir, verbose) {
     let transDir = load(defDir, code, false);
     scanAnalyses(defDir, srcDir);
     saveAsPO(transDir, verbose);
