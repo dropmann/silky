@@ -287,7 +287,8 @@ export class I18n {
             region: null,
             variant: null,
             code: null,
-            isValid: true
+            isValid: true,
+            scriptWasInferred: false
         };
 
         if (!code) {
@@ -324,6 +325,17 @@ export class I18n {
                 else
                     parts.isValid = false;
             }
+
+            if (parts.isValid && parts.language === 'zh' && parts.script === null) {
+                if (parts.region === 'cn' || parts.region === 'sg' || parts.region === 'my') {
+                    parts.script = 'hans';
+                    parts.scriptWasInferred = true;
+                }
+                else if (parts.region === 'tw' || parts.region === 'hk' || parts.region === 'mo') {
+                    parts.script = 'hant';
+                    parts.scriptWasInferred = true;
+                }
+            }
         }
 
         return parts;
@@ -352,7 +364,8 @@ export class I18n {
         let languages = codes.map(code => this.parseLangCode(code));
 
         // compares the tags of the two languages. Every matching tag increases the ranking.
-        // Mismatched tags disqualify the compare, except if the target tag being compared is null
+        // Script mismatches disqualify the compare, because they usually mean different written forms.
+        // Region mismatches are allowed, so region-based and script-based language packs can match.
         let compare = (desired, target) => {
             if (target.isValid === false)
                 return 0;
@@ -360,28 +373,24 @@ export class I18n {
             let rank = 0;
             if (desired.language === target.language)
                 rank += 5;
-            else if (target.language !== null)
+            else
                 return 0;
 
             if (desired.extlang === target.extlang)
-                rank += 4;
-            else if (target.extlang !== null)
+                rank += desired.extlang !== null ? 4 : 0;
+            else if (desired.extlang !== null && target.extlang !== null)
                 return 0;
 
             if (desired.script === target.script)
-                rank += 3;
-            else if (target.script !== null)
+                rank += desired.script !== null ? 3 : 0;
+            else if (desired.script !== null && target.script !== null)
                 return 0;
 
             if (desired.region === target.region)
-                rank += 2;
-            else if (target.region !== null)
-                return 0;
+                rank += desired.region !== null ? 2 : 0;
 
             if (desired.variant === target.variant)
-                rank += 1;
-            else if (target.variant !== null)
-                return 0;
+                rank += desired.variant !== null ? 1 : 0;
 
             return rank;
         };
@@ -392,7 +401,7 @@ export class I18n {
             let rank = compare(desiredLanguage, language);
 
             // If two languages have the same best rank then the shortest code is used.
-            if (rank > currentRank || (rank === currentRank && (bestLanguage === null || bestLanguage.code.Length > language.code.length))) {
+            if (rank > 0 && (rank > currentRank || (rank === currentRank && (bestLanguage === null || bestLanguage.code.length > language.code.length)))) {
                 currentRank = rank;
                 bestLanguage = language;
             }
