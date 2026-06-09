@@ -276,10 +276,7 @@ export class I18n {
         return 'en';
     }
 
-    // for information about language codes
-    // https://www.w3.org/International/articles/language-tags/
-    parseLangCode(code: string) {
-
+    createLangCodeParts(code: string) {
         let parts = {
             language: null,
             extlang: null,
@@ -287,58 +284,165 @@ export class I18n {
             region: null,
             variant: null,
             code: null,
+            originalCode: code,
             isValid: true,
             scriptWasInferred: false
         };
 
-        if (!code) {
-            parts.isValid = false;
-            parts.code = code;
-        }
-        else {
-            parts.code = code.toLowerCase();
+        return parts;
+    }
 
-            let sections = code.split('-');
-            let partIndex = 0;
-            for (let i = 0; i < sections.length && partIndex < 5 && parts.isValid; i++) {
-                let value = sections[i];
-                if (partIndex === 0 && /^[a-zA-Z]{2,3}$/g.test(value)) {  // language code of length 2 or 3 characters
-                    parts.language = value.toLowerCase();
-                    partIndex = 1;
-                }
-                else if (partIndex > 0 && partIndex <= 1 && /^[a-zA-Z]{3}$/g.test(value)) {  // language extension code of length 3 characters
-                    parts.extlang = value.toLowerCase();
-                    partIndex = 2;
-                }
-                else if (partIndex > 0 && partIndex <= 2 && /^[a-zA-Z]{4}$/g.test(value)) {  // language script code of length 4 characters
-                    parts.script = value.toLowerCase();
-                    partIndex = 3;
-                }
-                else if (partIndex > 0 && partIndex <= 3 && /\d{3}$|^[a-zA-Z]{2}$/g.test(value)) {  // region code of length 2 characters or 3 digits
-                    parts.region = value.toLowerCase();
-                    partIndex = 4;
-                }
-                else if (partIndex > 0 && partIndex <= 4 && /^\d{4}$|^[a-zA-Z]{5}$/g.test(value)) {  // variant code of length 5 characters or 4 digits
-                    parts.variant = value.toLowerCase();
-                    partIndex = 5;
-                }
-                else
-                    parts.isValid = false;
-            }
+    posixScriptModifiers(): { [key: string]: string } {
+        return {
+            latin: 'latn',
+            latn: 'latn',
+            cyrillic: 'cyrl',
+            cyrl: 'cyrl',
+            arabic: 'arab',
+            arab: 'arab',
+            devanagari: 'deva',
+            deva: 'deva',
+            gujarati: 'gujr',
+            gujr: 'gujr',
+            gurmukhi: 'guru',
+            guru: 'guru',
+            simplified: 'hans',
+            hans: 'hans',
+            traditional: 'hant',
+            hant: 'hant'
+        };
+    }
 
-            if (parts.isValid && parts.language === 'zh' && parts.script === null) {
-                if (parts.region === 'cn' || parts.region === 'sg' || parts.region === 'my') {
-                    parts.script = 'hans';
-                    parts.scriptWasInferred = true;
-                }
-                else if (parts.region === 'tw' || parts.region === 'hk' || parts.region === 'mo') {
-                    parts.script = 'hant';
-                    parts.scriptWasInferred = true;
-                }
-            }
+    normalizeLocaleCode(code: string) {
+        let normalizedCode = code.trim().toLowerCase();
+        let posixModifier = null;
+
+        let modifierIndex = normalizedCode.indexOf('@');
+        if (modifierIndex !== -1) {
+            posixModifier = normalizedCode.substring(modifierIndex + 1);
+            normalizedCode = normalizedCode.substring(0, modifierIndex);
         }
+
+        let codesetIndex = normalizedCode.indexOf('.');
+        if (codesetIndex !== -1)
+            normalizedCode = normalizedCode.substring(0, codesetIndex);
+
+        normalizedCode = normalizedCode.replace(/_/g, '-');
+
+        let script = null;
+        let variant = null;
+        if (posixModifier) {
+            const scriptModifiers = this.posixScriptModifiers();
+            if (scriptModifiers[posixModifier])
+                script = scriptModifiers[posixModifier];
+            else if (/^[a-zA-Z0-9]{4,8}$/.test(posixModifier))
+                variant = posixModifier;
+        }
+
+        if (script || variant) {
+            const sections = normalizedCode.split('-');
+            let insertIndex = 1;
+
+            if (sections.length > 1 && /^[a-z]{3}$/.test(sections[1]))
+                insertIndex = 2;
+
+            if (script && !(sections.length > insertIndex && /^[a-z]{4}$/.test(sections[insertIndex])))
+                sections.splice(insertIndex, 0, script);
+
+            if (variant)
+                sections.push(variant);
+
+            normalizedCode = sections.join('-');
+        }
+
+        return {
+            code: normalizedCode,
+            posixModifier: posixModifier
+        };
+    }
+
+    parseLangCodeFallback(code: string, originalCode: string) {
+        let parts = this.createLangCodeParts(originalCode);
+        parts.code = code;
+
+        let sections = code.split('-');
+        let partIndex = 0;
+        for (let i = 0; i < sections.length && partIndex < 5 && parts.isValid; i++) {
+            let value = sections[i];
+            if (partIndex === 0 && /^[a-zA-Z]{2,3}$/.test(value)) {  // language code of length 2 or 3 characters
+                parts.language = value.toLowerCase();
+                partIndex = 1;
+            }
+            else if (partIndex > 0 && partIndex <= 1 && /^[a-zA-Z]{3}$/.test(value)) {  // language extension code of length 3 characters
+                parts.extlang = value.toLowerCase();
+                partIndex = 2;
+            }
+            else if (partIndex > 0 && partIndex <= 2 && /^[a-zA-Z]{4}$/.test(value)) {  // language script code of length 4 characters
+                parts.script = value.toLowerCase();
+                partIndex = 3;
+            }
+            else if (partIndex > 0 && partIndex <= 3 && /^(\d{3}|[a-zA-Z]{2})$/.test(value)) {  // region code of length 2 characters or 3 digits
+                parts.region = value.toLowerCase();
+                partIndex = 4;
+            }
+            else if (partIndex > 0 && partIndex <= 4 && (/^(\d{4}|[a-zA-Z0-9]{5,8})$/.test(value))) {  // variant code of length 5 to 8 characters or 4 digits
+                parts.variant = value.toLowerCase();
+                partIndex = 5;
+            }
+            else
+                parts.isValid = false;
+        }
+
+        this.inferScript(parts);
 
         return parts;
+    }
+
+    inferScript(parts) {
+        if (parts.isValid && parts.language === 'zh' && parts.script === null) {
+            if (parts.region === 'cn' || parts.region === 'sg' || parts.region === 'my') {
+                parts.script = 'hans';
+                parts.scriptWasInferred = true;
+            }
+            else if (parts.region === 'tw' || parts.region === 'hk' || parts.region === 'mo') {
+                parts.script = 'hant';
+                parts.scriptWasInferred = true;
+            }
+        }
+    }
+
+    // for information about language codes
+    // https://www.w3.org/International/articles/language-tags/
+    parseLangCode(code: string) {
+
+        if (!code) {
+            let parts = this.createLangCodeParts(code);
+            parts.isValid = false;
+            parts.code = code;
+            return parts;
+        }
+
+        const normalized = this.normalizeLocaleCode(code);
+
+        try {
+            const Locale = (Intl as any).Locale;
+            if (Locale) {
+                const locale = new Locale(normalized.code);
+                const baseName = locale.baseName ? locale.baseName : locale.toString();
+                let parts = this.parseLangCodeFallback(baseName.toLowerCase(), code);
+                parts.language = locale.language ? locale.language.toLowerCase() : parts.language;
+                parts.script = locale.script ? locale.script.toLowerCase() : parts.script;
+                parts.region = locale.region ? locale.region.toLowerCase() : parts.region;
+                parts.code = locale.toString().toLowerCase();
+                this.inferScript(parts);
+                return parts;
+            }
+        }
+        catch (e) {
+            // Fall through to the small parser below for older or less common tags.
+        }
+
+        return this.parseLangCodeFallback(normalized.code, code);
     }
 
     findBestMatchingLanguage(code: string, codes: string[], options?: { excludeDev?: boolean }) {
@@ -407,7 +511,7 @@ export class I18n {
             }
         }
 
-        return bestLanguage ? bestLanguage.code : null;
+        return bestLanguage ? bestLanguage.originalCode : null;
     }
 }
 
