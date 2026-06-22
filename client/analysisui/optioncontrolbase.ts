@@ -21,19 +21,167 @@ export type OptionControlBaseProperties<T> = GridControlProperties & {
     optionValueChanged: (event) => void;
 }
 
+class OptionBinding<T, V, P extends OptionControlBaseProperties<T>> {
+    private owner: OptionControlBase<T, V, P>;
+
+    private valueChanged = (key, data) => {
+        this.handleValueChanged(key, data);
+    };
+
+    private valueInserted = (key, data) => {
+        this.handleValueInserted(key, data);
+    };
+
+    private valueRemoved = (key, data) => {
+        this.handleValueRemoved(key, data);
+    };
+
+    constructor(owner: OptionControlBase<T, V, P>) {
+        this.owner = owner;
+    }
+
+    setOption(option: ControlOption<T>) {
+        if (this.owner.option !== null) {
+            this.owner.option.source.off('valuechanged', this.valueChanged);
+            this.owner.option.source.off('valueinserted', this.valueInserted);
+            this.owner.option.source.off('valueremoved', this.valueRemoved);
+        }
+
+        this.owner.option = option;
+
+        if (this.owner.option !== null) {
+            this.owner.option.source.on('valuechanged', this.valueChanged);
+            this.owner.option.source.on('valueinserted', this.valueInserted);
+            this.owner.option.source.on('valueremoved', this.valueRemoved);
+        }
+    }
+
+    handleValueChanged(key, data) {
+        if (this.owner.isDisposed === false && this.isKeyAffecting(key)) {
+            let relKey = this.getRelativeKey(key);
+            if (this.owner.onOptionValueChanging(relKey, data))
+                this.owner.onOptionValueChanged(relKey, data);
+            this.owner.fireValuePropertyChanged();
+        }
+    }
+
+    handleValueInserted(key, data) {
+        if (this.owner.isDisposed === false && this.isKeyAffecting(key)) {
+            let relKey = this.getRelativeKey(key);
+            if (relKey.length > 0) {
+                if (this.owner.onOptionValueInserting(relKey, data))
+                    this.owner.onOptionValueInserted(relKey, data);
+                this.owner.fireValuePropertyChanged();
+            }
+        }
+    }
+
+    handleValueRemoved(key, data) {
+        if (this.owner.isDisposed === false && this.isKeyAffecting(key)) {
+            let relKey = this.getRelativeKey(key);
+            if (relKey.length > 0) {
+                if (this.owner.onOptionValueRemoving(relKey, data))
+                    this.owner.onOptionValueRemoved(relKey, data);
+                this.owner.fireValuePropertyChanged();
+            }
+        }
+    }
+
+    isKeyAffecting(fullkey) {
+        let needsUpdate = fullkey.length === 0;
+        if (needsUpdate === false) {
+            let valueKey = this.getValueKey();
+            needsUpdate = valueKey.length === 0;
+            if (needsUpdate === false) {
+                let diff = this.keyDifference(fullkey, valueKey);
+
+                let d = diff[diff.length - 1];
+                if (d !== null && d === 0)
+                    needsUpdate = true;
+            }
+        }
+
+        return needsUpdate;
+    }
+
+    keyDifference(fullkey, valueKey) {
+        let diff = [];
+        for (let i = 0; i < valueKey.length; i++) {
+            if (i >= fullkey.length)
+                break;
+
+            let a1 = fullkey[i];
+            let b1 = valueKey[i];
+
+            if (typeof a1 !== typeof b1)
+                break;
+
+            let f = 0;
+            if (typeof a1 === 'string') {
+                if (a1 !== b1)
+                    f = null;
+            }
+            else {
+                f = b1 - a1;
+            }
+
+            diff.push(f);
+            if (f !== 0)
+                break;
+        }
+
+        return diff;
+    }
+
+    getFullKey(relativeKey=null) {
+        let valueKey = this.getValueKey();
+        if (relativeKey === undefined || relativeKey === null || relativeKey.length === 0)
+            return valueKey;
+
+        return valueKey.concat(relativeKey);
+    }
+
+    getValueKey() {
+        let bKey =  this.owner.getPropertyValue('valueKey').slice(0);
+        let templateInfo = this.owner.getTemplateInfo();
+        if (templateInfo !== null) {
+            let prevCtrl = this.owner;
+            let parentCtrl = this.owner._parentControl;
+            while (parentCtrl !== null) {
+                if (parentCtrl.getValueKey && isTemplateItemControl(prevCtrl)) {
+                    bKey = parentCtrl.getValueKey().concat(prevCtrl.getPropertyValue('itemKey')).concat(bKey);
+                    break;
+                }
+                prevCtrl = parentCtrl;
+                parentCtrl = parentCtrl._parentControl;
+            }
+        }
+        return bKey;
+    }
+
+    getRelativeKey(fullKey) {
+        let valueKey = this.getValueKey();
+        if (valueKey.length === 0)
+            return fullKey;
+
+        if (valueKey.length === fullKey.length)
+            return [];
+
+        return fullKey.slice(valueKey.length, fullKey.length);
+    }
+}
+
 export class OptionControlBase<T, V, P extends OptionControlBaseProperties<T>> extends TitledGridControl<P> {
 
     option: ControlOption<T>;
     protected valueId: string;
+    private optionBinding: OptionBinding<T, V, P>;
 
     constructor(params: P, parent) {
         super(params, parent);
 
         this.option = null;
-
-        this._valueChanged = this._valueChanged.bind(this);
-        this._valueInserted = this._valueInserted.bind(this);
-        this._valueRemoved = this._valueRemoved.bind(this);
+        this.optionBinding = new OptionBinding(this);
     }
 
     protected override registerProperties(properties: P) {
@@ -115,13 +263,12 @@ export class OptionControlBase<T, V, P extends OptionControlBaseProperties<T>> e
         return null;
     }
 
+    fireValuePropertyChanged() {
+        this.firePropertyChangedEvent('value');
+    }
+
     _valueChanged(key, data) {
-        if (this.isDisposed === false && this._isKeyAffecting(key)) {
-            let relKey = this.getRelativeKey(key);
-            if (this.onOptionValueChanging(relKey, data))
-                this.onOptionValueChanged(relKey, data);
-            this.firePropertyChangedEvent('value');
-        }
+        this.optionBinding.handleValueChanged(key, data);
     }
 
     onOptionValueChanging(key, data) {
@@ -138,14 +285,7 @@ export class OptionControlBase<T, V, P extends OptionControlBaseProperties<T>> e
     }
 
     _valueInserted(key, data) {
-        if (this.isDisposed === false && this._isKeyAffecting(key)) {
-            let relKey = this.getRelativeKey(key);
-            if (relKey.length > 0) {
-                if (this.onOptionValueInserting(relKey, data))
-                    this.onOptionValueInserted(relKey, data);
-                this.firePropertyChangedEvent('value');
-            }
-        }
+        this.optionBinding.handleValueInserted(key, data);
     }
 
     onOptionValueInserted(key, data) {
@@ -162,14 +302,7 @@ export class OptionControlBase<T, V, P extends OptionControlBaseProperties<T>> e
     }
 
     _valueRemoved(key, data) {
-        if (this.isDisposed === false && this._isKeyAffecting(key)) {
-            let relKey = this.getRelativeKey(key);
-            if (relKey.length > 0) {
-                if (this.onOptionValueRemoving(relKey, data))
-                    this.onOptionValueRemoved(relKey, data);
-                this.firePropertyChangedEvent('value');
-            }
-        }
+        this.optionBinding.handleValueRemoved(key, data);
     }
 
     onOptionValueRemoving(key, data) {
@@ -186,22 +319,10 @@ export class OptionControlBase<T, V, P extends OptionControlBaseProperties<T>> e
     }
 
     setOption(option: ControlOption<T>, valueKey=null) {
-        if (this.option !== null) {
-            this.option.source.off('valuechanged', this._valueChanged);
-            this.option.source.off('valueinserted', this._valueInserted);
-            this.option.source.off('valueremoved', this._valueRemoved);
-        }
-
         if (valueKey !== null && valueKey !== undefined)
             this.setPropertyValue('valueKey', valueKey);
 
-        this.option = option;
-
-        if (this.option !== null) {
-            this.option.source.on('valuechanged', this._valueChanged);
-            this.option.source.on('valueinserted', this._valueInserted);
-            this.option.source.on('valueremoved', this._valueRemoved);
-        }
+        this.optionBinding.setOption(option);
 
         if (this.onOptionSet)
             this.onOptionSet(option);
@@ -234,86 +355,23 @@ export class OptionControlBase<T, V, P extends OptionControlBaseProperties<T>> e
     }
 
     _isKeyAffecting(fullkey) {
-        let needsUpdate = fullkey.length === 0;
-        if (needsUpdate === false) {
-            let valueKey = this.getValueKey();
-            needsUpdate = valueKey.length === 0;
-            if (needsUpdate === false) {
-                let diff = this._keyDifference(fullkey, valueKey);
-
-                let d = diff[diff.length - 1];
-                if (d !== null && d === 0)
-                    needsUpdate = true;
-            }
-        }
-
-        return needsUpdate;
+        return this.optionBinding.isKeyAffecting(fullkey);
     }
 
     _keyDifference(fullkey, valueKey) {
-        let diff = [];
-        for (let i = 0; i < valueKey.length; i++) {
-            if (i >= fullkey.length)
-                break;
-
-            let a1 = fullkey[i];
-            let b1 = valueKey[i];
-
-            if (typeof a1 !== typeof b1)
-                break;
-
-            let f = 0;
-            if (typeof a1 === 'string') {
-                if (a1 !== b1)
-                    f = null;
-            }
-            else {
-                f = b1 - a1;
-            }
-
-            diff.push(f);
-            if (f !== 0)
-                break;
-        }
-
-        return diff;
+        return this.optionBinding.keyDifference(fullkey, valueKey);
     }
 
     getFullKey(relativeKey=null) {
-        let valueKey = this.getValueKey();
-        if (relativeKey === undefined || relativeKey === null || relativeKey.length === 0)
-            return valueKey;
-
-        return valueKey.concat(relativeKey);
+        return this.optionBinding.getFullKey(relativeKey);
     }
 
     getValueKey() {
-        let bKey =  this.getPropertyValue('valueKey').slice(0);
-        let templateInfo = this.getTemplateInfo();
-        if (templateInfo !== null) {
-            let prevCtrl = this;
-            let parentCtrl = this._parentControl;
-            while (parentCtrl !== null) {
-                if (parentCtrl.getValueKey && isTemplateItemControl(prevCtrl)) {
-                    bKey = parentCtrl.getValueKey().concat(prevCtrl.getPropertyValue('itemKey')).concat(bKey);
-                    break;
-                }
-                prevCtrl = parentCtrl;
-                parentCtrl = parentCtrl._parentControl;
-            }
-        }
-        return bKey;
+        return this.optionBinding.getValueKey();
     }
 
     getRelativeKey(fullKey) {
-        let valueKey = this.getValueKey();
-        if (valueKey.length === 0)
-            return fullKey;
-
-        if (valueKey.length === fullKey.length)
-            return [];
-
-        return fullKey.slice(valueKey.length, fullKey.length);
+        return this.optionBinding.getRelativeKey(fullKey);
     }
 }
 

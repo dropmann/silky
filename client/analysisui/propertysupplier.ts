@@ -1,8 +1,7 @@
 'use strict';
 
-import { DefaultEventMap, EventEmitter, Listener } from 'tsee';
+import { EventEmitter, Listener } from 'tsee';
 import { CtrlDef } from './optionsview';
-import { ControlBaseProperties } from './controlbase';
 
 export interface IPropertyFilter<T> {
     check: (value: T) => T;
@@ -22,49 +21,28 @@ export type EventHandlers<P> = {
     [K in keyof P as P[K] extends Listener ? `${(K & string)}` : `${(K & string)}_changed`]: (P[K] extends Listener ? P[K] : Listener);
 };
 
-export class PropertySupplier<P extends CtrlDef, E extends { } = EventHandlers<P>> extends EventEmitter<E> {
-    public params: Partial<P>;
-    private _propertySupplier_editting: number;
-    private _propertySupplier_eventsPending: { [key: string]: boolean };
-    public properties: Partial<{ [K in keyof P]: IProperties<P[K]> }>;
+class PropertyBag<P extends CtrlDef> {
+    public properties: Partial<{ [K in keyof P]: IProperties<P[K]> }> = { };
+    private editing = 0;
+    private pendingEvents: { [key: string]: boolean } = { };
 
-    constructor(properties: Partial<P>) {
-        super();
-
-        this.params = properties;
-        this._propertySupplier_editting = 0;
-        this._propertySupplier_eventsPending = {};
-
-        this.registerProperties(properties);
+    reset() {
+        for (let key in this.properties)
+            delete this.properties[key];
     }
 
-    protected registerProperties(properties: Partial<P>) {
-        this.properties = { };
-        if (properties  !== undefined && properties !== null) {
-            if (typeof properties !== 'object' || Array.isArray(properties) === true)
-                throw 'Properties can only be an object.';
-            else {
-                for (let key in properties) {
-                    let value = properties[key];
-                    this.registerSimpleProperty(key, value, null, true);
-                }
-            }
-        }
-    }
-
-    protected registerComplexProperty<K extends (keyof P & string)>(name: K, getter: () => P[K], setter: (value: P[K]) => void, externalTrigger: string) {
+    registerComplexProperty<K extends (keyof P & string)>(name: K, getter: () => P[K], setter: (value: P[K]) => void, externalTrigger: string) {
         if (this.properties[name] !== undefined)
             return;
 
         this.properties[name] = { get: getter, set: setter, trigger: externalTrigger, externalTrigger: externalTrigger };
     }
 
-    public registerSimpleProperty<K extends keyof P>(name: K, initialValue: P[K], filter: IPropertyFilter<P[K]>=null, defined=false) {
-
+    registerSimpleProperty<K extends keyof P>(name: K, initialValue: P[K], filter: IPropertyFilter<P[K]>=null, defined=false) {
         if (this.properties[name] !== undefined && this.properties[name].isDefined)
             return;
 
-        let properties: IProperties<P[K]> = {
+        let property: IProperties<P[K]> = {
             trigger: (name.toString() + "_changed"),
             isDefined: defined,
             get: () => {
@@ -82,14 +60,14 @@ export class PropertySupplier<P extends CtrlDef, E extends { } = EventHandlers<P
 
         let dataBound = this.isValueDataBound(initialValue);
         if (dataBound) {
-            properties.binding = initialValue as string;
-            properties.value = null;
+            property.binding = initialValue as string;
+            property.value = null;
         }
 
-        this.properties[name] = properties;
+        this.properties[name] = property;
     }
 
-    protected isValueDataBound(value: any) {
+    isValueDataBound(value: any) {
         if (typeof value === 'string') {
             let temp = value.trim();
             return temp.startsWith('(') && temp.endsWith(')');
@@ -98,20 +76,19 @@ export class PropertySupplier<P extends CtrlDef, E extends { } = EventHandlers<P
         return false;
     }
 
-    public getPropertyValue<K extends keyof P>(property: K): P[K] {
-
+    getPropertyValue<K extends keyof P>(owner: PropertySupplier<P>, property: K): P[K] {
         var propertyObj = this.properties[property];
         if (propertyObj === undefined)
             throw "property '" + property.toString() + "' does not exist";
 
-        var value = propertyObj.get.call(this);
+        var value = propertyObj.get.call(owner);
         if (typeof value === 'function')
-            return value.call(this);
+            return value.call(owner);
         else
             return value;
     }
 
-    public setPropertyValue<K extends (keyof P & string)>(property: K, value: P[K]) {
+    setPropertyValue<K extends (keyof P & string)>(owner: PropertySupplier<P>, property: K, value: P[K]): boolean {
         if (property === "name" || property === "type")
             throw "Cannot change the '" + property.toString() + "' property";
 
@@ -119,12 +96,106 @@ export class PropertySupplier<P extends CtrlDef, E extends { } = EventHandlers<P
         if (propertyObj === undefined)
             throw "property '" + property.toString() + "' does not exist";
 
-        var oldValue = propertyObj.get.call(this);
+        var oldValue = propertyObj.get.call(owner);
         if (oldValue !== value) {
-            oldValue = propertyObj.set.call(this, value);
+            propertyObj.set.call(owner, value);
             if (propertyObj.externalTrigger === undefined)
-                this.firePropertyChangedEvent(property);
+                this.firePropertyChangedEvent(owner, property);
+            return true;
+        }
 
+        return false;
+    }
+
+    isPropertyDefined<K extends keyof P>(propertyName: K) {
+        let property = this.properties[propertyName];
+        return property && property.isDefined;
+    }
+
+    hasProperty<K extends keyof P>(property: K) {
+        return property in this.properties;
+    }
+
+    getTrigger<K extends keyof P>(property: K) {
+        return this.properties[property].trigger;
+    }
+
+    beginEdit() {
+        this.editing += 1;
+    }
+
+    endEdit(owner: PropertySupplier<P>) {
+        if (this.editing === 0)
+            return;
+
+        this.editing -= 1;
+
+        if (this.editing === 0) {
+            for (let key in this.pendingEvents)
+                this.firePropertyChangedEvent(owner, key as keyof P & string);
+
+            this.pendingEvents = { };
+        }
+    }
+
+    firePropertyChangedEvent<K extends (keyof P & string)>(owner: PropertySupplier<P>, property: K) {
+        if (this.editing > 0)
+            this.pendingEvents[property] = true;
+        else {
+            let eventName = this.getTrigger(property) as string;
+            let emitter = owner as EventEmitter;
+            emitter.emit(eventName);
+        }
+    }
+}
+
+export class PropertySupplier<P extends CtrlDef, E extends { } = EventHandlers<P>> extends EventEmitter<E> {
+    public params: Partial<P>;
+    private propertyBag: PropertyBag<P>;
+    public properties: Partial<{ [K in keyof P]: IProperties<P[K]> }>;
+
+    constructor(properties: Partial<P>) {
+        super();
+
+        this.params = properties;
+        this.propertyBag = new PropertyBag<P>();
+        this.properties = this.propertyBag.properties;
+
+        this.registerProperties(properties);
+    }
+
+    protected registerProperties(properties: Partial<P>) {
+        this.propertyBag.reset();
+        if (properties  !== undefined && properties !== null) {
+            if (typeof properties !== 'object' || Array.isArray(properties) === true)
+                throw 'Properties can only be an object.';
+            else {
+                for (let key in properties) {
+                    let value = properties[key];
+                    this.registerSimpleProperty(key, value, null, true);
+                }
+            }
+        }
+    }
+
+    protected registerComplexProperty<K extends (keyof P & string)>(name: K, getter: () => P[K], setter: (value: P[K]) => void, externalTrigger: string) {
+        this.propertyBag.registerComplexProperty(name, getter, setter, externalTrigger);
+    }
+
+    public registerSimpleProperty<K extends keyof P>(name: K, initialValue: P[K], filter: IPropertyFilter<P[K]>=null, defined=false) {
+        this.propertyBag.registerSimpleProperty(name, initialValue, filter, defined);
+    }
+
+    protected isValueDataBound(value: any) {
+        return this.propertyBag.isValueDataBound(value);
+    }
+
+    public getPropertyValue<K extends keyof P>(property: K): P[K] {
+        return this.propertyBag.getPropertyValue(this, property);
+    }
+
+    public setPropertyValue<K extends (keyof P & string)>(property: K, value: P[K]) {
+        if (this.propertyBag.setPropertyValue(this, property, value)) {
             if (this.onPropertyChanged)
                 this.onPropertyChanged(property);
         }
@@ -135,16 +206,15 @@ export class PropertySupplier<P extends CtrlDef, E extends { } = EventHandlers<P
     }
 
     public isPropertyDefined<K extends keyof P>(propertyName: K) {
-        let property = this.properties[propertyName];
-        return property && property.isDefined;
+        return this.propertyBag.isPropertyDefined(propertyName);
     }
 
     public hasProperty<K extends keyof P>(property: K) {
-        return property in this.properties;
+        return this.propertyBag.hasProperty(property);
     }
 
     public getTrigger<K extends keyof P>(property: K) {
-        return this.properties[property].trigger;
+        return this.propertyBag.getTrigger(property);
     }
 
     public runInEditScope(fn: () => void) {
@@ -157,31 +227,15 @@ export class PropertySupplier<P extends CtrlDef, E extends { } = EventHandlers<P
     }
 
     public beginPropertyEdit() {
-        this._propertySupplier_editting += 1;
+        this.propertyBag.beginEdit();
     }
 
     public endPropertyEdit() {
-        if (this._propertySupplier_editting === 0)
-            return;
-
-        this._propertySupplier_editting -= 1;
-
-        if (this._propertySupplier_editting === 0) {
-            for (let key in this._propertySupplier_eventsPending)
-                this.firePropertyChangedEvent(key);
-
-            this._propertySupplier_eventsPending = { };
-        }
+        this.propertyBag.endEdit(this);
     }
 
     protected firePropertyChangedEvent<K extends (keyof P & string)>(property: K) {
-        if (this._propertySupplier_editting > 0)
-            this._propertySupplier_eventsPending[property] = true;
-        else {
-            let eventName = this.getTrigger(property) as string;
-            let emitter = this as EventEmitter;
-            emitter.emit(eventName);
-        }
+        this.propertyBag.firePropertyChangedEvent(this, property);
     }
 }
 
