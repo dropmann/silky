@@ -3,29 +3,31 @@
 import Jed from 'jed';
 
 export function s6e(input: string): string {
-
-    // Temporarily protect allowed HTML tags
     const allowedTags = ["i", "em", "b", "strong", "sub", "sup"] as const;
 
+    // Protect allowed tags
     for (const tag of allowedTags) {
-        const openTag = new RegExp(`<${tag}>`, "gi");
-        const closeTag = new RegExp(`</${tag}>`, "gi");
-
         input = input
-            .replace(openTag,  `@@@OPEN_${tag.toUpperCase()}@@@`)
-            .replace(closeTag, `@@@CLOSE_${tag.toUpperCase()}@@@`);
+            .replace(new RegExp(`<${tag}>`, "gi"), `@@OPEN_${tag.toUpperCase()}@@`)
+            .replace(new RegExp(`</${tag}>`, "gi"), `@@CLOSE_${tag.toUpperCase()}@@`);
     }
 
-    // Escape all other HTML brackets
+    // Disable HTML entities while preserving normal &
+    input = input.replace(
+        /&(?:[a-zA-Z][a-zA-Z0-9]+|#\d+|#x[0-9a-fA-F]+);/g,
+        match => "&amp;" + match.slice(1)
+    );
+
+    // Escape all remaining tags
     input = input
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-    // Restore the allowed tags safely
+    // Restore allowed tags
     for (const tag of allowedTags) {
         input = input
-            .replace(new RegExp(`@@@OPEN_${tag.toUpperCase()}@@@`, "g"), `<${tag}>`)
-            .replace(new RegExp(`@@@CLOSE_${tag.toUpperCase()}@@@`, "g"), `</${tag}>`);
+            .replace(new RegExp(`@@OPEN_${tag.toUpperCase()}@@`, "g"), `<${tag}>`)
+            .replace(new RegExp(`@@CLOSE_${tag.toUpperCase()}@@`, "g"), `</${tag}>`);
     }
 
     return input;
