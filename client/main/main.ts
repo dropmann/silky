@@ -553,6 +553,286 @@ ready(async() => {
     resultsView.setAttribute('aria-live', 'polite');
     resultsPanel.append(resultsView);
 
+    type AuxView = 'assistant' | 'help' | null;
+    type AuxPresentation = 'hidden' | 'overlay' | 'docked';
+    type AuxSide = 'left' | 'right';
+
+    const auxToolbar = document.createElement('div');
+    auxToolbar.id = 'aux-toolbar';
+    auxToolbar.setAttribute('role', 'toolbar');
+    auxToolbar.setAttribute('aria-label', 'Assistance panel toolbar');
+
+    const auxPanel = document.createElement('aside');
+    auxPanel.id = 'aux-panel';
+    auxPanel.setAttribute('role', 'complementary');
+    auxPanel.setAttribute('aria-label', 'Assistance panel');
+    auxPanel.tabIndex = -1;
+
+    const auxPanelResize = document.createElement('div');
+    auxPanelResize.id = 'aux-panel-resize';
+    auxPanelResize.setAttribute('role', 'separator');
+    auxPanelResize.setAttribute('aria-label', 'Resize assistance panel');
+
+    const auxPanelHeader = document.createElement('div');
+    auxPanelHeader.id = 'aux-panel-header';
+
+    const auxPanelTitle = document.createElement('div');
+    auxPanelTitle.id = 'aux-panel-title';
+    auxPanelTitle.textContent = _('Assistant');
+
+    const auxPanelActions = document.createElement('div');
+    auxPanelActions.id = 'aux-panel-actions';
+
+    const auxPinButton = document.createElement('button');
+    auxPinButton.className = 'aux-panel-action';
+    auxPinButton.type = 'button';
+    auxPinButton.setAttribute('aria-label', 'Pin panel');
+    auxPinButton.textContent = 'Pin';
+
+    const auxSideButton = document.createElement('button');
+    auxSideButton.className = 'aux-panel-action';
+    auxSideButton.type = 'button';
+    auxSideButton.setAttribute('aria-label', 'Move panel to left side');
+    auxSideButton.textContent = 'Side';
+
+    const auxCloseButton = document.createElement('button');
+    auxCloseButton.className = 'aux-panel-action';
+    auxCloseButton.type = 'button';
+    auxCloseButton.setAttribute('aria-label', 'Close panel');
+    auxCloseButton.textContent = 'X';
+
+    auxPanelActions.append(auxPinButton, auxSideButton, auxCloseButton);
+    auxPanelHeader.append(auxPanelTitle, auxPanelActions);
+
+    const auxPanelBody = document.createElement('div');
+    auxPanelBody.id = 'aux-panel-body';
+
+    const assistantView = document.createElement('section');
+    assistantView.className = 'aux-panel-view';
+    assistantView.setAttribute('data-aux-view', 'assistant');
+    assistantView.innerHTML = `
+        <h2>${ _('Assistant') }</h2>
+        <p>${ _('This scaffold is ready for an assistant experience that can stay docked or slide over the workspace.') }</p>
+        <div class="aux-panel-placeholder">${ _('Use this area for prompts, contextual guidance, or task-specific help.') }</div>
+    `;
+
+    const helpView = document.createElement('section');
+    helpView.className = 'aux-panel-view';
+    helpView.setAttribute('data-aux-view', 'help');
+    helpView.innerHTML = `
+        <h2>${ _('Help') }</h2>
+        <p>${ _('This placeholder can host help topics, quick documentation, or workflow tips.') }</p>
+        <div class="aux-panel-placeholder">${ _('The right toolbar now anchors future assistance tools without changing the main workspace flow.') }</div>
+    `;
+
+    auxPanelBody.append(assistantView, helpView);
+    auxPanel.append(auxPanelResize, auxPanelHeader, auxPanelBody);
+
+    const createAuxToolbarButton = (view: Exclude<AuxView, null>, label: string, text: string) => {
+        const button = document.createElement('button');
+        button.className = 'aux-toolbar-button';
+        button.type = 'button';
+        button.setAttribute('data-aux-view', view);
+        button.setAttribute('aria-label', label);
+        button.textContent = text;
+        return button;
+    };
+
+    const createAuxViewMarkup = (view: Exclude<AuxView, null>) => {
+        if (view === 'help') {
+            return `
+                <h2>${ _('Help') }</h2>
+                <p>${ _('This placeholder can host help topics, quick documentation, or workflow tips.') }</p>
+                <div class="aux-panel-placeholder">${ _('The right toolbar now anchors future assistance tools without changing the main workspace flow.') }</div>
+            `;
+        }
+
+        return `
+            <h2>${ _('Assistant') }</h2>
+            <p>${ _('This scaffold is ready for an assistant experience that can stay docked or slide over the workspace.') }</p>
+            <div class="aux-panel-placeholder">${ _('Use this area for prompts, contextual guidance, or task-specific help.') }</div>
+        `;
+    };
+
+    assistantView.innerHTML = createAuxViewMarkup('assistant');
+    helpView.innerHTML = createAuxViewMarkup('help');
+
+    const assistantButton = createAuxToolbarButton('assistant', 'Assistant', 'AI');
+    const helpButton = createAuxToolbarButton('help', 'Help', '?');
+    auxToolbar.append(assistantButton, helpButton);
+
+    splitPanel.append(auxToolbar, auxPanel);
+
+    let activeAuxView: AuxView = null;
+    let auxPresentation: AuxPresentation = 'hidden';
+    let auxSide: AuxSide = 'right';
+    let auxPinned = false;
+    let auxWidth = 320;
+    const minAuxWidth = 240;
+    const maxAuxWidth = 640;
+    let auxResizeStartX = 0;
+    let auxResizeStartWidth = auxWidth;
+    let auxResizing = false;
+
+    const applyAuxWidth = () => {
+        splitPanel.style.setProperty('--aux-panel-width', `${ auxWidth }px`);
+    };
+
+    const setAuxState = (view: AuxView, presentation: AuxPresentation) => {
+        const previousPresentation = auxPresentation;
+        const previousSide = auxSide;
+
+        activeAuxView = presentation === 'hidden' ? view : view;
+        auxPresentation = presentation;
+        if (presentation !== 'hidden')
+            auxPinned = presentation === 'docked';
+
+        const renderedView = presentation === 'hidden' ? 'none' : (view || 'none');
+        splitPanel.dataset.auxPresentation = presentation;
+        splitPanel.dataset.auxView = renderedView;
+        splitPanel.dataset.auxSide = auxSide;
+        auxPanel.setAttribute('aria-hidden', presentation === 'hidden' ? 'true' : 'false');
+
+        const title = view === 'help' ? _('Help') : _('Assistant');
+        auxPanelTitle.textContent = title;
+        auxPinButton.textContent = auxPinned ? 'Float' : 'Pin';
+        auxPinButton.setAttribute('aria-label', auxPinned ? 'Use overlay panel' : 'Pin panel');
+        auxSideButton.textContent = auxSide === 'right' ? 'Left' : 'Right';
+        auxSideButton.setAttribute('aria-label', auxSide === 'right' ? 'Move panel to left side' : 'Move panel to right side');
+
+        [assistantButton, helpButton].forEach(button => {
+            let selected = button.getAttribute('data-aux-view') === view && presentation !== 'hidden';
+            button.classList.toggle('active', selected);
+            button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        });
+
+        [assistantView, helpView].forEach(panelView => {
+            let selected = panelView.getAttribute('data-aux-view') === view;
+            panelView.classList.toggle('active', selected);
+        });
+
+        // Force the browser to commit the aux layout state change before
+        // propagating the resize notification to the rest of the workspace.
+        void splitPanel.offsetWidth;
+        const containerSpaceChanged =
+            previousPresentation === 'docked' ||
+            presentation === 'docked' ||
+            (previousSide !== auxSide && (previousPresentation === 'docked' || presentation === 'docked'));
+
+        // Docked aux changes consume or release layout space by changing the
+        // split panel's reserved padding. Overlay changes do not.
+        if (containerSpaceChanged)
+            splitPanel.onContainerSpaceChanged();
+        else
+            splitPanel.onTransitioning();
+
+        if (presentation !== 'hidden')
+            setTimeout(() => auxPanel.focus(), 0);
+    };
+
+    const clampAuxWidth = (width: number) => {
+        const availableWidth = Math.max(minAuxWidth, Math.min(maxAuxWidth, Math.floor(window.innerWidth * 0.6)));
+        return Math.max(minAuxWidth, Math.min(availableWidth, width));
+    };
+
+    const updateAuxWidthFromPointer = (clientX: number) => {
+        let delta = clientX - auxResizeStartX;
+        let nextWidth = auxResizeStartWidth;
+
+        if (auxSide === 'right')
+            nextWidth = auxResizeStartWidth - delta;
+        else
+            nextWidth = auxResizeStartWidth + delta;
+
+        auxWidth = clampAuxWidth(nextWidth);
+        applyAuxWidth();
+
+        if (auxPresentation === 'docked')
+            splitPanel.onContainerSpaceChanged();
+        else
+            splitPanel.onTransitioning();
+    };
+
+    const toggleAuxView = (view: Exclude<AuxView, null>) => {
+        if (activeAuxView === view && auxPresentation !== 'hidden') {
+            setAuxState(view, 'hidden');
+            return;
+        }
+
+        setAuxState(view, auxPinned ? 'docked' : 'overlay');
+    };
+
+    const closeOverlayAuxPanel = () => {
+        if (auxPresentation === 'overlay')
+            setAuxState(activeAuxView, 'hidden');
+    };
+
+    assistantButton.addEventListener('click', () => toggleAuxView('assistant'));
+    helpButton.addEventListener('click', () => toggleAuxView('help'));
+
+    auxPinButton.addEventListener('click', () => {
+        if (activeAuxView === null)
+            return;
+        setAuxState(activeAuxView, auxPinned ? 'overlay' : 'docked');
+    });
+
+    auxSideButton.addEventListener('click', () => {
+        auxSide = auxSide === 'right' ? 'left' : 'right';
+        setAuxState(activeAuxView, auxPresentation);
+    });
+
+    auxCloseButton.addEventListener('click', () => {
+        if (activeAuxView !== null)
+            setAuxState(activeAuxView, 'hidden');
+    });
+
+    auxPanelResize.addEventListener('pointerdown', (event: PointerEvent) => {
+        auxResizing = true;
+        auxResizeStartX = event.clientX;
+        auxResizeStartWidth = auxWidth;
+        auxPanelResize.setPointerCapture(event.pointerId);
+        event.preventDefault();
+    });
+
+    auxPanelResize.addEventListener('pointermove', (event: PointerEvent) => {
+        if (! auxResizing)
+            return;
+
+        updateAuxWidthFromPointer(event.clientX);
+    });
+
+    ['pointerup', 'pointercancel'].forEach(eventName => {
+        auxPanelResize.addEventListener(eventName, (event: PointerEvent) => {
+            if (! auxResizing)
+                return;
+
+            auxResizing = false;
+            auxPanelResize.releasePointerCapture(event.pointerId);
+        });
+    });
+
+    document.addEventListener('pointerdown', (event) => {
+        const target = event.target as Node;
+        if (auxPresentation === 'overlay' && ! auxPanel.contains(target) && ! auxToolbar.contains(target))
+            closeOverlayAuxPanel();
+    }, true);
+
+    auxPanel.addEventListener('focusout', () => {
+        setTimeout(() => {
+            if (auxPresentation !== 'overlay')
+                return;
+
+            const activeElement = document.activeElement;
+            if (activeElement && (auxPanel.contains(activeElement) || auxToolbar.contains(activeElement)))
+                return;
+
+            closeOverlayAuxPanel();
+        }, 0);
+    });
+
+    applyAuxWidth();
+    setAuxState('assistant', 'hidden');
+
     let $mainTable = document.querySelector('#main-table');
     $mainTable.setAttribute('role', 'region');
     $mainTable.setAttribute('aria-label', 'Spreadsheet');

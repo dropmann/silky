@@ -13,6 +13,20 @@ const TRANSITION_DELAY_MS = 20;
 type PanelWidthsPx = number[];
 type SplitMode = 'mixed' | 'data' | 'results';
 type CollapsedEdgePanel = 'data' | 'results' | null;
+type PanelState = {
+    id: string;
+    role: SplitPanelRole;
+    visible: boolean;
+    adjustable: boolean;
+    fixed: boolean;
+    lastWidthPx: number | null;
+};
+type LayoutSnapshot = {
+    adjustableWidthPx: number;
+    widthsPx: PanelWidthsPx;
+    collapsedEdge: CollapsedEdgePanel;
+    widthTokens: (number | string | null)[];
+};
 type LayoutState = {
     dataWidthPx: number | null;
     optionsWidthPx: number | null;
@@ -32,6 +46,7 @@ export class SplitPanel extends EventDistributor {
     firstSection: SplitPanelSection;
     _sections: { [name: string]: SplitPanelSection } = {};
     _sectionsByRole: Partial<Record<SplitPanelRole, SplitPanelSection>> = {};
+    _panelStates: { [name: string]: PanelState } = {};
     _sectionsList: SplitPanelSection[] = [];
     widths: number[];
     optionsChanging: 'opening' | 'closing' | null;
@@ -79,6 +94,31 @@ export class SplitPanel extends EventDistributor {
         return this._sectionsList.filter(section => section.placement === placement);
     }
 
+    createPanelState(section: SplitPanelSection): PanelState {
+        return {
+            id: section.name,
+            role: section.role,
+            visible: section.getVisibility(),
+            adjustable: section.adjustable,
+            fixed: section.fixed,
+            lastWidthPx: section.lastWidth,
+        };
+    }
+
+    syncPanelState(section: SplitPanelSection) {
+        this._panelStates[section.name] = this.createPanelState(section);
+        return this._panelStates[section.name];
+    }
+
+    getPanelState(sectionRef: number | string | SplitPanelSection) {
+        let section = typeof sectionRef === 'object' ? sectionRef : this.getSection(sectionRef);
+        return this._panelStates[section.name] || this.syncPanelState(section);
+    }
+
+    getPanelStates() {
+        return this._sectionsList.map(section => this.getPanelState(section));
+    }
+
     getColumnTemplates() {
         return getComputedStyle(this).gridTemplateColumns.split(' ');
     }
@@ -89,27 +129,100 @@ export class SplitPanel extends EventDistributor {
 
     getDataPanelWidth(columnTemplates?: string[]) {
         let templates = columnTemplates || this.getColumnTemplates();
-        return templates[0];
+        return templates[this.getSectionColumnIndex(this.getDataSection())];
     }
 
     getResultsPanelWidth(columnTemplates?: string[]) {
         let templates = columnTemplates || this.getColumnTemplates();
-        return templates[templates.length - 1];
+        return templates[this.getSectionColumnIndex(this.getResultsSection())];
     }
 
     getOptionsAndDataWidthPx(columnTemplates?: string[]) {
         let templates = columnTemplates || this.getColumnTemplates();
-        return parseInt(templates[0]) + parseInt(templates[1]) + parseInt(templates[2]);
+        let optionsSection = this.getOptionsSection();
+        if ( ! optionsSection)
+            return parseInt(this.getDataPanelWidth(templates));
+
+        let startIndex = this.getSectionColumnIndex(this.getDataSection());
+        let endIndex = this.getSectionColumnIndex(optionsSection);
+        let total = 0;
+        for (let i = startIndex; i <= endIndex; i++)
+            total += parseInt(templates[i]) || 0;
+        return total;
+    }
+
+    getSectionWidthValue(section: SplitPanelSection, columnTemplates?: string[]) {
+        let templates = columnTemplates || this.getColumnTemplates();
+        return parseInt(templates[this.getSectionColumnIndex(section)]);
+    }
+
+    setSectionWidthToken(section: SplitPanelSection, value: string, columnTemplates: string[]) {
+        columnTemplates[this.getSectionColumnIndex(section)] = value;
     }
 
     readPanelWidthsPx() {
         let columnTemplates = this.getColumnTemplates();
+        return this.readPanelWidthsPxFromTemplates(columnTemplates);
+    }
+
+    readPanelWidthsPxFromTemplates(columnTemplates: string[]) {
         let widths: PanelWidthsPx = [];
 
         for (let i = 0; i < this._sectionsList.length; i++)
             widths[i] = parseInt(columnTemplates[this.getSectionColumnIndex(this._sectionsList[i])]);
 
         return widths;
+    }
+
+    determineCollapsedEdge(widths?: PanelWidthsPx) {
+        let currentWidths = widths || this.readPanelWidthsPx();
+        let previousCollapsedEdge = this._collapsedEdgePanel;
+        let wideCount = 0;
+
+        for (let i = 0; i < currentWidths.length; i++) {
+            if (currentWidths[i] > COLLAPSED_WIDTH_THRESHOLD)
+                wideCount += 1;
+        }
+
+        let dataCollapsed = this.isPanelCollapsed(this.getDataSection(), currentWidths);
+        let resultsCollapsed = this.isPanelCollapsed(this.getResultsSection(), currentWidths);
+
+        if (dataCollapsed && (wideCount <= 1 || previousCollapsedEdge === 'data'))
+            return 'data';
+        if (resultsCollapsed && wideCount <= 1)
+            return 'results';
+        return null;
+    }
+
+    readLayoutSnapshot(widths?: PanelWidthsPx, columnTemplates?: string[]): LayoutSnapshot {
+        let templates = columnTemplates || this.getColumnTemplates();
+        let currentWidths = widths || this.readPanelWidthsPxFromTemplates(templates);
+        let adjustableWidthPx = 0;
+        let widthTokens: (number | string | null)[] = [];
+
+        this.applyToSections((currentSection) => {
+            if (currentSection.adjustable) {
+                if (currentSection.fixed === false) {
+                    widthTokens[currentSection.listIndex] = currentWidths[currentSection.listIndex];
+                    adjustableWidthPx += currentWidths[currentSection.listIndex];
+                }
+                else
+                    widthTokens[currentSection.listIndex] = templates[currentSection.listIndex * 2];
+            }
+            else
+                widthTokens[currentSection.listIndex] = null;
+        });
+
+        return {
+            adjustableWidthPx,
+            widthsPx: currentWidths,
+            collapsedEdge: this.determineCollapsedEdge(currentWidths),
+            widthTokens,
+        };
+    }
+
+    writeLayoutSnapshot(snapshot: LayoutSnapshot) {
+        return this.writePanelWidthsPx(snapshot.widthsPx);
     }
 
     writePanelWidthsPx(widths: PanelWidthsPx) {
@@ -141,24 +254,8 @@ export class SplitPanel extends EventDistributor {
     }
 
     updateCollapsedModeState(widths?: PanelWidthsPx) {
-        let currentWidths = widths || this.readPanelWidthsPx();
-        let previousCollapsedEdge = this._collapsedEdgePanel;
-        let wideCount = 0;
-
-        for (let i = 0; i < currentWidths.length; i++) {
-            if (currentWidths[i] > COLLAPSED_WIDTH_THRESHOLD)
-                wideCount += 1;
-        }
-
-        let dataCollapsed = this.isPanelCollapsed(this.getDataSection(), currentWidths);
-        let resultsCollapsed = this.isPanelCollapsed(this.getResultsSection(), currentWidths);
-
-        if (dataCollapsed && (wideCount <= 1 || previousCollapsedEdge === 'data'))
-            this._collapsedEdgePanel = 'data';
-        else if (resultsCollapsed && wideCount <= 1)
-            this._collapsedEdgePanel = 'results';
-        else
-            this._collapsedEdgePanel = null;
+        let snapshot = this.readLayoutSnapshot(widths);
+        this._collapsedEdgePanel = snapshot.collapsedEdge;
     }
 
     clearCollapsedModeState() {
@@ -209,6 +306,7 @@ export class SplitPanel extends EventDistributor {
          }
 
          section.initalise(properties);
+         this.syncPanelState(section);
 
          if (section.role !== 'custom' && this._sectionsByRole[section.role] === undefined)
             this._sectionsByRole[section.role] = section;
@@ -243,7 +341,7 @@ export class SplitPanel extends EventDistributor {
 
                 if (value) {
                     let columnTemplates = this.getColumnTemplates();
-                    this._layoutState.resultsWidth = columnTemplates[columnTemplates.length - 1];
+                    this._layoutState.resultsWidth = this.getResultsPanelWidth(columnTemplates);
                     this._layoutState.otherWidthPx = this.getOptionsAndDataWidthPx(columnTemplates);
                     this.allowDocking('left');
                 }
@@ -252,6 +350,7 @@ export class SplitPanel extends EventDistributor {
                    this.normalise();
 
                 optionsSection.setVisibility(value);
+                this.syncPanelState(optionsSection);
                 this.onTransitioning();
 
                 optionsSection.addEventListener('transitionend', async () => {
@@ -278,18 +377,22 @@ export class SplitPanel extends EventDistributor {
         if (normalise)
             this._normaliseWidths(columnTemplates, clean);
 
-        if (this.getDataSection().adjustable) {
+        let dataSection = this.getDataSection();
+        if (dataSection.adjustable) {
+            let dataWidth = this.getDataPanelWidth(columnTemplates);
             if ((this._allowDocking.left === false && this._allowDocking.both === false) && ! this.isResultsFocused())
-                columnTemplates[0] = `minmax(${ MIN_PANEL_WIDTH_PX }px, ${columnTemplates[0]} )`;
+                this.setSectionWidthToken(dataSection, `minmax(${ MIN_PANEL_WIDTH_PX }px, ${dataWidth} )`, columnTemplates);
             else
-                columnTemplates[0] = `minmax(auto, ${columnTemplates[0]} )`;
+                this.setSectionWidthToken(dataSection, `minmax(auto, ${dataWidth} )`, columnTemplates);
         }
 
-        if (this.getResultsSection().adjustable) {
+        let resultsSection = this.getResultsSection();
+        if (resultsSection.adjustable) {
+            let resultsWidth = this.getResultsPanelWidth(columnTemplates);
             if ((this._allowDocking.right === false && this._allowDocking.both === false) && ! this.isDataFocused())
-                columnTemplates[columnTemplates.length - 1] = `minmax(${ MIN_PANEL_WIDTH_PX }px, ${columnTemplates[columnTemplates.length - 1]} )`;
+                this.setSectionWidthToken(resultsSection, `minmax(${ MIN_PANEL_WIDTH_PX }px, ${resultsWidth} )`, columnTemplates);
             else
-                columnTemplates[columnTemplates.length - 1] = `minmax(auto, ${columnTemplates[columnTemplates.length - 1]} )`;
+                this.setSectionWidthToken(resultsSection, `minmax(auto, ${resultsWidth} )`, columnTemplates);
         }
 
         this.style.gridTemplateColumns = columnTemplates.join(' ');
@@ -303,6 +406,11 @@ export class SplitPanel extends EventDistributor {
     getLayoutKey(el: HTMLElement) {
         const style = getComputedStyle(el);
         const gridTemplate = style.gridTemplateColumns;
+        const width = el.offsetWidth;
+        const paddingLeft = style.paddingLeft;
+        const paddingRight = style.paddingRight;
+        const paddingTop = style.paddingTop;
+        const paddingBottom = style.paddingBottom;
 
         // outerHeight(true) includes margin, so we calculate that manually
         const height = el.offsetHeight;
@@ -310,7 +418,7 @@ export class SplitPanel extends EventDistributor {
         const marginBottom = parseFloat(style.marginBottom) || 0;
         const outerHeight = height + marginTop + marginBottom;
 
-        return gridTemplate + ' ' + outerHeight;
+        return `${ gridTemplate } ${ width } ${ outerHeight } ${ paddingLeft } ${ paddingRight } ${ paddingTop } ${ paddingBottom }`;
     }
 
     onTransitioning(layoutKey?: string) {
@@ -330,6 +438,25 @@ export class SplitPanel extends EventDistributor {
                 }
             }, 50);
         }
+    }
+
+    onContainerSpaceChanged() {
+        // Some transitions, such as the docked aux panel changing the split
+        // panel's padding, alter the space available to the grid without
+        // coming through a splitter drag or options-panel width transition.
+        // In those cases any cached results width must be cleared so the
+        // results panel can expand or shrink with the container again.
+        if (this._layoutState.resultsWidth !== null) {
+            this._layoutState.resultsWidth = null;
+            this._layoutState.otherWidthPx = null;
+            this._layoutState.dataWidthPx = null;
+            this._layoutState.optionsWidthPx = null;
+
+            if (this.resetState())
+                this.normalise();
+        }
+
+        this.onTransitioning();
     }
 
     applyToSections(action: (SplitPanelSection) => (boolean | void)) {
@@ -425,57 +552,44 @@ export class SplitPanel extends EventDistributor {
 
     _saveWidths() {
         if (this._collapsedEdgePanel === null) {
-            let widths = this.readPanelWidthsPx();
+            let snapshot = this.readLayoutSnapshot();
+            let widths = snapshot.widthsPx;
             this.applyToSections((currentSection) => {
                 currentSection.lastWidth = widths[currentSection.listIndex];
                 if (currentSection === this.getResultsSection())
                     currentSection.lastWidth -= 2;
+                this.syncPanelState(currentSection);
             });
 
             if (this._layoutState.resultsWidth) {
                 let columnTemplates = this.getColumnTemplates();
                 let newOtherWidth = this.getOptionsAndDataWidthPx(columnTemplates);
-                this._layoutState.resultsWidth = `${ parseInt(columnTemplates[columnTemplates.length - 1]) + (newOtherWidth  - this._layoutState.otherWidthPx) }px`;
-                this._layoutState.dataWidthPx = widths[0] ?? null;
-                this._layoutState.optionsWidthPx = widths[OPTIONS_SECTION_INDEX] ?? null;
+                this._layoutState.resultsWidth = `${ this.getSectionWidthValue(this.getResultsSection(), columnTemplates) + (newOtherWidth  - this._layoutState.otherWidthPx) }px`;
+                this._layoutState.dataWidthPx = widths[this.getDataSection().listIndex] ?? null;
+                this._layoutState.optionsWidthPx = widths[this.getOptionsSection().listIndex] ?? null;
                 this._layoutState.otherWidthPx = newOtherWidth;
             }
         }
     }
 
     _normaliseWidths(columnTemplates, clean) {
+        let snapshot = this.readLayoutSnapshot(undefined, columnTemplates);
+        let widthTokens = snapshot.widthTokens.slice();
 
         if (this._layoutState.resultsWidth)
-            columnTemplates[columnTemplates.length - 1] = this._layoutState.resultsWidth;
+            widthTokens[this.getResultsSection().listIndex] = this._layoutState.resultsWidth;
 
-        let total = 0;
-        let widthValues = [];
-        let i = 0;
-        this.applyToSections((currentSection) => {
-            if (currentSection.adjustable) {
-                if (currentSection.fixed === false) {
-                    widthValues[i] = parseInt(columnTemplates[i*2]);
-                    total += widthValues[i];
-                }
-                else
-                    widthValues[i] = columnTemplates[i*2];
-            }
-            else
-                widthValues[i] = null;
-            i += 1;
-        });
-
-        for (let i = 0; i < widthValues.length; i++) {
-            if (widthValues[i] !== null) {
-                if (clean && ((i === 0 && this.isResultsFocused()) || (i === widthValues.length - 1 && this.isDataFocused())))
+        for (let i = 0; i < widthTokens.length; i++) {
+            if (widthTokens[i] !== null) {
+                if (clean && ((i === 0 && this.isResultsFocused()) || (i === widthTokens.length - 1 && this.isDataFocused())))
                         columnTemplates[i*2] = '0fr';
-                else if (typeof widthValues[i] === 'string')
-                    columnTemplates[i*2] = widthValues[i];
+                else if (typeof widthTokens[i] === 'string')
+                    columnTemplates[i*2] = widthTokens[i];
                 else {
-                    if (total === 0)
+                    if (snapshot.adjustableWidthPx === 0)
                         columnTemplates[i*2] = '10fr';
                     else
-                        columnTemplates[i*2] = (widthValues[i] * 10) / total + 'fr';
+                        columnTemplates[i*2] = (widthTokens[i] * 10) / snapshot.adjustableWidthPx + 'fr';
                 }
             }
             else
@@ -487,7 +601,6 @@ export class SplitPanel extends EventDistributor {
     }
 
     resetState() {
-
         if (this._sectionsList.length !== 3)
             return false;
 
@@ -506,6 +619,8 @@ export class SplitPanel extends EventDistributor {
 
         resultsPanel.adjustable = true;
         dataPanel.adjustable = true;
+        this.syncPanelState(resultsPanel);
+        this.syncPanelState(dataPanel);
 
         return true;
     }
@@ -714,7 +829,8 @@ export class SplitPanel extends EventDistributor {
             return;
 
         let changed = false;
-        let widths = this.readPanelWidthsPx();
+        let snapshot = this.readLayoutSnapshot();
+        let widths = snapshot.widthsPx;
         let shrinkingSection = diffX < 0 ? leftSection : rightSection;
         let growingSection = diffX > 0 ? leftSection : rightSection;
         const dir = window.getComputedStyle(this).direction;
@@ -757,7 +873,7 @@ export class SplitPanel extends EventDistributor {
 
         if (changed) {
             this.onTransitioning();
-            let columnTemplates = this.writePanelWidthsPx(widths);
+            let columnTemplates = this.writeLayoutSnapshot(snapshot);
             this._applyColumnTemplates(columnTemplates, true);
             await this.checkDockConditions(false);
         }
