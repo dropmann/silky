@@ -262,6 +262,7 @@ body.windows.electron #header-buttons {
 #main-view {
     --aux-toolbar-width: 56px;
     --aux-panel-width: 320px;
+    --aux-toolbar-gap: 8px;
     --aux-space-width: calc(var(--aux-toolbar-width) + var(--aux-panel-width));
     padding-inline-end: var(--aux-toolbar-width);
     transition: padding-inline-start 0.2s ease, padding-inline-end 0.2s ease;
@@ -274,7 +275,7 @@ body.windows.electron #header-buttons {
 
 #main-view[data-aux-side='right'] {
     padding-inline-start: 0;
-    padding-inline-end: var(--aux-toolbar-width);
+    padding-inline-end: calc(var(--aux-toolbar-width) + var(--aux-toolbar-gap));
 }
 
 #main-view[data-aux-presentation='docked'] {
@@ -333,7 +334,7 @@ body.windows.electron #header-buttons {
 #aux-toolbar {
     position: absolute;
     inset-inline-end: 0;
-    top: 6px;
+    top: -1px;
     bottom: 0;
     width: var(--aux-toolbar-width);
     display: flex;
@@ -343,8 +344,8 @@ body.windows.electron #header-buttons {
     padding: 10px 6px;
     box-sizing: border-box;
     overflow-y: auto;
-    background: linear-gradient(180deg, rgba(228, 231, 236, 0.96), rgba(211, 215, 221, 0.96));
-    border-inline-start: 1px solid #C4C9CF;
+    background: #F0F0F0;
+    border-inline-start: 1px solid #d0d0d0;
     z-index: 55;
 }
 
@@ -352,13 +353,13 @@ body.windows.electron #header-buttons {
     inset-inline-start: 0;
     inset-inline-end: auto;
     border-inline-start: none;
-    border-inline-end: 1px solid #C4C9CF;
+    border-inline-end: 1px solid #D0D0D0;
 }
 
 #main-view[data-aux-side='right'] #aux-toolbar {
     inset-inline-start: auto;
     inset-inline-end: 0;
-    border-inline-start: 1px solid #C4C9CF;
+    border-inline-start: 1px solid #D0D0D0;
     border-inline-end: none;
 }
 
@@ -394,7 +395,7 @@ body.windows.electron #header-buttons {
 #aux-panel {
     position: absolute;
     inset-inline-end: var(--aux-toolbar-width);
-    top: 6px;
+    top: 0;
     bottom: 0;
     width: var(--aux-panel-width);
     display: grid;

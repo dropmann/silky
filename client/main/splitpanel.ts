@@ -63,7 +63,7 @@ export class SplitPanel extends EventDistributor {
 
         this.classList.add("silky-splitpanel");
         this.style.position = "relative";
-        this.style.overflow = "hidden";
+        //this.style.overflow = "hidden";
 
         this._transition = Promise.resolve();
         this._layoutState = {
