@@ -4,8 +4,13 @@ import type { AuxTranslate } from './types';
 export default function createDataQualityAuxView(t: AuxTranslate): AuxView {
     return new AuxView(
         'data-quality',
-        t('Data Quality'),
-        'DQ',
+        t('Data Quality Checks'),
+        `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3 19 6v5c0 4.5-2.7 7.5-7 10-4.3-2.5-7-5.5-7-10V6z" />
+                <path d="m9.5 12 1.8 1.8 3.7-4.1" />
+            </svg>
+        `,
         `
             <h2>${ t('Data Quality') }</h2>
             <p>${ t('Quick checks for missingness, outliers, constants, and suspicious structure.') }</p>

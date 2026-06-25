@@ -4,8 +4,14 @@ import type { AuxTranslate } from './types';
 export default function createAssistantAuxView(t: AuxTranslate): AuxView {
     return new AuxView(
         'assistant',
-        t('Assistant'),
-        'AI',
+        t('AI Assistant'),
+        `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 9a5 5 0 0 1 10 0v3a5 5 0 0 1-5 5h-3l-3 3v-4a5 5 0 0 1-4-4V9a5 5 0 0 1 5-5" />
+                <path d="M10 9.5h4" />
+                <path d="M12 7.5v4" />
+            </svg>
+        `,
         `
             <h2>${ t('Assistant') }</h2>
             <p>${ t('Context-aware guidance for the active module, analysis, and currently focused option.') }</p>

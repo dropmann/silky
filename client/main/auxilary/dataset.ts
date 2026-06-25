@@ -4,8 +4,14 @@ import type { AuxTranslate } from './types';
 export default function createDatasetAuxView(t: AuxTranslate): AuxView {
     return new AuxView(
         'dataset',
-        t('Dataset'),
-        'DS',
+        t('Dataset Overview'),
+        `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="5" width="16" height="14" rx="2" />
+                <path d="M4 10h16" />
+                <path d="M10 5v14" />
+            </svg>
+        `,
         `
             <h2>${ t('Dataset Overview') }</h2>
             <p>${ t('A compact status summary for the active data set.') }</p>

@@ -4,8 +4,17 @@ import type { AuxTranslate } from './types';
 export default function createResultsTocAuxView(t: AuxTranslate): AuxView {
     return new AuxView(
         'results-toc',
-        t('Results TOC'),
-        'TOC',
+        t('Results Table of Contents'),
+        `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 7h11" />
+                <path d="M8 12h11" />
+                <path d="M8 17h11" />
+                <circle cx="4.5" cy="7" r="1" data-fill="currentColor" />
+                <circle cx="4.5" cy="12" r="1" data-fill="currentColor" />
+                <circle cx="4.5" cy="17" r="1" data-fill="currentColor" />
+            </svg>
+        `,
         `
             <h2>${ t('Results Table of Contents') }</h2>
             <p>${ t('A navigation outline for the current results document.') }</p>

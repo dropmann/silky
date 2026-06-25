@@ -4,8 +4,15 @@ import type { AuxTranslate } from './types';
 export default function createTransformsAuxView(t: AuxTranslate): AuxView {
     return new AuxView(
         'transforms',
-        t('Transforms'),
-        'Fx',
+        t('Transforms and Filters'),
+        `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 7h10l-3-3" />
+                <path d="m17 7-3 3" />
+                <path d="M17 17H7l3 3" />
+                <path d="m7 17 3-3" />
+            </svg>
+        `,
         `
             <h2>${ t('Transforms and Filters') }</h2>
             <p>${ t('Overview of active filters, computed variables, recodes, and weights.') }</p>

@@ -15,6 +15,14 @@ export default class AuxPanel {
     onResizeMove: ((event: PointerEvent) => void) | null = null;
     onResizeEnd: ((event: PointerEvent) => void) | null = null;
 
+    createActionIcon(svg: string) {
+        const icon = document.createElement('div');
+        icon.className = 'aux-panel-action-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.innerHTML = svg;
+        return icon;
+    }
+
     constructor(views: AuxView[]) {
         this.element = document.createElement('aside');
         this.element.id = 'aux-panel';
@@ -26,6 +34,7 @@ export default class AuxPanel {
         this.resizeHandle.id = 'aux-panel-resize';
         this.resizeHandle.setAttribute('role', 'separator');
         this.resizeHandle.setAttribute('aria-label', 'Resize assistance panel');
+        this.resizeHandle.title = 'Resize assistance panel';
 
         const header = document.createElement('div');
         header.id = 'aux-panel-header';
@@ -40,16 +49,35 @@ export default class AuxPanel {
         this.pinButton = document.createElement('button');
         this.pinButton.className = 'aux-panel-action';
         this.pinButton.type = 'button';
+        this.pinButton.append(this.createActionIcon(`
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 4h8" />
+                <path d="M9 4v5l-3 4h12l-3-4V4" />
+                <path d="M12 13v7" />
+            </svg>
+        `));
 
         this.sideButton = document.createElement('button');
         this.sideButton.className = 'aux-panel-action';
         this.sideButton.type = 'button';
+        this.sideButton.append(this.createActionIcon(`
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 12h10" />
+                <path d="m13 8 4 4-4 4" />
+            </svg>
+        `));
 
         this.closeButton = document.createElement('button');
         this.closeButton.className = 'aux-panel-action';
         this.closeButton.type = 'button';
         this.closeButton.setAttribute('aria-label', 'Close panel');
-        this.closeButton.textContent = 'X';
+        this.closeButton.title = 'Close panel';
+        this.closeButton.append(this.createActionIcon(`
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m7 7 10 10" />
+                <path d="m17 7-10 10" />
+            </svg>
+        `));
 
         actions.append(this.pinButton, this.sideButton, this.closeButton);
         header.append(this.titleElement, actions);
@@ -93,13 +121,40 @@ export default class AuxPanel {
     }
 
     setPinned(pinned: boolean) {
-        this.pinButton.textContent = pinned ? 'Float' : 'Pin';
-        this.pinButton.setAttribute('aria-label', pinned ? 'Use overlay panel' : 'Pin panel');
+        const label = pinned ? 'Use overlay panel' : 'Pin panel';
+        this.pinButton.setAttribute('aria-label', label);
+        this.pinButton.title = label;
+        this.pinButton.classList.toggle('active', pinned);
+        this.pinButton.replaceChildren(this.createActionIcon(pinned ? `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="6" width="14" height="12" rx="2" />
+                <path d="M9 10h6" />
+                <path d="M9 14h6" />
+            </svg>
+        ` : `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 4h8" />
+                <path d="M9 4v5l-3 4h12l-3-4V4" />
+                <path d="M12 13v7" />
+            </svg>
+        `));
     }
 
     setSide(side: AuxSide) {
-        this.sideButton.textContent = side === 'right' ? 'Left' : 'Right';
-        this.sideButton.setAttribute('aria-label', side === 'right' ? 'Move panel to left side' : 'Move panel to right side');
+        const label = side === 'right' ? 'Move panel to left side' : 'Move panel to right side';
+        this.sideButton.setAttribute('aria-label', label);
+        this.sideButton.title = label;
+        this.sideButton.replaceChildren(this.createActionIcon(side === 'right' ? `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 12H7" />
+                <path d="m11 8-4 4 4 4" />
+            </svg>
+        ` : `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 12h10" />
+                <path d="m13 8 4 4-4 4" />
+            </svg>
+        `));
     }
 
     setActiveView(view: AuxViewId | null) {

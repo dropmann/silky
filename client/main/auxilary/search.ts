@@ -5,7 +5,12 @@ export default function createSearchAuxView(t: AuxTranslate): AuxView {
     return new AuxView(
         'search',
         t('Search'),
-        'Go',
+        `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="6" />
+                <path d="m20 20-4.2-4.2" />
+            </svg>
+        `,
         `
             <h2>${ t('Search') }</h2>
             <p>${ t('One place to search analyses, options, variables, results, and help content.') }</p>

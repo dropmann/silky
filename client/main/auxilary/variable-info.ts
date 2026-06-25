@@ -4,8 +4,14 @@ import type { AuxTranslate } from './types';
 export default function createVariableInfoAuxView(t: AuxTranslate): AuxView {
     return new AuxView(
         'variable-info',
-        t('Variable Info'),
-        'Var',
+        t('Variable Details'),
+        `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="6" width="16" height="12" rx="3" />
+                <path d="M8 10h8" />
+                <path d="M8 14h5" />
+            </svg>
+        `,
         `
             <h2>${ t('Selection and Variable Info') }</h2>
             <p>${ t('Details for the current variable, selection, or focused cell range.') }</p>
