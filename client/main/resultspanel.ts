@@ -1188,6 +1188,7 @@ class ResultsPanel extends EventDistributor {
                 if (newSelectedResults) {
                     newSelectedResults.$container.setAttribute('data-selected', '');
                     newSelectedResults.$container.setAttribute('aria-current', 'true');
+                    this._scrollIntoView(newSelectedResults.$container, newSelectedResults.$container.offsetHeight);
                 }
                 this._refsTable.deselect();
                 delete this._refsTable.dataset.selected;

@@ -24,18 +24,60 @@ export type AuxTranslate = (text: string, data?: { [key: string]: any }) => stri
 
 export class AuxView {
     id: AuxViewId;
+    t: AuxTranslate;
     title: string;
     iconSvg: string;
-    body: string;
+    element: HTMLElement | null = null;
+    bodyElement: HTMLElement | null = null;
 
-    constructor(id: AuxViewId, title: string, iconSvg: string, body: string) {
+    constructor(id: AuxViewId, t: AuxTranslate) {
         this.id = id;
-        this.title = title;
-        this.iconSvg = iconSvg;
-        this.body = body;
+        this.t = t;
+        this.title = this.getTitle();
+        this.iconSvg = this.getIconSvg();
     }
 
-    createToolbarButton() {
+    getTitle(): string {
+        return this.id;
+    }
+
+    getIconSvg(): string {
+        return '';
+    }
+
+    createBodyElement(innerHtml: string): HTMLElement {
+        const body = document.createElement('div');
+        body.innerHTML = innerHtml;
+        return body;
+    }
+
+    getBody(): HTMLElement {
+        return this.createBodyElement('');
+    }
+
+    render(): void {
+        this.title = this.getTitle();
+        this.iconSvg = this.getIconSvg();
+
+        if (this.bodyElement === null)
+            this.bodyElement = this.getBody();
+        else
+            this.update();
+    }
+
+    onMount(): void {
+    }
+
+    update(): void {
+    }
+
+    onShow(): void {
+    }
+
+    onHide(): void {
+    }
+
+    createToolbarButton(): HTMLButtonElement {
         const button = document.createElement('button');
         button.className = 'aux-toolbar-button';
         button.type = 'button';
@@ -52,11 +94,18 @@ export class AuxView {
         return button;
     }
 
-    createPanelElement() {
+    createPanelElement(): HTMLElement {
+        if (this.element !== null)
+            return this.element;
+
         const panelView = document.createElement('section');
         panelView.className = 'aux-panel-view';
         panelView.setAttribute('data-aux-view', this.id);
-        panelView.innerHTML = this.body;
+        this.element = panelView;
+        this.render();
+        if (this.bodyElement !== null)
+            panelView.replaceChildren(this.bodyElement);
+        this.onMount();
         return panelView;
     }
 }

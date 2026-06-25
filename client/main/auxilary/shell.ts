@@ -94,8 +94,17 @@ export default class AuxShell {
     }
 
     setState(view: AuxViewSelection, presentation: AuxPresentation) {
+        const previousView = this.activeView;
         const previousPresentation = this.presentation;
         const previousSide = this.side;
+        const previouslyShownView =
+            previousPresentation === 'hidden' || previousView === null
+                ? null
+                : this.viewMap.get(previousView) || null;
+        const nextShownView =
+            presentation === 'hidden' || view === null
+                ? null
+                : this.viewMap.get(view) || null;
 
         this.activeView = view;
         this.presentation = presentation;
@@ -108,12 +117,20 @@ export default class AuxShell {
         this.splitPanel.dataset.auxSide = this.side;
         this.panel.setAriaHidden(presentation === 'hidden');
 
+        nextShownView?.render();
+
         const title = view ? (this.viewMap.get(view)?.title || this.defaultTitle) : this.defaultTitle;
         this.panel.setTitle(title);
         this.panel.setPinned(this.pinned);
         this.panel.setSide(this.side);
         this.toolbar.setActiveView(view, presentation !== 'hidden');
         this.panel.setActiveView(view);
+
+        if (previouslyShownView !== null && previouslyShownView !== nextShownView)
+            previouslyShownView.onHide();
+
+        if (nextShownView !== null && nextShownView !== previouslyShownView)
+            nextShownView.onShow();
 
         const containerSpaceChanged =
             previousPresentation === 'docked' ||

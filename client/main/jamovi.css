@@ -374,8 +374,8 @@ body.windows.electron #header-buttons {
 }
 
 .aux-toolbar-button {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
     border: none;
     border-radius: 12px;
     background: transparent;
@@ -485,7 +485,7 @@ body.windows.electron #header-buttons {
     grid-template-columns: 10px minmax(0, 1fr);
     background: linear-gradient(180deg, #F7F8FA, #FDFDFE);
     border-inline-start: 1px solid #BCC3CC;
-    box-shadow: -12px 0 24px rgba(38, 46, 56, 0.16);
+    box-shadow: -4px 0 10px rgba(38, 46, 56, 0.10);
     z-index: 54;
     transform: translateX(calc(100% + 8px));
     opacity: 0;
@@ -500,7 +500,7 @@ body.windows.electron #header-buttons {
     grid-template-columns: minmax(0, 1fr) 10px;
     border-inline-start: none;
     border-inline-end: 1px solid #BCC3CC;
-    box-shadow: 12px 0 24px rgba(38, 46, 56, 0.16);
+    box-shadow: 4px 0 10px rgba(38, 46, 56, 0.10);
     transform: translateX(calc(-100% - 8px));
 }
 
@@ -509,7 +509,7 @@ body.windows.electron #header-buttons {
     inset-inline-end: var(--aux-toolbar-width);
     border-inline-start: 1px solid #BCC3CC;
     border-inline-end: none;
-    box-shadow: -12px 0 24px rgba(38, 46, 56, 0.16);
+    box-shadow: -4px 0 10px rgba(38, 46, 56, 0.10);
     transform: translateX(calc(100% + 8px));
 }
 
@@ -703,6 +703,36 @@ body.windows.electron #header-buttons {
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.88);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.aux-panel-nav {
+    display: grid;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.aux-panel-nav-item {
+    padding: 10px 12px;
+    border: 1px solid #D7DDE5;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    color: #334155;
+    text-align: left;
+    cursor: default;
+}
+
+.aux-panel-nav-item:hover,
+.aux-panel-nav-item:focus-visible {
+    background: rgba(235, 242, 251, 0.95);
+    border-color: #B8C6D8;
+    outline: none;
+}
+
+.aux-panel-nav-item.active {
+    background: rgba(66, 112, 176, 0.12);
+    border-color: #7FA2D1;
+    color: #1E3A5F;
 }
 
 .aux-panel-grid {

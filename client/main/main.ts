@@ -554,7 +554,7 @@ ready(async() => {
     resultsView.setAttribute('aria-live', 'polite');
     resultsPanel.append(resultsView);
 
-    const auxShell = new AuxShell(splitPanel, createAuxViews(_));
+    const auxShell = new AuxShell(splitPanel, createAuxViews(_, instance));
     auxShell.mount();
     auxShell.initialise('assistant');
 
