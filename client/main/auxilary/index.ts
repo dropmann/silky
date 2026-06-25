@@ -35,8 +35,8 @@ export function createAuxViews(t: AuxTranslate, instance: Instance): AuxView[] {
     return [
         new AssistantAuxView(t),
         new ResultsTocAuxView(t, instance),
-        new DatasetAuxView(t),
-        new AnalysisAuxView(t),
+        new DatasetAuxView(t, instance),
+        new AnalysisAuxView(t, instance),
         new HelpAuxView(t),
         new VariableInfoAuxView(t),
         new IssuesAuxView(t),
@@ -46,7 +46,7 @@ export function createAuxViews(t: AuxTranslate, instance: Instance): AuxView[] {
         new OutputNavAuxView(t),
         new DataQualityAuxView(t),
         new TransformsAuxView(t),
-        new ModulesAuxView(t),
+        new ModulesAuxView(t, instance),
         new GuidanceAuxView(t),
         new ReviewAuxView(t),
     ];

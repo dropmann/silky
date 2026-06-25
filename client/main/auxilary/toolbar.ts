@@ -1,7 +1,9 @@
+import interactionManager, { keyTips, type FocusLoop } from '../../common/interactionmanager';
 import type { AuxView, AuxViewId } from './types';
 
 export default class AuxToolbar {
     element: HTMLDivElement;
+    loop: FocusLoop;
     buttons = new Map<AuxViewId, HTMLButtonElement>();
     onToggleView: ((view: AuxViewId) => void) | null = null;
     pressedView: AuxViewId | null = null;
@@ -22,6 +24,14 @@ export default class AuxToolbar {
         this.element.id = 'aux-toolbar';
         this.element.setAttribute('role', 'toolbar');
         this.element.setAttribute('aria-label', 'Assistance panel toolbar');
+        this.element.tabIndex = -1;
+        this.loop = interactionManager.registerLoop(this.element, { level: 1 });
+        keyTips.register(this.element, {
+            key: 'T',
+            maintainAccessibility: true,
+            action: () => this.focus(),
+            position: { x: '50%', y: '12px' }
+        });
 
         for (const view of views) {
             const button = view.createToolbarButton();
@@ -187,6 +197,14 @@ export default class AuxToolbar {
 
     contains(target: Node) {
         return this.element.contains(target);
+    }
+
+    focus(view: AuxViewId | null = null) {
+        const button = (view && this.buttons.get(view)) || this.element.querySelector<HTMLButtonElement>('.aux-toolbar-button');
+        if (button)
+            button.focus();
+        else
+            this.element.focus();
     }
 
     clearDropIndicator() {

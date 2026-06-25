@@ -1,9 +1,17 @@
+import type Instance from '../instance';
+import { Analysis } from '../analyses';
 import { AuxView } from './types';
 import type { AuxTranslate } from './types';
 
 export default class AnalysisAuxView extends AuxView {
-    constructor(t: AuxTranslate) {
+    model: Instance;
+    descriptionElement: HTMLParagraphElement | null = null;
+    listElement: HTMLDivElement | null = null;
+    stateElement: HTMLDivElement | null = null;
+
+    constructor(t: AuxTranslate, model: Instance) {
         super('analysis', t);
+        this.model = model;
     }
 
     getTitle() {
@@ -22,16 +30,83 @@ export default class AnalysisAuxView extends AuxView {
     }
 
     getBody() {
-        return this.createBodyElement(`
-            <h2>${ this.t('Analysis Inspector') }</h2>
-            <p>${ this.t('Metadata and state for the currently selected analysis.') }</p>
-            <div class="aux-panel-list">
-                <div class="aux-panel-list-item">${ this.t('Module: jmv') }</div>
-                <div class="aux-panel-list-item">${ this.t('Analysis: Descriptives') }</div>
-                <div class="aux-panel-list-item">${ this.t('Assigned variables: 4') }</div>
-                <div class="aux-panel-list-item">${ this.t('Non-default options: 6') }</div>
-            </div>
-            <div class="aux-panel-placeholder">${ this.t('This could also show warnings, dependencies, and what changed from defaults.') }</div>
-        `);
+        const body = document.createElement('div');
+
+        const description = document.createElement('p');
+        description.textContent = this.t('Metadata and state for the currently selected analysis.');
+
+        const list = document.createElement('div');
+        list.className = 'aux-panel-list';
+
+        const state = document.createElement('div');
+        state.className = 'aux-panel-placeholder';
+
+        body.append(description, list, state);
+
+        this.descriptionElement = description;
+        this.listElement = list;
+        this.stateElement = state;
+
+        return body;
+    }
+
+    onMount(): void {
+        const analyses = this.model.analyses();
+        analyses.on('analysisCreated', this.update, this);
+        analyses.on('analysisDeleted', this.update, this);
+        analyses.on('analysisResultsChanged', this.update, this);
+        analyses.on('analysisHeadingChanged', this.update, this);
+        analyses.on('analysisOptionsChanged', this.update, this);
+        this.model.on('change:selectedAnalysis', this.update, this);
+        this.update();
+    }
+
+    onShow(): void {
+        this.update();
+    }
+
+    createListItem(text: string) {
+        const item = document.createElement('div');
+        item.className = 'aux-panel-list-item';
+        item.textContent = text;
+        return item;
+    }
+
+    update(): void {
+        if (this.listElement === null || this.stateElement === null || this.descriptionElement === null)
+            return;
+
+        const selectedAnalysis = this.model.get('selectedAnalysis');
+        if (! (selectedAnalysis instanceof Analysis)) {
+            this.descriptionElement.textContent = this.t('Metadata and state for the currently selected analysis.');
+            this.listElement.replaceChildren();
+            this.stateElement.textContent = this.t('Select an analysis in the results or the TOC to inspect its details.');
+            return;
+        }
+
+        const hasOptions = selectedAnalysis.options !== null;
+        const heading = hasOptions ? selectedAnalysis.getHeading() : '';
+        const analysisLabel = heading || selectedAnalysis.results?.title || selectedAnalysis.name;
+        const assignedVariables = hasOptions ? selectedAnalysis.getUsingColumns().length : 0;
+        const optionValues = hasOptions ? selectedAnalysis.options.getValues() : {};
+        const optionNames = Object.keys(optionValues).filter(name => ! name.startsWith('results/'));
+        const dependentCount = selectedAnalysis.dependents.length;
+
+        this.descriptionElement.textContent = this.t('Metadata and state for the currently selected analysis.');
+        this.listElement.replaceChildren(
+            this.createListItem(this.t('Module: {module}', { module: selectedAnalysis.ns })),
+            this.createListItem(this.t('Analysis: {analysis}', { analysis: analysisLabel })),
+            this.createListItem(this.t('Assigned variables: {count}', { count: assignedVariables.toLocaleString() })),
+            this.createListItem(this.t('Option values set: {count}', { count: optionNames.length.toLocaleString() })),
+            this.createListItem(this.t('Dependent analyses: {count}', { count: dependentCount.toLocaleString() })),
+        );
+
+        this.stateElement.textContent = this.t(
+            'Revision {revision}. Analysis is {enabledState}.',
+            {
+                revision: selectedAnalysis.revision.toLocaleString(),
+                enabledState: selectedAnalysis.enabled ? this.t('enabled') : this.t('disabled'),
+            }
+        );
     }
 }

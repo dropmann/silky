@@ -1,13 +1,16 @@
+import interactionManager, { keyTips, type FocusLoop } from '../../common/interactionmanager';
 import type { AuxSide, AuxView, AuxViewId } from './types';
 
 export default class AuxPanel {
     element: HTMLElement;
+    loop: FocusLoop;
     resizeHandle: HTMLDivElement;
     titleElement: HTMLDivElement;
     pinButton: HTMLButtonElement;
     sideButton: HTMLButtonElement;
     closeButton: HTMLButtonElement;
     viewElements = new Map<AuxViewId, HTMLElement>();
+    activeView: AuxViewId | null = null;
     onTogglePinned: (() => void) | null = null;
     onToggleSide: (() => void) | null = null;
     onClose: (() => void) | null = null;
@@ -29,6 +32,13 @@ export default class AuxPanel {
         this.element.setAttribute('role', 'complementary');
         this.element.setAttribute('aria-label', 'Assistance panel');
         this.element.tabIndex = -1;
+        this.loop = interactionManager.registerLoop(this.element);
+        keyTips.register(this.element, {
+            key: 'X',
+            maintainAccessibility: true,
+            action: () => this.focus(),
+            position: { x: '50%', y: '12px' }
+        });
 
         this.resizeHandle = document.createElement('div');
         this.resizeHandle.id = 'aux-panel-resize';
@@ -109,6 +119,14 @@ export default class AuxPanel {
     }
 
     focus() {
+        if (this.activeView !== null) {
+            const view = this.viewElements.get(this.activeView);
+            if (view) {
+                view.focus();
+                return;
+            }
+        }
+
         this.element.focus();
     }
 
@@ -158,8 +176,11 @@ export default class AuxPanel {
     }
 
     setActiveView(view: AuxViewId | null) {
+        this.activeView = view;
         this.viewElements.forEach((element, elementView) => {
-            element.classList.toggle('active', elementView === view);
+            const active = elementView === view;
+            element.classList.toggle('active', active);
+            element.setAttribute('aria-hidden', active ? 'false' : 'true');
         });
     }
 }

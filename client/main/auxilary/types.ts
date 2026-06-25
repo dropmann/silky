@@ -1,3 +1,5 @@
+import interactionManager, { type FocusLoop } from '../../common/interactionmanager';
+
 export type AuxViewId =
     | 'assistant'
     | 'results-toc'
@@ -29,6 +31,7 @@ export class AuxView {
     iconSvg: string;
     element: HTMLElement | null = null;
     bodyElement: HTMLElement | null = null;
+    loop: FocusLoop | null = null;
 
     constructor(id: AuxViewId, t: AuxTranslate) {
         this.id = id;
@@ -59,6 +62,9 @@ export class AuxView {
         this.title = this.getTitle();
         this.iconSvg = this.getIconSvg();
 
+        if (this.element !== null)
+            this.element.setAttribute('aria-label', this.title);
+
         if (this.bodyElement === null)
             this.bodyElement = this.getBody();
         else
@@ -75,6 +81,13 @@ export class AuxView {
     }
 
     onHide(): void {
+    }
+
+    focus(): void {
+        if (this.loop !== null)
+            this.loop.activate();
+        else
+            this.element?.focus();
     }
 
     createToolbarButton(): HTMLButtonElement {
@@ -101,7 +114,11 @@ export class AuxView {
         const panelView = document.createElement('section');
         panelView.className = 'aux-panel-view';
         panelView.setAttribute('data-aux-view', this.id);
+        panelView.setAttribute('role', 'group');
+        panelView.setAttribute('aria-label', this.title);
+        panelView.tabIndex = -1;
         this.element = panelView;
+        this.loop = interactionManager.registerLoop(panelView, { level: 1 });
         this.render();
         if (this.bodyElement !== null)
             panelView.replaceChildren(this.bodyElement);

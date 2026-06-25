@@ -1,3 +1,4 @@
+import { keyTips } from '../../common/interactionmanager';
 import type { SplitPanel } from '../splitpanel';
 import AuxPanel from './panel';
 import AuxToolbar from './toolbar';
@@ -139,8 +140,16 @@ export default class AuxShell {
 
         this.notifyLayoutChange(containerSpaceChanged);
 
-        if (presentation !== 'hidden')
-            setTimeout(() => this.panel.focus(), 0);
+        keyTips.update({ silent: true });
+
+        if (presentation !== 'hidden') {
+            setTimeout(() => {
+                if (nextShownView !== null)
+                    nextShownView.focus();
+                else
+                    this.panel.focus();
+            }, 0);
+        }
     }
 
     toggleView(view: AuxViewId) {

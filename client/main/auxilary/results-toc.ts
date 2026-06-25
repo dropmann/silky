@@ -1,5 +1,5 @@
 import type Instance from '../instance';
-import type { Analysis } from '../analyses';
+import { Analysis } from '../analyses';
 import { AuxView } from './types';
 import type { AuxTranslate } from './types';
 
@@ -7,6 +7,7 @@ export default class ResultsTocAuxView extends AuxView {
     model: Instance;
     listElement: HTMLDivElement | null = null;
     emptyElement: HTMLDivElement | null = null;
+    lastStructureKey = '';
 
     constructor(t: AuxTranslate, model: Instance) {
         super('results-toc', t);
@@ -55,9 +56,8 @@ export default class ResultsTocAuxView extends AuxView {
         const analyses = this.model.analyses();
         analyses.on('analysisCreated', this.update, this);
         analyses.on('analysisDeleted', this.update, this);
-        analyses.on('analysisResultsChanged', this.update, this);
         analyses.on('analysisHeadingChanged', this.update, this);
-        this.model.on('change:selectedAnalysis', this.update, this);
+        this.model.on('change:selectedAnalysis', this.updateSelectionState, this);
         this.update();
     }
 
@@ -70,7 +70,16 @@ export default class ResultsTocAuxView extends AuxView {
             return;
 
         const analyses = [...this.model.analyses()].filter(analysis => analysis.name !== 'empty');
-        const selectedAnalysis = this.model.get('selectedAnalysis');
+        const structureKey = analyses
+            .map(analysis => `${ analysis.id }:${ this.getAnalysisLabel(analysis) }`)
+            .join('|');
+
+        if (structureKey === this.lastStructureKey) {
+            this.updateSelectionState();
+            return;
+        }
+
+        this.lastStructureKey = structureKey;
 
         this.listElement.replaceChildren();
 
@@ -80,7 +89,7 @@ export default class ResultsTocAuxView extends AuxView {
             button.className = 'aux-panel-nav-item';
             button.textContent = this.getAnalysisLabel(analysis);
             button.title = button.textContent;
-            button.classList.toggle('active', selectedAnalysis === analysis);
+            button.dataset.analysisId = analysis.id.toString();
             button.addEventListener('click', () => {
                 this.model.set('selectedAnalysis', analysis);
             });
@@ -88,6 +97,19 @@ export default class ResultsTocAuxView extends AuxView {
         }
 
         this.emptyElement.style.display = analyses.length === 0 ? '' : 'none';
+        this.updateSelectionState();
+    }
+
+    updateSelectionState(): void {
+        if (this.listElement === null)
+            return;
+
+        const selectedAnalysis = this.model.get('selectedAnalysis');
+        this.listElement.querySelectorAll<HTMLButtonElement>('.aux-panel-nav-item').forEach(button => {
+            const buttonId = Number(button.dataset.analysisId);
+            const selected = selectedAnalysis instanceof Analysis && selectedAnalysis.id === buttonId;
+            button.classList.toggle('active', selected);
+        });
     }
 
     getAnalysisLabel(analysis: Analysis): string {
