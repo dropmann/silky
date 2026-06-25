@@ -637,6 +637,8 @@ body.windows.electron #header-buttons {
     grid-column: 2;
     overflow: auto;
     padding: 14px;
+    padding-top: 0px;
+    margin-top: 14px;
 }
 
 #main-view[data-aux-side='left'] #aux-panel-header,
@@ -756,6 +758,27 @@ body.windows.electron #header-buttons {
     gap: 8px;
 }
 
+.aux-module-view {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+}
+
+.aux-module-controls {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #F8FAFD;
+}
+
+.aux-module-list {
+    overflow: auto;
+    min-height: 0;
+    margin-top: 0;
+    padding-bottom: 8px;
+}
+
 .aux-module-tabs {
     display: flex;
     gap: 8px;
@@ -802,6 +825,23 @@ body.windows.electron #header-buttons {
     background: rgba(235, 242, 251, 0.95);
 }
 
+.aux-module-summary-progress {
+    min-height: 20px;
+    margin: -4px 0 8px 0;
+    visibility: hidden;
+}
+
+.aux-module-summary-progress.active {
+    visibility: visible;
+}
+
+.aux-module-summary-action {
+    min-height: 22px;
+    padding: 3px 8px;
+    font-size: 11px;
+    line-height: 1.1;
+}
+
 .aux-module-tab {
     border: 1px solid #D7DDE5;
     border-radius: 999px;
@@ -833,6 +873,14 @@ body.windows.electron #header-buttons {
     box-shadow: none;
 }
 
+.aux-module-progress-wrap-summary {
+    min-height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
 .aux-module-section > .aux-module-card:not(:last-child) {
     border-bottom: 1px solid #D7DDE5;
     margin-bottom: 4px;
@@ -859,6 +907,13 @@ body.windows.electron #header-buttons {
     font-weight: 700;
     color: #1E293B;
     min-width: 0;
+}
+
+.aux-module-version {
+    margin-inline-start: 8px;
+    font-weight: 500;
+    color: #94A3B8;
+    font-size: 12px;
 }
 
 .aux-module-meta {
@@ -897,6 +952,13 @@ body.windows.electron #header-buttons {
 .aux-module-meta:focus-visible {
     outline: none;
     color: #475569;
+}
+
+.aux-module-authors {
+    margin-inline-start: 36px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #94A3B8;
 }
 
 .aux-module-actions,

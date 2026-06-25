@@ -21,6 +21,7 @@ export default class AuxShell {
     resizeStartX = 0;
     resizeStartWidth = this.width;
     defaultTitle = 'Assistant';
+    lastInternalPointerDownAt = 0;
 
     constructor(splitPanel: SplitPanel, views: AuxView[]) {
         this.splitPanel = splitPanel;
@@ -48,6 +49,12 @@ export default class AuxShell {
         this.panel.onResizeMove = event => this.handleResizeMove(event);
         this.panel.onResizeEnd = event => this.handleResizeEnd(event);
 
+        const markInternalPointerDown = () => {
+            this.lastInternalPointerDownAt = Date.now();
+        };
+        this.panel.element.addEventListener('pointerdown', markInternalPointerDown, true);
+        this.toolbar.element.addEventListener('pointerdown', markInternalPointerDown, true);
+
         document.addEventListener('pointerdown', event => {
             const target = event.target as Node;
             if (this.presentation === 'overlay' && ! this.panel.contains(target) && ! this.toolbar.contains(target))
@@ -61,6 +68,9 @@ export default class AuxShell {
 
                 const activeElement = document.activeElement;
                 if (activeElement && (this.panel.contains(activeElement) || this.toolbar.contains(activeElement)))
+                    return;
+
+                if (Date.now() - this.lastInternalPointerDownAt < 150)
                     return;
 
                 this.closeOverlay();

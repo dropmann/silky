@@ -1,6 +1,7 @@
 import type Instance from '../instance';
 import type { IModuleMeta } from '../modules';
 import Notify from '../notification';
+import Version from '../utils/version';
 import MsgDialog from '../../common/msgdialog';
 import { AuxView } from './types';
 import type { AuxTranslate } from './types';
@@ -15,6 +16,7 @@ export default class ModulesAuxView extends AuxView {
     model: Instance;
     tabsElement: HTMLDivElement | null = null;
     searchElement: HTMLInputElement | null = null;
+    summaryProgressElement: HTMLDivElement | null = null;
     listElement: HTMLDivElement | null = null;
     installStates = new Map<string, ModuleInstallState>();
     renderVersion = 0;
@@ -40,6 +42,10 @@ export default class ModulesAuxView extends AuxView {
 
     getBody() {
         const body = document.createElement('div');
+        body.className = 'aux-module-view';
+
+        const controls = document.createElement('div');
+        controls.className = 'aux-module-controls';
 
         const tabs = document.createElement('div');
         tabs.className = 'aux-module-tabs';
@@ -69,13 +75,19 @@ export default class ModulesAuxView extends AuxView {
 
         searchBox.append(searchIcon, search);
 
-        const list = document.createElement('div');
-        list.className = 'aux-panel-list';
+        const summaryProgress = document.createElement('div');
+        summaryProgress.className = 'aux-module-summary-progress';
+        summaryProgress.setAttribute('aria-hidden', 'true');
 
-        body.append(tabs, searchBox, list);
+        const list = document.createElement('div');
+        list.className = 'aux-panel-list aux-module-list';
+
+        controls.append(tabs, searchBox, summaryProgress);
+        body.append(controls, list);
 
         this.tabsElement = tabs;
         this.searchElement = search;
+        this.summaryProgressElement = summaryProgress;
         this.listElement = list;
 
         return body;
@@ -215,12 +227,9 @@ export default class ModulesAuxView extends AuxView {
             return;
 
         const renderVersion = ++this.renderVersion;
-
-        const modules = this.model.modules();
-        const available = modules.available();
-
-        const installedModules = modules.get('modules') || [];
-        const availableModules = available.get('modules') || [];
+        const installedModules = this.getInstalledModules();
+        const availableModules = this.getAvailableModules();
+        this.updateSummaryProgress(installedModules, availableModules);
 
         const nextListContent = document.createDocumentFragment();
 
@@ -288,6 +297,86 @@ export default class ModulesAuxView extends AuxView {
                 : this.t('Search installed modules'));
     }
 
+    getInstalledModules(): IModuleMeta[] {
+        return this.model.modules().get('modules') || [];
+    }
+
+    getAvailableModules(): IModuleMeta[] {
+        return this.model.modules().available().get('modules') || [];
+    }
+
+    getVisibleModules(installedModules = this.getInstalledModules(), availableModules = this.getAvailableModules()): IModuleMeta[] {
+        if (this.selectedTab === 'installed')
+            return installedModules
+                .filter(module => this.moduleMatchesSearch(module))
+                .slice()
+                .sort((left, right) => left.title.localeCompare(right.title));
+
+        return availableModules
+            .filter(module => ! installedModules.some(installed => installed.name === module.name))
+            .filter(module => this.moduleMatchesSearch(module))
+            .slice()
+            .sort((left, right) => left.title.localeCompare(right.title));
+    }
+
+    updateSummaryProgress(installedModules = this.getInstalledModules(), availableModules = this.getAvailableModules()): void {
+        if (this.summaryProgressElement === null)
+            return;
+
+        const activeInstalls = [ ...this.installStates.values() ];
+        if (activeInstalls.length === 0) {
+            const updateableModules = this.getVisibleModules(installedModules, availableModules)
+                .filter(module => module.ops.includes('update'))
+                .filter(module => ! this.installStates.has(module.name));
+
+            if (updateableModules.length > 0) {
+                const button = this.createActionButton(
+                    this.t('Update all ({count})', { count: updateableModules.length.toString() }),
+                    () => this.updateAll(updateableModules),
+                    false,
+                    'primary');
+                button.classList.add('aux-module-summary-action');
+                this.summaryProgressElement.classList.add('active');
+                this.summaryProgressElement.setAttribute('aria-hidden', 'false');
+                this.summaryProgressElement.replaceChildren(button);
+                return;
+            }
+
+            this.summaryProgressElement.classList.remove('active');
+            this.summaryProgressElement.setAttribute('aria-hidden', 'true');
+            this.summaryProgressElement.replaceChildren();
+            return;
+        }
+
+        const totalValue = activeInstalls.reduce((sum, state) => sum + state.progress[0], 0);
+        const totalMax = activeInstalls.reduce((sum, state) => sum + state.progress[1], 0);
+        const percent = totalMax > 0
+            ? Math.max(0, Math.min(100, Math.round((100 * totalValue) / totalMax)))
+            : 0;
+
+        const summaryState: ModuleInstallState = {
+            source: '',
+            progress: [ totalValue, totalMax ],
+            percent,
+        };
+
+        const wrap = this.createInstallProgress(summaryState, {
+            text: activeInstalls.length === 1
+                ? this.t('Installing 1 module')
+                : this.t('Installing {count} modules', { count: activeInstalls.length.toString() }),
+            className: 'aux-module-progress-wrap aux-module-progress-wrap-summary'
+        });
+
+        this.summaryProgressElement.classList.add('active');
+        this.summaryProgressElement.setAttribute('aria-hidden', 'false');
+        this.summaryProgressElement.replaceChildren(wrap);
+    }
+
+    updateAll(modules: IModuleMeta[]): void {
+        for (const module of modules)
+            this.installModule(module);
+    }
+
     moduleMatchesSearch(module: IModuleMeta): boolean {
         const rawSearch = this.searchTerm.trim().toLowerCase();
         if (rawSearch === '')
@@ -343,6 +432,12 @@ export default class ModulesAuxView extends AuxView {
         const title = document.createElement('div');
         title.className = 'aux-module-title';
         title.textContent = translator(module.title);
+
+        const version = document.createElement('span');
+        version.className = 'aux-module-version';
+        version.textContent = `v${ Version.stringify(module.version) }`;
+
+        title.append(version);
         header.append(icon, title);
 
         const meta = document.createElement('div');
@@ -376,6 +471,12 @@ export default class ModulesAuxView extends AuxView {
                 analysisCount: module.analyses.length.toLocaleString(),
             });
         }
+
+        const authors = document.createElement('div');
+        authors.className = 'aux-module-authors';
+        const authorList = module.authors.filter(author => author && author.trim() !== '');
+        if (authorList.length > 0)
+            authors.textContent = this.t('By {authors}', { authors: authorList.join(', ') });
 
         const actions = document.createElement('div');
         actions.className = 'aux-module-actions';
@@ -424,7 +525,10 @@ export default class ModulesAuxView extends AuxView {
             ? this.createAvailableAnalyses(module, translator)
             : this.createInstalledAnalyses(module, translator);
 
-        card.append(header, meta);
+        card.append(header);
+        if (authors.textContent)
+            card.append(authors);
+        card.append(meta);
         if (actions.childElementCount > 0)
             card.append(actions);
         if (analyses.childElementCount > 0)
@@ -546,14 +650,14 @@ export default class ModulesAuxView extends AuxView {
         return chip;
     }
 
-    createInstallProgress(state: ModuleInstallState): HTMLDivElement {
+    createInstallProgress(state: ModuleInstallState, options?: { text?: string; className?: string }): HTMLDivElement {
         const wrap = document.createElement('div');
-        wrap.className = 'aux-module-progress-wrap';
+        wrap.className = options?.className || 'aux-module-progress-wrap';
         wrap.dataset.role = 'install-progress';
 
         const progressText = document.createElement('div');
         progressText.className = 'aux-module-progress-text';
-        progressText.textContent = this.t('Installing');
+        progressText.textContent = options?.text || this.t('Installing');
 
         const progressBar = document.createElement('div');
         progressBar.className = 'aux-module-progress';
@@ -624,10 +728,12 @@ export default class ModulesAuxView extends AuxView {
             progress: [ 0, 1 ],
             percent: 0,
         });
+        this.updateSummaryProgress();
         this.updateInstallCard(module);
 
         void this.model.installModule(source).then(() => {
             this.installStates.delete(module.name);
+            this.updateSummaryProgress();
             this.model.modules().available().retrieve();
             this.model.trigger('notification', new Notify({
                 title: this.t('Module installed'),
@@ -638,6 +744,7 @@ export default class ModulesAuxView extends AuxView {
             this.update();
         }, error => {
             this.installStates.delete(module.name);
+            this.updateSummaryProgress();
             this.model.trigger('notification', new Notify({
                 title: this.t('Unable to install module'),
                 message: error.cause || error.message || '',
@@ -654,6 +761,7 @@ export default class ModulesAuxView extends AuxView {
                 progress: [ value, total ],
                 percent,
             });
+            this.updateSummaryProgress();
             this.updateInstallCard(module);
         });
     }
@@ -686,7 +794,8 @@ export default class ModulesAuxView extends AuxView {
     }
 
     toggleVisibility(module: IModuleMeta): void {
-        void this.model.modules().toggleModuleVisibility(module.name).then(() => this.update());
+        this.model.modules().toggleModuleVisibility(module.name);
+        void this.update();
     }
 
     runAnalysis(module: IModuleMeta, analysisName: string, analysisTitle: string): void {
