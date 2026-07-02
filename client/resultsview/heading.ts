@@ -1,7 +1,7 @@
 
 'use strict';
 
-import { HTMLElementCreator as HTML }  from '../common/htmlelementcreator';
+import { h }  from '../common/htmlelementcreator';
 import { AnnotationAction, IAnnotation } from './annotations';
 
 export class Heading extends HTMLElement implements IAnnotation {
@@ -37,7 +37,7 @@ export class Heading extends HTMLElement implements IAnnotation {
         this.role = 'textbox';
         this.ariaDescription = _('Press enter to edit');
 
-        this.$heading = HTML.parse(`<h1 contenteditable spellcheck="false" tabindex="-1">${ text }</h1>`);
+        this.$heading = h('h1', { contenteditable: '', spellcheck: 'false', tabindex: '-1' }, text);
         this.append(this.$heading);
 
 

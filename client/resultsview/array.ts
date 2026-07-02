@@ -6,7 +6,7 @@ import Annotations, { IAnnotation } from './annotations';
 import Elem, { ElementModel, View as Element, ElementData, CollectionView } from './element';
 import b64 from '../common/utils/b64';
 import interactionManager from '../common/interactionmanager';
-import { HTMLElementCreator as HTML }  from '../common/htmlelementcreator';
+import { h }  from '../common/htmlelementcreator';
 import { AnalysisStatus, IElement } from './create';
 import { Item } from './itemtracker';
 import Annotation from './annotation';
@@ -59,9 +59,6 @@ export class View extends CollectionView<Model> {
         this._children = [ ];
         
 
-        this.hoTag = '<h'  + (this.level+1) + ' class="jmv-results-array-heading">';
-        this.hcTag = '</h' + (this.level+1) + '>';
-
         this.classList.add('jmv-results-array');
         this.setAttribute('role', 'group');
 
@@ -70,7 +67,7 @@ export class View extends CollectionView<Model> {
 
         this.updateSelect();
 
-        this.$container = HTML.parse('<div class="jmv-results-array-container"></div>');
+        this.$container = h('div', { class: 'jmv-results-array-container' });
         this.addContent(this.$container);
 
         this.render();
@@ -140,7 +137,7 @@ export class View extends CollectionView<Model> {
             this.$select.remove();
 
         if ( ! this.$title) {
-            this.$title = HTML.parse(this.hoTag + this.model.attributes.title + this.hcTag);
+            this.$title = h(`h${this.level+1}` as keyof HTMLElementTagNameMap, { class: 'jmv-results-array-heading' }, this.model.attributes.title) as HTMLHeadingElement;
             this.prepend(this.$title);
             const labelId = interactionManager.nextAriaId('label');
             this.$title.setAttribute('id', labelId);
@@ -177,7 +174,7 @@ export class View extends CollectionView<Model> {
 
         if (this.$title) {
             if ( ! this.model.attributes.title)
-                this.$title.innerHTML = '';
+                this.$title.textContent = '';
         }
 
         let selected;
@@ -241,7 +238,7 @@ export class View extends CollectionView<Model> {
 
 
         if (this.hasSelect)
-            this.$select.innerHTML = '';
+            this.$select.replaceChildren();
         for (let element of elements) {
             if (element.visible === 1 || element.visible === 3)
                 continue;
@@ -284,8 +281,12 @@ export class View extends CollectionView<Model> {
             else
                 current.item.removeAttribute('data-active');
 
-            if (this.hasSelect)
-                this.$select.append(HTML.parse('<option value="' + b64.enc(name) + '" ' + selectedAttr + '>' + title + '</option>'));
+            if (this.hasSelect) {
+                let option = h('option', { value: b64.enc(name) }, title);
+                if (selectedAttr)
+                    option.selected = true;
+                this.$select.append(option);
+            }
 
 
             if ((! child.hasAnnotations || child.hasAnnotations()) && this.model.attributes.element.layout !== 1 && element.name)

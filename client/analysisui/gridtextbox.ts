@@ -7,7 +7,7 @@ import OptionControl, { GridOptionControlProperties } from './optioncontrol';
 import { FormatDef, StringFormat } from './formatdef';
 import EnumPropertyFilter from './enumpropertyfilter';
 import interactionManager from '../common/interactionmanager';
-import { HTMLElementCreator as HTML }  from '../common/htmlelementcreator';
+import { attrs, h }  from '../common/htmlelementcreator';
 import { VerticalAlignment } from './layoutcell';
 import { HorizontalAlignment } from './gridcontrol';
 
@@ -135,7 +135,7 @@ export class GridTextbox extends OptionControl<GridTextboxProperties> {
         let startClass = label === '' ? '' : 'silky-option-text-start';
         if (label !== '') {
             this.labelId = interactionManager.nextAriaId('label');
-            this.label = HTML.parse(`<label id="${this.labelId}" for="${id}" class="silky-option-text-label silky-control-margin-${this.getPropertyValue('margin')} ${startClass}" style="display: inline; white-space: nowrap;" >${label}</label>`);
+            this.label = h('label', { id: this.labelId, for: id, class: `silky-option-text-label silky-control-margin-${this.getPropertyValue('margin')} ${startClass}`, style: "display: inline; white-space: nowrap;" }, label);
             this.$label = $(this.label);
             cell = grid.addCell(column, row, this.label);
             cell.blockInsert('right');
@@ -165,11 +165,17 @@ export class GridTextbox extends OptionControl<GridTextboxProperties> {
         cell.blockInsert('left');
 
 
-        let dd = '';
         let suggestedValues = this.getPropertyValue('suggestedValues');
         let optionsName = suggestedValues === null ? null : this.getPropertyValue('name') + '_suggestedValues';
+        this.suggestValues = null;
         if (suggestedValues !== null) {
-            dd = '<div class="jmv-option-text-input-suggested silky-control-margin-' + this.getPropertyValue('margin') + ' ' + startClass + '" id="'+ optionsName + '" style="display: none;">';
+            this.suggestValues = h('div', attrs({
+                class: `jmv-option-text-input-suggested silky-control-margin-${this.getPropertyValue('margin')} ${startClass}`,
+                id: optionsName as string,
+                role: 'listbox',
+            }));
+            this.suggestValues.style.display = 'none';
+
             for (let i = 0; i < suggestedValues.length; i++) {
                 let isObject = false;
                 let value = suggestedValues[i];
@@ -177,28 +183,20 @@ export class GridTextbox extends OptionControl<GridTextboxProperties> {
                     value = suggestedValues[i].value;
                     isObject = true;
                 }
-                dd = dd + '<div class="jmv-option-text-input-suggested-option" data-value="' + value + '">';
-                dd = dd + '    <div class="jmv-option-text-input-suggested-option-value">' + value + '</div>';
+
+                let valueText = String(value);
+                let option = h('div', attrs({ id: `${optionsName}_${i}`, class: 'jmv-option-text-input-suggested-option', 'data-value': valueText, role: 'option' }),
+                    h('div', { class: 'jmv-option-text-input-suggested-option-value' }, valueText));
                 if (isObject && suggestedValues[i].label)
-                    dd = dd + '    <div class="jmv-option-text-input-suggested-option-label">' + this.translate(suggestedValues[i].label) + '</div>';
-                dd = dd + '</div>';
+                    option.append(h('div', { class: 'jmv-option-text-input-suggested-option-label' }, this.translate(suggestedValues[i].label)));
+                this.suggestValues.append(option);
             }
-            dd = dd + '</div>';
         }
-        this.suggestValues = HTML.parse(dd);
         this.$suggestValues = $(this.suggestValues);
 
-        let t = '<input id="'+id+'" class="silky-option-input silky-option-text-input silky-option-value silky-control-margin-' + this.getPropertyValue('margin') + ' ' + startClass + '" style="display: inline;" type="text" spellcheck="false" value="' + this.getValueAsString() + '"';
-
-        // this code block has been commented out because of a bug in electron 3.X that caused a crash if
-        // the validation failed.
-        /*let format = this.getPropertyValue('format');
-        if (format.name === 'number')
-            t += ' pattern="^-?[0-9]*\\.?[0-9]+$"';*/
-        t += '>';
+        this.input = h('input', { id: id, class: `silky-option-input silky-option-text-input silky-option-value silky-control-margin-${this.getPropertyValue('margin')} ${startClass}`, style: "display: inline;", type: "text", spellcheck: "false", value: this.getValueAsString(), role: suggestedValues === null ? undefined : 'combobox', 'aria-expanded': suggestedValues === null ? undefined : 'false', 'aria-controls': suggestedValues === null ? undefined : optionsName as string, 'aria-autocomplete': suggestedValues === null ? undefined : 'list' });
 
 
-        this.input = HTML.parse(t);
         this.$input = $(this.input);
         if (this.getPropertyValue('stretchFactor') === 0)
             this.input.classList.add('silky-option-' + this.getPropertyValue('width') + '-text');
@@ -207,23 +205,95 @@ export class GridTextbox extends OptionControl<GridTextboxProperties> {
         if (this.getPropertyValue('alignText') === 'center')
             this.input.classList.add('centre-text');
 
-        this.input.addEventListener('focus', () => { this.input.select(); });
-        this.input.addEventListener('keyup', (event) => {
-            if (event.keyCode == 13) {
-                this.input.blur();
+        let suggestions: HTMLElement[] = [];
+        let selectedSuggestion = -1;
+
+        let setSelectedSuggestion = (index: number) => {
+            if (suggestions.length === 0)
+                return;
+
+            if (selectedSuggestion >= 0) {
+                suggestions[selectedSuggestion].classList.remove('selected');
+                suggestions[selectedSuggestion].setAttribute('aria-selected', 'false');
             }
-        });
-        this.input.addEventListener('focus', (event) => {
-            if (this.suggestValues)
-                this.suggestValues.style.display = '';
+
+            selectedSuggestion = index;
+
+            if (selectedSuggestion >= 0) {
+                let suggestion = suggestions[selectedSuggestion];
+                suggestion.classList.add('selected');
+                suggestion.setAttribute('aria-selected', 'true');
+                this.input.setAttribute('aria-activedescendant', suggestion.id);
+                suggestion.scrollIntoView({ block: 'nearest' });
+            }
+            else
+                this.input.removeAttribute('aria-activedescendant');
+        };
+
+        let showSuggestions = () => {
+            if (this.suggestValues === null)
+                return;
+            this.suggestValues.style.display = '';
+            this.input.setAttribute('aria-expanded', 'true');
             if (this.fullCtrl)
                 this.fullCtrl.classList.add('float-up');
-        });
-        this.input.addEventListener('blur', (event) => {
-            if (this.suggestValues)
-                this.suggestValues.style.display = 'none';
+        };
+
+        let hideSuggestions = () => {
+            if (this.suggestValues === null)
+                return;
+            this.suggestValues.style.display = 'none';
+            this.input.setAttribute('aria-expanded', 'false');
             if (this.fullCtrl)
                 this.fullCtrl.classList.remove('float-up');
+            setSelectedSuggestion(-1);
+        };
+
+        let commitSuggestion = (suggestion: HTMLElement) => {
+            let value = suggestion.dataset.value ?? '';
+            let parsed = this.parse(value);
+
+            this.setValue(parsed.value);
+            this.input.value = parsed.success === false ? this.getValueAsString() : value;
+            hideSuggestions();
+        };
+
+        this.input.addEventListener('focus', () => {
+            this.input.select();
+            showSuggestions();
+        });
+        this.input.addEventListener('keydown', (event) => {
+            if (suggestions.length === 0) {
+                if (event.key === 'Enter')
+                    this.input.blur();
+                return;
+            }
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                showSuggestions();
+                setSelectedSuggestion(selectedSuggestion < suggestions.length - 1 ? selectedSuggestion + 1 : 0);
+            }
+            else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                showSuggestions();
+                setSelectedSuggestion(selectedSuggestion > 0 ? selectedSuggestion - 1 : suggestions.length - 1);
+            }
+            else if (event.key === 'Enter') {
+                if (selectedSuggestion >= 0) {
+                    event.preventDefault();
+                    commitSuggestion(suggestions[selectedSuggestion]);
+                }
+                else
+                    this.input.blur();
+            }
+            else if (event.key === 'Escape') {
+                event.preventDefault();
+                hideSuggestions();
+            }
+        });
+        this.input.addEventListener('blur', () => {
+            hideSuggestions();
         });
         this.input.addEventListener('change', (event) => {
 
@@ -241,25 +311,21 @@ export class GridTextbox extends OptionControl<GridTextboxProperties> {
         });
 
         if (this.suggestValues) {
-            let suggestions = this.suggestValues.querySelectorAll<HTMLElement>('.jmv-option-text-input-suggested-option')
+            suggestions = Array.from(this.suggestValues.querySelectorAll<HTMLElement>('.jmv-option-text-input-suggested-option'));
             suggestions.forEach((el) => {
+                el.addEventListener('mouseenter', () => {
+                    setSelectedSuggestion(suggestions.indexOf(el));
+                });
                 el.addEventListener('mousedown', (event) => {
-                    let option = event.target;
-                    if (option instanceof HTMLElement) {
-                        let value = option.dataset.value;
-                        let parsed = this.parse(value);
-
-                        this.setValue(parsed.value);
-                        if (parsed.success === false)
-                            this.input.value = this.getValueAsString();
-                    }
+                    event.preventDefault();
+                    commitSuggestion(el);
                 });
             });
         }
 
         let $ctrl = this.input;
         if (suggestedValues !== null) {
-            $ctrl = HTML.parse('<div role="presentation"></div>');
+            $ctrl = h('div', { role: "presentation", class: "jmv-option-text-input-suggested-container"} );
             $ctrl.append(this.input);
             $ctrl.append(this.suggestValues);
             this.fullCtrl = $ctrl;
@@ -274,7 +340,7 @@ export class GridTextbox extends OptionControl<GridTextboxProperties> {
         if (suffix !== '') {
             startClass = suffix === '' ? '' : 'silky-option-text-end';
 
-            this.suffix = HTML.parse('<div class="silky-option-suffix silky-control-margin-' + this.getPropertyValue('margin') + ' ' + startClass + '" style="display: inline; white-space: nowrap;" >' + _(suffix) + '</div>');
+            this.suffix = h('div', { class: `silky-option-suffix silky-control-margin-${this.getPropertyValue('margin')} ${startClass}`, style: "display: inline; white-space: nowrap;" }, _(suffix));
             this.$suffix = $(this.suffix);
             cell = subgrid.addCell(1, 0, this.suffix);
             cell.setAlignment('left', 'center');

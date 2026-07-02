@@ -2,7 +2,7 @@
 
 import OptionControl, { GridOptionControlProperties } from './optioncontrol';
 import { BooleanFormat, FormatDef } from './formatdef';
-import { HTMLElementCreator as HTML }  from '../common/htmlelementcreator';
+import { h }  from '../common/htmlelementcreator';
 
 
 export type GridActionButtonProperties = GridOptionControlProperties<boolean> & {
@@ -15,7 +15,7 @@ export class GridActionButton extends OptionControl<GridActionButtonProperties> 
     constructor(params: GridActionButtonProperties, parent) {
         super(params, parent);
         
-        this.setRootElement(HTML.parse('<button class="jmv-action-button"></button>'));
+        this.setRootElement(h('button', { class: "jmv-action-button" }));
 
         let horizontalAlign = this.getPropertyValue("horizontalAlignment");
         this.el.setAttribute('data-horizontal-align', horizontalAlign);
