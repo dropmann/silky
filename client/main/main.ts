@@ -27,6 +27,7 @@ import Instance from './instance';
 import Notify from './notification';
 import { UserFacingError } from './errors';
 import interactionManager, { keyTips, shortcuts } from '../common/interactionmanager';
+import { AuxShell, createAuxViews } from './auxiliary';
 
 import './utils/headeralert';
 import type { HeaderAlert } from './utils/headeralert';
@@ -543,15 +544,19 @@ ready(async() => {
             splitPanel.setMode('mixed');
     });
 
-    splitPanel.addPanel('main-table', { adjustable: true, fixed: false, anchor: 'left' });
-    splitPanel.addPanel('main-options', { adjustable: false, fixed: true, anchor: 'right', visible: false });
+    splitPanel.addPanel('main-table', { adjustable: true, fixed: false, anchor: 'left', role: 'data', placement: 'left' });
+    splitPanel.addPanel('main-options', { adjustable: false, fixed: true, anchor: 'right', visible: false, role: 'options', placement: 'center' });
     
-    let resultsPanel = splitPanel.addPanel('results', { adjustable: true, fixed: true, anchor: 'right' });
+    let resultsPanel = splitPanel.addPanel('results', { adjustable: true, fixed: true, anchor: 'right', role: 'results', placement: 'right' });
     let resultsView = new ResultsView();
     resultsView.setAttribute('role', 'region');
     resultsView.setAttribute('aria-label', 'Analyses Results');
     resultsView.setAttribute('aria-live', 'polite');
     resultsPanel.append(resultsView);
+
+    const auxShell = new AuxShell(splitPanel, createAuxViews(_, instance));
+    auxShell.mount();
+    auxShell.initialise('assistant');
 
     let $mainTable = document.querySelector('#main-table');
     $mainTable.setAttribute('role', 'region');
