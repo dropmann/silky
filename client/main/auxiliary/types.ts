@@ -1,4 +1,5 @@
 import interactionManager, { type FocusLoop } from '../../common/interactionmanager';
+import type Instance from '../instance';
 
 export type AuxViewId =
     | 'assistant'
@@ -23,6 +24,17 @@ export type AuxPresentation = 'hidden' | 'overlay' | 'docked';
 export type AuxSide = 'left' | 'right';
 
 export type AuxTranslate = (text: string, data?: { [key: string]: any }) => string;
+
+export type AuxEntryContext = {
+    t: AuxTranslate;
+    instance: Instance;
+};
+
+export type AuxEntry = {
+    id: AuxViewId;
+    order: number;
+    create: (context: AuxEntryContext) => AuxView;
+};
 
 export class AuxView {
     id: AuxViewId;

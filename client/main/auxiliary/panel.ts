@@ -26,6 +26,26 @@ export default class AuxPanel {
         return icon;
     }
 
+    createDockSideIcon(side: AuxSide) {
+        return this.createActionIcon(side === 'left' ? `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4.5" y="5.5" width="15" height="13" rx="2" />
+                <path d="M9 5.5v13" />
+                <path d="M6.5 8.5h.01" />
+                <path d="M6.5 11.5h.01" />
+                <path d="M6.5 14.5h.01" />
+            </svg>
+        ` : `
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4.5" y="5.5" width="15" height="13" rx="2" />
+                <path d="M15 5.5v13" />
+                <path d="M17.5 8.5h.01" />
+                <path d="M17.5 11.5h.01" />
+                <path d="M17.5 14.5h.01" />
+            </svg>
+        `);
+    }
+
     constructor(views: AuxView[]) {
         this.element = document.createElement('aside');
         this.element.id = 'aux-panel';
@@ -70,12 +90,7 @@ export default class AuxPanel {
         this.sideButton = document.createElement('button');
         this.sideButton.className = 'aux-panel-action';
         this.sideButton.type = 'button';
-        this.sideButton.append(this.createActionIcon(`
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M7 12h10" />
-                <path d="m13 8 4 4-4 4" />
-            </svg>
-        `));
+        this.sideButton.append(this.createDockSideIcon('left'));
 
         this.closeButton = document.createElement('button');
         this.closeButton.className = 'aux-panel-action';
@@ -159,20 +174,11 @@ export default class AuxPanel {
     }
 
     setSide(side: AuxSide) {
-        const label = side === 'right' ? 'Move panel to left side' : 'Move panel to right side';
+        const targetSide = side === 'right' ? 'left' : 'right';
+        const label = targetSide === 'left' ? 'Move panel to left side' : 'Move panel to right side';
         this.sideButton.setAttribute('aria-label', label);
         this.sideButton.title = label;
-        this.sideButton.replaceChildren(this.createActionIcon(side === 'right' ? `
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 12H7" />
-                <path d="m11 8-4 4 4 4" />
-            </svg>
-        ` : `
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M7 12h10" />
-                <path d="m13 8 4 4-4 4" />
-            </svg>
-        `));
+        this.sideButton.replaceChildren(this.createDockSideIcon(targetSide));
     }
 
     setActiveView(view: AuxViewId | null) {
