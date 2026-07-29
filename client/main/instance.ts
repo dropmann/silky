@@ -79,6 +79,7 @@ export type InstanceOpenStream = ProgressStream<IInstanceOpenProgress, IInstance
 
 export interface IModuleInteractions {
     installModule: (name: string) => QQ.Promise<void>,
+    cancelInstallModule: (name: string) => QQ.Promise<void>,
     uninstallModule: (name: string) => QQ.Promise<void>,
     setModuleVisibility: (name: string, value: boolean) =>  QQ.Promise<void>,
     retrieveAvailableModules: () => QQ.Promise<void>,
@@ -698,6 +699,22 @@ export class Instance extends EventMap<IInstanceModel> implements IBackstageSupp
 
         let moduleRequest = new coms.Messages.ModuleRR();
         moduleRequest.command = coms.Messages.ModuleRR.ModuleCommand.INSTALL;
+        moduleRequest.path = filePath;
+
+        let request = new coms.Messages.ComsMessage();
+        request.payload = moduleRequest.toArrayBuffer();
+        request.payloadType = 'ModuleRR';
+        request.instanceId = this._instanceId;
+
+        return coms.send(request);
+    }
+
+    cancelInstallModule(filePath: string) {
+
+        let coms = this.attributes.coms;
+
+        let moduleRequest = new coms.Messages.ModuleRR();
+        moduleRequest.command = coms.Messages.ModuleRR.ModuleCommand.CANCEL_INSTALL;
         moduleRequest.path = filePath;
 
         let request = new coms.Messages.ComsMessage();

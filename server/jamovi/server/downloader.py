@@ -1,5 +1,6 @@
 
 import ssl
+from asyncio import CancelledError
 from asyncio import create_task
 from functools import partial
 from tempfile import TemporaryFile
@@ -50,11 +51,16 @@ class Download:
         info.stream.write((0, 1))
         task = create_task(self._download(url, info))
         task.add_done_callback(partial(self._complete, info))
+        info.stream.add_done_callback(lambda f: task.cancel() if f.cancelled() else None)
         return info.stream
 
     def _complete(self, info, result):
+        if info.stream.done():
+            return
         try:
             result.result()
+        except CancelledError:
+            info.stream.cancel()
         except Exception as e:
             info.stream.set_exception(e)
 
