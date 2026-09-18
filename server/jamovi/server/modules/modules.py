@@ -5,6 +5,7 @@ import logging
 import shutil
 import json
 from zipfile import ZipFile
+from asyncio import CancelledError
 from asyncio import ensure_future as create_task
 from collections import namedtuple
 from functools import lru_cache
@@ -432,13 +433,27 @@ class Modules:
                 await self.install_from_file(path)
                 out_stream.set_result((1, 1))
 
+            except CancelledError:
+                if in_stream:
+                    in_stream.cancel()
+                if not out_stream.done():
+                    out_stream.cancel()
+                raise
+
             except Exception as e:
                 if in_stream:
                     in_stream.cancel()
                 out_stream.set_exception(e)
 
+        def complete_install(future):
+            try:
+                future.result()
+            except CancelledError:
+                pass
+
         t = create_task(download_and_install(path))
-        t.add_done_callback(lambda f: f.result())
+        t.add_done_callback(complete_install)
+        out_stream.add_done_callback(lambda f: t.cancel() if f.cancelled() else None)
 
         return out_stream
 
