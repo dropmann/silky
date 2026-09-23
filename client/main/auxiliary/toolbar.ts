@@ -249,4 +249,14 @@ export default class AuxToolbar {
             button.setAttribute('aria-pressed', selected ? 'true' : 'false');
         });
     }
+
+    dispose() {
+        this.clearDropIndicator();
+        this.clearDragGhost();
+        this.clearDragCursor();
+        this.buttons.clear();
+        this.loop.unregister();
+        this.element.remove();
+        this.onToggleView = null;
+    }
 }

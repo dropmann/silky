@@ -1,10 +1,12 @@
 import interactionManager, { type FocusLoop } from '../../common/interactionmanager';
 import type Instance from '../instance';
+import type Selection from '../selection';
 
 export type AuxViewId =
     | 'assistant'
     | 'results-toc'
     | 'dataset'
+    | 'dataset-summary-extension'
     | 'analysis'
     | 'help'
     | 'variable-info'
@@ -28,6 +30,7 @@ export type AuxTranslate = (text: string, data?: { [key: string]: any }) => stri
 export type AuxEntryContext = {
     t: AuxTranslate;
     instance: Instance;
+    selection: Selection;
 };
 
 export type AuxEntry = {
@@ -44,6 +47,7 @@ export class AuxView {
     element: HTMLElement | null = null;
     bodyElement: HTMLElement | null = null;
     loop: FocusLoop | null = null;
+    disposed = false;
 
     constructor(id: AuxViewId, t: AuxTranslate) {
         this.id = id;
@@ -95,6 +99,22 @@ export class AuxView {
     onHide(): void {
     }
 
+    onDispose(): void {
+    }
+
+    dispose(): void {
+        if (this.disposed)
+            return;
+
+        this.disposed = true;
+        this.onDispose();
+        this.loop?.unregister();
+        this.loop = null;
+        this.element?.remove();
+        this.element = null;
+        this.bodyElement = null;
+    }
+
     focus(): void {
         if (this.loop !== null)
             this.loop.activate();
@@ -120,6 +140,8 @@ export class AuxView {
     }
 
     createPanelElement(): HTMLElement {
+        this.disposed = false;
+
         if (this.element !== null)
             return this.element;
 

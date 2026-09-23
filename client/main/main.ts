@@ -273,6 +273,8 @@ const highContrast = new HighContrast(document.body, document.body, () => {
 }, true);
 
 ready(async() => {
+    let auxShell: AuxShell | null = null;
+
     if (navigator.platform === 'Win32')
         document.body.classList.add('windows');
     else if (navigator.platform == 'MacIntel')
@@ -323,7 +325,7 @@ ready(async() => {
     }, _('Open application menu'));
     shortcuts.register('Alt+KeyL', () => { // navigate to Modules library
         interactionManager.setMode('keyboard');
-        ribbonModel.getTab('analyses').store.show(1);
+        auxShell?.toggleView('modules');
     }, _('Open the jamovi module library'));
     shortcuts.register('Alt+ArrowLeft', () => { // navigate to Options panel
         let iframe = document.querySelector(`.results-loop-highlighted-item > iframe`);
@@ -561,10 +563,6 @@ ready(async() => {
     resultsView.setAttribute('aria-live', 'polite');
     resultsPanel.append(resultsView);
 
-    const auxShell = new AuxShell(splitPanel, createAuxViews(_, instance));
-    auxShell.mount();
-    auxShell.initialise('assistant');
-
     let $mainTable = document.querySelector('#main-table');
     $mainTable.setAttribute('role', 'region');
     $mainTable.setAttribute('aria-label', 'Spreadsheet');
@@ -699,6 +697,10 @@ ready(async() => {
 
     let selection = new Selection(dataSetModel);
     let viewController = new ViewController(dataSetModel, selection, instance.settings());
+
+    auxShell = new AuxShell(splitPanel, createAuxViews(_, instance, selection));
+    auxShell.mount();
+    auxShell.initialise('assistant');
 
     let mainTable = new TableView(dataSetModel, viewController, instance.settings());
     mainTable.id = 'spreadsheet';

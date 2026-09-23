@@ -2,6 +2,7 @@ import AnalysisAuxView from './analysis';
 import AssistantAuxView from './assistant';
 import DataQualityAuxView from './data-quality';
 import DatasetAuxView from './dataset';
+import datasetSummaryExtensionEntry from './entries/dataset-summary-extension';
 import GuidanceAuxView from './guidance';
 import HelpAuxView from './help';
 import HistoryAuxView from './history';
@@ -15,6 +16,7 @@ import SearchAuxView from './search';
 import TransformsAuxView from './transforms';
 import VariableInfoAuxView from './variable-info';
 import type Instance from '../instance';
+import type Selection from '../selection';
 import type { AuxEntry, AuxTranslate, AuxView } from './types';
 
 const createEntry = (
@@ -31,6 +33,7 @@ export const auxEntries: AuxEntry[] = [
     createEntry('assistant', 10, ({ t }) => new AssistantAuxView(t)),
     createEntry('results-toc', 20, ({ t, instance }) => new ResultsTocAuxView(t, instance)),
     createEntry('dataset', 30, ({ t, instance }) => new DatasetAuxView(t, instance)),
+    datasetSummaryExtensionEntry,
     createEntry('analysis', 40, ({ t, instance }) => new AnalysisAuxView(t, instance)),
     createEntry('help', 50, ({ t }) => new HelpAuxView(t)),
     createEntry('variable-info', 60, ({ t }) => new VariableInfoAuxView(t)),
@@ -46,8 +49,8 @@ export const auxEntries: AuxEntry[] = [
     createEntry('review', 160, ({ t }) => new ReviewAuxView(t)),
 ];
 
-export function createAuxViews(t: AuxTranslate, instance: Instance): AuxView[] {
-    const context = { t, instance };
+export function createAuxViews(t: AuxTranslate, instance: Instance, selection: Selection): AuxView[] {
+    const context = { t, instance, selection };
     return auxEntries
         .slice()
         .sort((left, right) => left.order - right.order)

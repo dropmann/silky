@@ -385,6 +385,72 @@ const variable = await jamovi.variables.get('age');
 const selected = await jamovi.variables.getSelected();
 ```
 
+`variables.get()` requires `read:variables` and accepts a variable name, id, or object selector:
+
+```ts
+await jamovi.variables.get('score');
+await jamovi.variables.get(3);
+await jamovi.variables.get({ id: 3 });
+await jamovi.variables.get({ name: 'score' });
+```
+
+It returns the same safe variable metadata shape as `variables.list()`, or `null` if the variable cannot be found or resolves to a filter column.
+
+`variables.getSelected()` requires `read:selectedVariable` and returns a safe selection context:
+
+```ts
+{
+  row: 0,
+  column: {
+    id: 3,
+    name: 'score',
+    dataType: 'decimal',
+    measureType: 'continuous',
+    isBlank: false,
+    isFilter: false
+  },
+  columns: [
+    {
+      id: 3,
+      name: 'score',
+      dataType: 'decimal',
+      measureType: 'continuous',
+      isBlank: false,
+      isFilter: false
+    }
+  ],
+  range: {
+    rowStart: 0,
+    rowEnd: 0,
+    columnStart: 2,
+    columnEnd: 2,
+    focusRow: 0,
+    focusColumn: 2
+  },
+  ranges: [
+    {
+      rowStart: 0,
+      rowEnd: 0,
+      columnStart: 2,
+      columnEnd: 2,
+      focusRow: 0,
+      focusColumn: 2
+    }
+  ],
+  hasSubselections: false
+}
+```
+
+`column` is the focused variable. `columns` contains the unique selected variables across the primary selection and subselections, excluding filter columns. `range` is the primary selection range, and `ranges` contains the primary range plus all subselection ranges.
+
+The host emits `selectedVariableChanged` with the same shape whenever the focused variable changes:
+
+```ts
+jamovi.on('selectedVariableChanged', selection => {
+    console.log(selection.column?.name);
+});
+```
+
 Analyses:
 
 ```ts
@@ -403,6 +469,59 @@ await jamovi.analyses.create({
 
 await jamovi.analyses.select({
     id: 12
+});
+```
+
+`analyses.list()` requires `read:analyses` and returns safe metadata for analyses in the document:
+
+```ts
+[
+  {
+    id: 12,
+    name: 'descriptives',
+    ns: 'jmv',
+    title: 'Descriptives',
+    status: 2,
+    enabled: true,
+    revision: 4,
+    index: 0,
+    selected: true,
+    missingModule: false,
+    arbitraryCode: false
+  }
+]
+```
+
+The host emits `analysesChanged` with the same list when analysis metadata changes:
+
+```ts
+jamovi.on('analysesChanged', analyses => {
+    console.log(analyses.length);
+});
+```
+
+`analyses.getSelected()` requires `read:selectedAnalysis` and returns safe metadata for the selected analysis, or `null` when nothing is selected:
+
+```ts
+{
+  id: 12,
+  name: 'descriptives',
+  ns: 'jmv',
+  title: 'Descriptives',
+  status: 2,
+  enabled: true,
+  revision: 4,
+  index: 0,
+  missingModule: false,
+  arbitraryCode: false
+}
+```
+
+The host emits `selectedAnalysisChanged` with the same shape:
+
+```ts
+jamovi.on('selectedAnalysisChanged', analysis => {
+    console.log(analysis?.title);
 });
 ```
 

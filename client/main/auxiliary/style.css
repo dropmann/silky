@@ -400,6 +400,18 @@ body.aux-toolbar-reordering.aux-toolbar-no-drop * {
     display: block;
 }
 
+.aux-extension-sandbox-host {
+    display: grid;
+    min-height: 260px;
+}
+
+.aux-extension-sandbox-frame {
+    width: 100%;
+    min-height: 260px;
+    border: none;
+    background: #F8FAFD;
+}
+
 .aux-panel-view h2 {
     display: none;
 }

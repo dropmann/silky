@@ -22,6 +22,9 @@ export default class AuxShell {
     resizeStartWidth = this.width;
     defaultTitle = 'Assistant';
     lastInternalPointerDownAt = 0;
+    private markInternalPointerDown: () => void;
+    private handleDocumentPointerDown: (event: PointerEvent) => void;
+    private handlePanelFocusOut: () => void;
 
     constructor(splitPanel: SplitPanel, views: AuxView[]) {
         this.splitPanel = splitPanel;
@@ -49,19 +52,20 @@ export default class AuxShell {
         this.panel.onResizeMove = event => this.handleResizeMove(event);
         this.panel.onResizeEnd = event => this.handleResizeEnd(event);
 
-        const markInternalPointerDown = () => {
+        this.markInternalPointerDown = () => {
             this.lastInternalPointerDownAt = Date.now();
         };
-        this.panel.element.addEventListener('pointerdown', markInternalPointerDown, true);
-        this.toolbar.element.addEventListener('pointerdown', markInternalPointerDown, true);
+        this.panel.element.addEventListener('pointerdown', this.markInternalPointerDown, true);
+        this.toolbar.element.addEventListener('pointerdown', this.markInternalPointerDown, true);
 
-        document.addEventListener('pointerdown', event => {
+        this.handleDocumentPointerDown = event => {
             const target = event.target as Node;
             if (this.presentation === 'overlay' && ! this.panel.contains(target) && ! this.toolbar.contains(target))
                 this.closeOverlay();
-        }, true);
+        };
+        document.addEventListener('pointerdown', this.handleDocumentPointerDown, true);
 
-        this.panel.element.addEventListener('focusout', () => {
+        this.handlePanelFocusOut = () => {
             setTimeout(() => {
                 if (this.presentation !== 'overlay')
                     return;
@@ -75,7 +79,8 @@ export default class AuxShell {
 
                 this.closeOverlay();
             }, 0);
-        });
+        };
+        this.panel.element.addEventListener('focusout', this.handlePanelFocusOut);
     }
 
     mount() {
@@ -211,5 +216,21 @@ export default class AuxShell {
 
         this.resizing = false;
         this.panel.resizeHandle.releasePointerCapture(event.pointerId);
+    }
+
+    dispose() {
+        this.setState(this.activeView, 'hidden');
+        this.panel.element.removeEventListener('pointerdown', this.markInternalPointerDown, true);
+        this.toolbar.element.removeEventListener('pointerdown', this.markInternalPointerDown, true);
+        this.panel.element.removeEventListener('focusout', this.handlePanelFocusOut);
+        document.removeEventListener('pointerdown', this.handleDocumentPointerDown, true);
+
+        for (const view of this.views)
+            view.dispose();
+
+        this.panel.dispose();
+        this.toolbar.dispose();
+        this.viewMap.clear();
+        this.activeView = null;
     }
 }

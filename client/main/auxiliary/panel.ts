@@ -189,4 +189,16 @@ export default class AuxPanel {
             element.setAttribute('aria-hidden', active ? 'false' : 'true');
         });
     }
+
+    dispose() {
+        this.viewElements.clear();
+        this.loop.unregister();
+        this.element.remove();
+        this.onTogglePinned = null;
+        this.onToggleSide = null;
+        this.onClose = null;
+        this.onResizeStart = null;
+        this.onResizeMove = null;
+        this.onResizeEnd = null;
+    }
 }
