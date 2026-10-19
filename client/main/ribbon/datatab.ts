@@ -65,6 +65,17 @@ export class DataTab extends RibbonTab {
                 ]}),
             ]}),
             new RibbonSeparator(),
+            new RibbonGroup({ title: _('Sort'), items: [
+                new RibbonGroup({ orientation: 'vertical', margin: 'large', items: [
+                    new RibbonButton({ title: _('Ascending'), ariaLabel: _('Sort the selected variables ascending'), name: 'sortAsc', keyTipKey: 'oa', keyTipPosition: { x: '25%', y: '25%' } }),
+                    new RibbonButton({ title: _('Descending'), ariaLabel: _('Sort the selected variables descending'), name: 'sortDesc', keyTipKey: 'od', keyTipPosition: { x: '25%', y: '75%' } }),
+                ]}),
+                new RibbonGroup({ orientation: 'vertical', margin: 'large', items: [
+                    new RibbonButton({ title: _('Clear'), ariaLabel: _('Clear the sort of the selected variables'), name: 'sortClear', keyTipKey: 'oc', keyTipPosition: { x: '25%', y: '25%' } }),
+                    new RibbonButton({ title: _('Clear All'), ariaLabel: _('Clear all sorting'), name: 'sortClearAll', keyTipKey: 'ox', keyTipPosition: { x: '25%', y: '75%' } }),
+                ]}),
+            ]}),
+            new RibbonSeparator(),
             new RibbonGroup({ title: _('Rows'), items : [
                 new RibbonButton({ title: _('Filters'), ariaLabel: _('Filters'), name: 'editFilters', margin: 'large', size: 'large', keyTipKey: 'f', keyTipPosition: { x: '50%', y: '90%' } }),
                 new RibbonGroup({ orientation: 'vertical', margin: 'large', items: [

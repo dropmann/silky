@@ -17,6 +17,8 @@ import os
 import os.path
 import sys
 
+import numpy
+
 from enum import Enum
 
 ctypedef char* charptr
@@ -654,6 +656,29 @@ cdef class Column:
             return self._this.raw[double](index)
         else:
             return self._this.raw[int](index)
+
+    def raw_values(self):
+        """all the raw values, as a float64 (decimal) or int32 numpy array
+
+        text columns with an ID measure type store strings, and have no
+        meaningful raw values; use get_values() for these
+        """
+        cdef int n = self._this.rowCount()
+        cdef int i
+        cdef double[:] d_values
+        cdef int[:] i_values
+
+        if self._this.dataType() == CDataTypeDecimal:
+            values = numpy.empty(n, dtype=numpy.float64)
+            d_values = values
+            for i in range(n):
+                d_values[i] = self._this.raw[double](i)
+        else:
+            values = numpy.empty(n, dtype=numpy.int32)
+            i_values = values
+            for i in range(n):
+                i_values[i] = self._this.raw[int](i)
+        return values
 
     def set_data_type(self, data_type):
         self._this.setDataType(data_type.value)

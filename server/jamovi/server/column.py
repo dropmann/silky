@@ -4,6 +4,8 @@ import re
 from collections import namedtuple
 from typing import Iterable
 
+import numpy
+
 from jamovi.core import ColumnType
 from jamovi.core import MeasureType
 from jamovi.core import DataType
@@ -492,6 +494,12 @@ class Column:
         if self._child is not None:
             return self._child.raw(index)
         return -2147483648
+
+    def raw_values(self):
+        """all the raw values, as a float64 (decimal) or int32 numpy array"""
+        if self._child is not None:
+            return self._child.raw_values()
+        return numpy.full(self.row_count, -2147483648, dtype=numpy.int32)
 
     def set_data_type(self, data_type):
         if self._child is None:

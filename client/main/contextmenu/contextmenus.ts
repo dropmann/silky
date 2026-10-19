@@ -75,6 +75,20 @@ export const createVariableMenuItems = function(plural:boolean, noData) {
         ]}),
         new RibbonSeparator(),
         new RibbonGroup({ orientation: 'vertical', items: [
+            new ContextMenuButton({ title: _('Sort'), name: 'sort', subItems: [
+                new RibbonGroup({ orientation: 'vertical', items: [
+                    new ContextMenuButton({ title: _('Ascending'), name: 'sortAsc', iconId: 'sortAsc' }),
+                    new ContextMenuButton({ title: _('Descending'), name: 'sortDesc', iconId: 'sortDesc' })
+                ]}),
+                new RibbonSeparator(),
+                new RibbonGroup({ orientation: 'vertical', items: [
+                    new ContextMenuButton({ title: _('Clear'), name: 'sortClear', iconId: 'sortClear' }),
+                    new ContextMenuButton({ title: _('Clear All'), name: 'sortClearAll', iconId: 'sortClearAll' })
+                ]})
+            ]})
+        ]}),
+        new RibbonSeparator(),
+        new RibbonGroup({ orientation: 'vertical', items: [
             new ContextMenuButton({ title: _('Setup...'), name: 'editVar' })
         ]}),
         new RibbonGroup({ orientation: 'vertical', items: [

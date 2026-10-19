@@ -3,6 +3,8 @@ from typing import Protocol
 from typing import Iterable
 from abc import abstractmethod
 
+import numpy
+
 from .core import DataType
 from .core import ColumnType
 from .core import MeasureType
@@ -244,6 +246,11 @@ class Column(Protocol):
     @abstractmethod
     def raw(self, index):
         raise NotImplementedError
+
+    def raw_values(self) -> numpy.ndarray:
+        """all the raw values, as a float64 (decimal) or int32 numpy array"""
+        dtype = numpy.float64 if self.data_type is DataType.DECIMAL else numpy.int32
+        return numpy.fromiter((self.raw(i) for i in range(self.row_count)), dtype=dtype, count=self.row_count)
 
     @abstractmethod
     def set_data_type(self, data_type):
