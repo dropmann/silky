@@ -15,8 +15,6 @@ from jamovi.server.dataset import Store
 from jamovi.server.dataset import ColumnRef
 from jamovi.server.dataset import CellValueArea
 
-import numpy
-
 from .transform import Transform
 from .rowtracker import RowTracker
 from .column import Column
@@ -59,41 +57,6 @@ class _RWLock:
             self._condition.notify_all()
 
 
-def _sort_key(column, descending: bool) -> numpy.ndarray:
-    """a key for sorting a column's rows; missing values sort last
-
-    ordinal columns sort by the order of their levels, other text columns
-    by their labels, and other columns by their values
-    """
-    if column.data_type is DataType.DECIMAL:
-        values = column.raw_values()
-        missing = numpy.isnan(values)
-    elif column.data_type is DataType.TEXT and column.measure_type is MeasureType.ID:
-        strings = numpy.array(column.get_values(0, column.row_count), dtype=str)
-        missing = strings == ''
-        values = numpy.unique(strings, return_inverse=True)[1]
-    else:
-        values = column.raw_values()
-        missing = values == -2147483648
-        levels = column.levels
-        if len(levels) > 0 and (column.measure_type is MeasureType.ORDINAL or column.data_type is DataType.TEXT):
-            if column.measure_type is MeasureType.ORDINAL:
-                level_keys = numpy.arange(len(levels))
-            else:
-                labels = numpy.array([ level[1] for level in levels ], dtype=str)
-                level_keys = numpy.unique(labels, return_inverse=True)[1]
-            level_values = numpy.array([ level[0] for level in levels ], dtype=numpy.int32)
-            by_value = numpy.argsort(level_values)
-            positions = numpy.searchsorted(level_values, values, sorter=by_value)
-            values = level_keys[by_value[positions.clip(0, len(levels) - 1)]]
-
-    key = values.astype(numpy.float64)
-    if descending:
-        numpy.negative(key, out=key)
-    key[missing] = numpy.inf
-    return key
-
-
 class DataSetModel:
     """A single data set (one table) within a project.
 
@@ -121,9 +84,8 @@ class DataSetModel:
     _log: object
     _row_tracker: RowTracker
     _sort_keys: list[tuple[int, bool]]
-    _view_order: numpy.ndarray | None
-    _view_lookup: numpy.ndarray | None
     _view_order_valid: bool
+    _view_remapped: bool
 
     def __init__(self, project: Project | None = None):
         self._project = project
@@ -134,9 +96,8 @@ class DataSetModel:
         self._reuseable_virtual_ids = deque([])
         self._filters_visible = True
         self._sort_keys = [ ]
-        self._view_order = None  # the data set rows in view order; None if the same
-        self._view_lookup = None  # the view row of each data set row; -1 if not displayed
-        self._view_order_valid = True
+        self._view_order_valid = False
+        self._view_remapped = False  # whether the view order was remapped when last refreshed
 
         self._perms = Permissions.retrieve()
         # we check permissions in here so the file importers
@@ -257,49 +218,13 @@ class DataSetModel:
         """rebuild the view order if invalidated; returns whether it changed"""
         if self._view_order_valid:
             return False
-        old_order = self._view_order
-        self._view_order, self._view_lookup = self._build_view_order()
+        changed = self._dataset.refresh_view_order(self._sort_keys, self.ex_filtered and self.has_filters)
         self._view_order_valid = True
-        if old_order is None or self._view_order is None:
-            return old_order is not self._view_order
-        return not numpy.array_equal(old_order, self._view_order)
-
-    def _build_view_order(self) -> tuple[numpy.ndarray | None, numpy.ndarray | None]:
-        if not self.is_view_remapped:
-            return None, None
-
-        n_rows = self.row_count
-        rows = None  # all rows
-
-        if self.ex_filtered and self.has_filters:
-            displayed = numpy.ones(n_rows, dtype=bool)
-            for column in self:
-                if not column.is_filter:
-                    break
-                if column.active:
-                    displayed &= (column.raw_values() == 1)
-            rows = numpy.flatnonzero(displayed).astype(numpy.int32)
-
-        keys = [ _sort_key(self.get_column_by_id(column_id), descending) for column_id, descending in self._sort_keys ]
-        if rows is not None:
-            keys = [ key[rows] for key in keys ]
-
-        # stable, so tied rows retain the data set order
-        if len(keys) == 1:
-            order = numpy.argsort(keys[0], kind='stable')
-        elif len(keys) > 1:
-            order = numpy.lexsort(keys[::-1])  # lexsort sorts by the last key first
-        else:
-            order = None
-
-        if rows is None:
-            rows = order.astype(numpy.int32) if order is not None else numpy.arange(n_rows, dtype=numpy.int32)
-        elif order is not None:
-            rows = rows[order]
-
-        lookup = numpy.full(n_rows, -1, dtype=numpy.int32)
-        lookup[rows] = numpy.arange(len(rows), dtype=numpy.int32)
-        return rows, lookup
+        # rows added or removed change the view order, but this only
+        # matters to the client when view rows differ from data set rows
+        was_remapped = self._view_remapped
+        self._view_remapped = self.is_view_remapped
+        return changed and (was_remapped or self._view_remapped)
 
     def _ensure_view_order(self):
         if not self._view_order_valid:
@@ -309,9 +234,7 @@ class DataSetModel:
     def view_row_count(self) -> int:
         """the number of data set rows displayed"""
         self._ensure_view_order()
-        if self._view_order is None:
-            return self.row_count
-        return len(self._view_order)
+        return self._dataset.view_row_count
 
     def get_data_indices(self, view_start, view_count):
         """the data set rows displayed at a range of view rows
@@ -320,22 +243,16 @@ class DataSetModel:
         non-existent) rows beyond the end of the data set
         """
         self._ensure_view_order()
-        if self._view_order is None:
-            return list(range(view_start, view_start + view_count))
-        n_view = len(self._view_order)
+        n_view = self._dataset.view_row_count
         view_end = view_start + view_count
-        indices = self._view_order[view_start:min(view_end, n_view)].tolist()
+        indices = self._dataset.get_data_indices(view_start, view_count)
         indices.extend(range(self.row_count + max(view_start, n_view) - n_view, self.row_count + view_end - n_view))
         return indices
 
     def get_view_indices(self, data_indices):
         """the view rows displaying data set rows (omitting those not displayed)"""
         self._ensure_view_order()
-        if self._view_lookup is None:
-            return list(data_indices)
-        n_rows = len(self._view_lookup)
-        view_rows = (self._view_lookup[index] for index in data_indices if index < n_rows)
-        return [ int(view_row) for view_row in view_rows if view_row >= 0 ]
+        return self._dataset.get_view_indices(data_indices)
 
     def set_values(self, columns: ColumnRef, row_offset: int, values: CellValueArea):
         self._dataset.set_values(columns, row_offset, values)
@@ -531,14 +448,17 @@ class DataSetModel:
     def set_row_count(self, count):
         self._check_perms(row_count=count)
         self._dataset.set_row_count(count)
+        self._view_order_valid = False
 
     def delete_rows(self, start, end):
         self._dataset.delete_rows(start, end)
+        self._view_order_valid = False
         self._recalc_all()
 
     def insert_rows(self, start, count):
         self._check_perms(row_count=self.row_count + count)
         self._dataset.insert_rows(start, start + count - 1)
+        self._view_order_valid = False
         self._recalc_all()
 
     def insert_column(self, index, name=None, import_name=None, id=0):
@@ -612,6 +532,7 @@ class DataSetModel:
 
     def refresh_filter_state(self):
         self._dataset.refresh_filter_state()
+        self._view_order_valid = False
 
     def delete_columns(self, start, end):
         self._dataset.delete_columns(start, end)
@@ -800,6 +721,7 @@ class DataSetModel:
     @dataset.setter
     def dataset(self, dataset: DataSet):
         self._dataset = dataset
+        self._view_order_valid = False
 
     def setup(self):
 

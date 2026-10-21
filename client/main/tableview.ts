@@ -14,7 +14,7 @@ import interactionManager from '../common/interactionmanager';
 import { h } from '../common/htmlelementcreator';
 
 import { s6e, contextMenuListener } from '../common/utils';
-import DataSetViewModel, { Column, ColumnActiveChangedEvent, ColumnEvent, ColumnType, DataType, MeasureType, SortKey, Viewport } from './dataset';
+import DataSetViewModel, { Column, ColumnActiveChangedEvent, ColumnEvent, ColumnType, DataType, MeasureType, Viewport } from './dataset';
 import Selection, { IAreaSelection, ISelection } from './selection';
 import ViewController, { DataSetView } from './viewcontroller';
 import Settings from './settings';
@@ -466,7 +466,6 @@ class TableView extends HTMLElement implements DataSetView {
         this.$headers.push($header);
 
         this._addResizeListeners($header);
-        this._addSortListeners($header);
 
         let $column = this._createColumn(column, left);
 
@@ -526,43 +525,6 @@ class TableView extends HTMLElement implements DataSetView {
         this._updateSortIndicators();
     }
 
-    _addSortListeners($header: HTMLElement) {
-        const $sort = $header.querySelector<HTMLElement>('.jmv-column-header-sort');
-        // don't let the header select the column
-        $sort.addEventListener('pointerdown', (event: PointerEvent) => event.stopPropagation());
-        $sort.addEventListener('click', (event: MouseEvent) => {
-            event.stopPropagation();
-            let columnId = parseInt($header.dataset.id);
-            this._cycleSort(columnId);
-        });
-    }
-
-    _cycleSort(columnId: number) {
-        // a column cycles through ascending, descending, and unsorted,
-        // affecting only that column's place in the sort; it's added to the
-        // end, retains its place when its direction changes, and is removed
-        let sortKeys = this.model.attributes.sortKeys;
-        let index = sortKeys.findIndex(key => key.columnId === columnId);
-
-        let next: SortKey | null;
-        if (index === -1)
-            next = { columnId, descending: false };
-        else if ( ! sortKeys[index].descending)
-            next = { columnId, descending: true };
-        else
-            next = null;
-
-        let newKeys = sortKeys.slice();
-        if (next === null)
-            newKeys.splice(index, 1);
-        else if (index === -1)
-            newKeys.push(next);
-        else
-            newKeys[index] = next;
-
-        this.controller.setSort(newKeys);
-    }
-
     _updateHeaderSort($header: HTMLElement) {
         let sortKeys = this.model.attributes.sortKeys;
         let columnId = parseInt($header.dataset.id);
@@ -574,7 +536,6 @@ class TableView extends HTMLElement implements DataSetView {
             delete $header.dataset.sort;
             $sort.removeAttribute('data-priority');
             $label.setAttribute('aria-sort', 'none');
-            $sort.setAttribute('title', _('Sort ascending'));
         }
         else {
             let direction = sortKeys[index].descending ? 'descending' : 'ascending';
@@ -584,7 +545,6 @@ class TableView extends HTMLElement implements DataSetView {
             else
                 $sort.removeAttribute('data-priority');
             $label.setAttribute('aria-sort', direction);
-            $sort.setAttribute('title', sortKeys[index].descending ? _('Clear sort') : _('Sort descending'));
         }
     }
 
@@ -1325,9 +1285,6 @@ class TableView extends HTMLElement implements DataSetView {
 
     _dblClickHandler(event: MouseEvent) {
         let element = document.elementFromPoint(event.clientX, event.clientY);
-
-        if (element.closest('.jmv-column-header-sort'))
-            return;
 
         let $header = element.closest('.jmv-column-header:not(.select-all)');
         if ($header) {
@@ -2345,7 +2302,6 @@ class TableView extends HTMLElement implements DataSetView {
                     this.$headers.splice(column.dIndex, 0, $header);
 
                     this._addResizeListeners($header);
-                    this._addSortListeners($header);
 
                     $after = this.$columns[column.dIndex];
                     let $column = this._createColumn(column, left);
@@ -2903,7 +2859,7 @@ class TableView extends HTMLElement implements DataSetView {
                 'aria-colindex': String(column.dIndex),
                 'aria-label': label,
             }, column.name),
-            h('div', { class: 'jmv-column-header-sort', role: 'button' }),
+            h('div', { class: 'jmv-column-header-sort' }),
             h('div', { class: 'jmv-column-header-resizer', 'data-index': String(column.dIndex) }),
             h('div', { class: 'jmv-column-header-colour' }),
             h('div', { class: 'sub-selection-bar' }));

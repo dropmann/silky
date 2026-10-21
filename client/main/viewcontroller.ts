@@ -186,7 +186,7 @@ class ViewController extends EventEmitter {
     }
 
     _isSortable(column: Column): boolean {
-        return column.columnType !== ColumnType.NONE && column.columnType !== ColumnType.FILTER;
+        return column.columnType !== ColumnType.NONE;
     }
 
     async setSort(sortKeys: SortKey[]) {

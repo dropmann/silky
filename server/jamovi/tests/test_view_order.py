@@ -527,3 +527,16 @@ async def test_append_rows_while_sorted(sortable_instance: Instance, coms: FakeC
 
     await _op(sortable_instance, coms, 'UNDO')
     assert sortable_instance.project.get_dataset().row_count == 4
+
+
+@pytest.mark.asyncio
+async def test_sort_by_filter(filtered_instance: Instance, coms: FakeComs):
+    """rows can be sorted by whether a filter keeps them, live"""
+    await _set_filters_visible(filtered_instance, coms, True)
+    filter_name = filtered_instance.project.get_dataset()[0].name
+    await _sort(filtered_instance, coms, (filter_name, True))
+    assert _view_order(filtered_instance) == [ 3, 4, 5, 0, 1, 2 ]
+
+    await _set_ints(filtered_instance, coms, 3, 1, [ 10 ])  # view row 3 is data row 0
+    assert _values(filtered_instance, 'A')[0] == 10
+    assert _view_order(filtered_instance) == [ 0, 3, 4, 5, 1, 2 ]
