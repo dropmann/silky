@@ -1,10 +1,10 @@
-import type Instance from '../../instance';
-import { h, htmlTrusted, rich, richDescriptionOptions } from '../../../common/htmlelementcreator';
-import type { IModuleMeta } from '../../modules';
-import Notify from '../../notification';
-import Version from '../../utils/version';
-import { AuxView } from '../types';
-import './style.css';
+import type Instance from '../../../instance';
+import host from '../../../host';
+import type { IModuleMeta } from '../../../modules';
+import Notify from '../../../notification';
+import { h, htmlTrusted, richDescriptionOptions, richParagraphs } from '../../../../common/htmlelementcreator';
+import Version from '../../../utils/version';
+import { AuxView, findInitialFocus } from '../../types';
 
 type ModuleOp = IModuleMeta['ops'][number];
 
@@ -13,6 +13,9 @@ type ModuleInstallState = {
     progress: [number, number];
     percent: number;
     cancelRequested: boolean;
+    // the server only allows an install to be cancelled while it is
+    // downloading, once the download completes the install can't be stopped
+    cancellable: boolean;
 };
 
 type ModuleCardState = {
@@ -21,20 +24,71 @@ type ModuleCardState = {
     installedInLibrary: boolean;
 };
 
-type ModuleActionEvent = MouseEvent & { keyboardTriggered?: boolean };
+type ModuleFilter = 'all' | 'installed' | 'not-installed' | 'updates';
+
+type ModuleActionIcon = 'install' | 'remove' | 'hide' | 'show';
+type ModuleStatusTone = 'default' | 'info' | 'warning';
+
+const actionIcons: Record<ModuleActionIcon, string> = {
+    install: `
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3v6" />
+            <path d="M5.5 6.5 8 9l2.5-2.5" />
+            <path d="M3.5 12.5h9" />
+        </svg>`,
+    remove: `
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3.5 4.5h9" />
+            <path d="M6.5 2.5h3" />
+            <path d="M5 4.5v8" />
+            <path d="M11 4.5v8" />
+            <path d="M4.5 4.5l.5 8h6l.5-8" />
+        </svg>`,
+    hide: `
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 8s2.2-3 6-3 6 3 6 3-2.2 3-6 3-6-3-6-3Z" />
+            <path d="M6.8 7.9a1.2 1.2 0 1 0 2.4 0 1.2 1.2 0 0 0-2.4 0Z" />
+            <path d="M3 13 13 3" />
+        </svg>`,
+    show: `
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 8s2.2-3 6-3 6 3 6 3-2.2 3-6 3-6-3-6-3Z" />
+            <path d="M6.8 7.9a1.2 1.2 0 1 0 2.4 0 1.2 1.2 0 0 0-2.4 0Z" />
+        </svg>`,
+};
+
+const statusIcons: Record<ModuleStatusTone, string> = {
+    default: `
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.5 8.5l3 3 6-7" />
+        </svg>`,
+    info: `
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 13V3.5" />
+            <path d="M4 7.5 8 3.5l4 4" />
+        </svg>`,
+    warning: `
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 2.5 14.5 13.5h-13z" />
+            <path d="M8 6.5v3" />
+            <path d="M8 11.5h.01" />
+        </svg>`,
+};
 
 export default class ModulesAuxView extends AuxView {
     model: Instance;
-    tabsElement: HTMLDivElement | null = null;
+    filtersElement: HTMLDivElement | null = null;
     searchElement: HTMLInputElement | null = null;
+    sideloadButton: HTMLButtonElement | null = null;
     summaryProgressElement: HTMLDivElement | null = null;
+    messageElement: HTMLDivElement | null = null;
     listElement: HTMLDivElement | null = null;
     installStates = new Map<string, ModuleInstallState>();
+    translators = new WeakMap<IModuleMeta['getTranslator'], (value: string) => string>();
     cancelledInstallSources = new Set<string>();
     pendingInstalledRemovals = new Set<string>();
-    pendingInstalledRemovalFocus = new Map<string, string | null>();
     renderVersion = 0;
-    selectedTab: 'installed' | 'available' = 'installed';
+    selectedFilter: ModuleFilter = 'all';
     searchTerm = '';
 
     constructor(model: Instance) {
@@ -55,63 +109,74 @@ export default class ModulesAuxView extends AuxView {
         `; }
 
     getBody() {
-        const body = h('div', { class: 'aux-module-view' });
-        const controls = h('div', { class: 'aux-module-controls' });
-        const tabs = h('div', { class: 'aux-module-tabs' });
+        const filters = h('div', { class: 'aux-module-tabs aux-module-filters' },
+            this.createFilterButton(_('All'), 'all'),
+            this.createFilterButton(_('Installed'), 'installed'),
+            this.createFilterButton(_('Not installed'), 'not-installed'),
+            this.createFilterButton(_('Updates'), 'updates'),
+        );
 
-        const installedTab = this.createTabButton(_('Installed'), 'installed');
-        const availableTab = this.createTabButton(_('Available'), 'available');
-        tabs.append(installedTab, availableTab);
-
-        const searchBox = h('div', { class: 'aux-module-searchbox' });
-
-        const searchIcon = h('div', { class: 'aux-module-search-icon' });
+        const sideloadButton = this.createActionButton(
+            _('Sideload'),
+            () => void this.sideloadModule(),
+            false,
+            'subtle',
+            '',
+            'install',
+        );
+        sideloadButton.classList.add('aux-module-sideload-button');
 
         const search = h('input', {
             type: 'text',
             class: 'aux-module-search-input',
-            'aria-label': this.selectedTab === 'available'
-                ? _('Search available modules')
-                : _('Search installed modules'),
+            spellcheck: 'true',
+            placeholder: _('Search'),
+            'aria-label': _('Search modules'),
         });
-        search.spellcheck = true;
-        search.placeholder = _('Search');
         search.addEventListener('input', () => {
             this.searchTerm = search.value;
             void this.update();
         });
 
-        searchBox.append(searchIcon, search);
-
-        const summaryProgress = h('div', {
-            class: 'aux-module-summary-progress',
-            'aria-hidden': 'true',
-        });
-
+        const summaryProgress = h('div', { class: 'aux-module-summary-progress', 'aria-hidden': 'true' });
+        const message = h('div', { class: 'aux-module-message', role: 'status', hidden: '' });
         const list = h('div', { class: 'aux-panel-list aux-module-list' });
 
-        controls.append(tabs, searchBox, summaryProgress);
-        body.append(controls, list);
+        const body = h('div', { class: 'aux-module-view' },
+            h('div', { class: 'aux-module-controls' },
+                h('div', { class: 'aux-module-searchbox' },
+                    h('div', { class: 'aux-module-search-icon' }),
+                    search,
+                ),
+                h('div', { class: 'aux-module-filter-row' }, filters, sideloadButton),
+                summaryProgress,
+                message,
+            ),
+            list,
+        );
 
-        this.tabsElement = tabs;
+        this.filtersElement = filters;
         this.searchElement = search;
+        this.sideloadButton = sideloadButton;
         this.summaryProgressElement = summaryProgress;
+        this.messageElement = message;
         this.listElement = list;
+        this.updateSideloadButton();
 
         return body;
     }
 
-    createTabButton(label: string, tab: 'installed' | 'available') {
+    createFilterButton(label: string, filter: ModuleFilter) {
+        const selected = this.selectedFilter === filter;
         const button = h('button', {
             type: 'button',
-            class: 'aux-module-tab',
-            'aria-pressed': this.selectedTab === tab ? 'true' : 'false',
+            class: selected ? 'aux-module-tab active' : 'aux-module-tab',
+            'data-filter': filter,
+            'aria-pressed': selected ? 'true' : 'false',
         }, label);
-        button.dataset.tab = tab;
-        button.classList.toggle('active', this.selectedTab === tab);
         button.addEventListener('click', () => {
-            this.selectedTab = tab;
-            this.updateTabState();
+            this.selectedFilter = filter;
+            this.updateFilterState();
             void this.update();
         });
         return button;
@@ -121,19 +186,28 @@ export default class ModulesAuxView extends AuxView {
         const modules = this.model.modules();
         const available = modules.available();
 
-        modules.on('change:modules', this.update, this);
-        modules.on('modulesChanged', this.update, this);
-        modules.on('moduleVisibilityChanged', this.update, this);
-        available.on('change:modules', this.update, this);
-        available.on('change:status', this.update, this);
-        available.on('change:progress', this.update, this);
+        this.listen(modules, 'change:modules', this.requestUpdate);
+        this.listen(modules, 'modulesChanged', this.requestUpdate);
+        this.listen(modules, 'moduleVisibilityChanged', this.requestUpdate);
+        this.listen(available, 'change:modules', this.requestUpdate);
+        this.listen(available, 'change:status', this.requestUpdate);
+        this.listen(available, 'change:progress', this.requestUpdate);
+        this.listen(available, 'change:message', this.requestUpdate);
+
+        const settings = this.model.settings();
+        this.listen(settings, 'change:permissions_library_side_load', this.updateSideloadButton);
+        this.listen(settings, 'change:permissions_library_add_remove', this.requestUpdate);
+        this.listen(settings, 'change:permissions_library_show_hide', this.requestUpdate);
+        this.listen(settings, 'change:permissions_library_browseable', this.onBrowseableChanged);
 
         this.update();
     }
 
     onShow(): void {
-        this.model.modules().available().retrieve();
-        this.updateTabState();
+        if (this.canBrowseLibrary())
+            this.model.modules().available().retrieve();
+        this.updateFilterState();
+        this.updateSideloadButton();
         this.update();
     }
 
@@ -142,37 +216,23 @@ export default class ModulesAuxView extends AuxView {
     }
 
     createDescriptionContent(text: string, highlightTerm = ''): DocumentFragment {
-        const fragment = rich(text, {
-            ...richDescriptionOptions,
-            linkTarget: '_blank',
-        });
+        const fragment = document.createDocumentFragment();
+        fragment.append(...richParagraphs(text, { ...richDescriptionOptions, linkTarget: '_blank' }));
         this.highlightTextNodes(fragment, highlightTerm);
         return fragment;
     }
 
-    highlightTextNodes(root: ParentNode, highlightTerm = ''): void {
-        const term = highlightTerm.trim();
-        if (term === '')
+    highlightTextNodes(root: Node, highlightTerm: string): void {
+        if (highlightTerm.trim() === '')
             return;
 
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
         const textNodes: Text[] = [];
-        let currentNode = walker.nextNode();
-        while (currentNode !== null) {
-            if (currentNode instanceof Text)
-                textNodes.push(currentNode);
-            currentNode = walker.nextNode();
-        }
+        while (walker.nextNode())
+            textNodes.push(walker.currentNode as Text);
 
-        for (const textNode of textNodes) {
-            const parent = textNode.parentNode;
-            if (parent === null)
-                continue;
-
-            const highlighted = this.createHighlightedTextContent(textNode.textContent || '', term);
-            if (highlighted.childNodes.length > 1 || highlighted.firstChild instanceof HTMLElement)
-                parent.replaceChild(highlighted, textNode);
-        }
+        for (const node of textNodes)
+            node.replaceWith(this.createHighlightedTextContent(node.textContent || '', highlightTerm));
     }
 
     createHighlightedTextContent(text: string, highlightTerm = ''): DocumentFragment {
@@ -195,8 +255,7 @@ export default class ModulesAuxView extends AuxView {
             if (matchIndex > index)
                 fragment.append(text.slice(index, matchIndex));
 
-            const highlight = h('span', { class: 'aux-module-search-highlight' }, text.slice(matchIndex, matchIndex + term.length));
-            fragment.append(highlight);
+            fragment.append(h('span', { class: 'aux-module-search-highlight' }, text.slice(matchIndex, matchIndex + term.length)));
             index = matchIndex + term.length;
         }
 
@@ -214,6 +273,38 @@ export default class ModulesAuxView extends AuxView {
         if (lowerSearch.startsWith('plot::'))
             return rawSearch.substring(6).trim();
         return rawSearch;
+    }
+
+    // whether a description is cut off depends on its width, so it's
+    // rechecked whenever a description changes size (i.e. the panel resizes)
+    descriptionObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            const meta = entry.target as HTMLElement;
+            if (meta.isConnected)
+                this.checkDescriptionClamp(meta);
+            else
+                this.descriptionObserver.unobserve(meta);
+        }
+    });
+
+    updateDescriptionClamp(meta: HTMLElement): void {
+        this.descriptionObserver.observe(meta);
+        requestAnimationFrame(() => {
+            if (meta.isConnected)
+                this.checkDescriptionClamp(meta);
+        });
+    }
+
+    // fades the last line when the collapsed description is cut off; an
+    // expanded description is shown in full, so it's left as it was
+    checkDescriptionClamp(meta: HTMLElement): void {
+        if (meta.classList.contains('expanded') || meta.dataset.expandable !== 'true')
+            return;
+        meta.classList.toggle('clamped', meta.scrollHeight > meta.clientHeight + 1);
+    }
+
+    onDispose(): void {
+        this.descriptionObserver.disconnect();
     }
 
     expandDescriptionForHiddenHighlight(meta: HTMLElement): void {
@@ -249,38 +340,16 @@ export default class ModulesAuxView extends AuxView {
         const renderVersion = ++this.renderVersion;
         const installedModules = this.getInstalledModules();
         const availableModules = this.getAvailableModules();
+
+        await this.loadTranslators([ ...installedModules, ...availableModules ]);
+        if (renderVersion !== this.renderVersion)
+            return;
+
+        this.updateMessage();
         this.updateSummaryProgress(installedModules, availableModules);
 
-        let cards: ModuleCardState[];
-        let emptyMessage: string;
-
-        if (this.selectedTab === 'installed') {
-            const featuredModules = installedModules
-                .filter(module => this.moduleMatchesSearch(module))
-                .slice()
-                .sort((left, right) => left.title.localeCompare(right.title));
-
-            cards = featuredModules.map(module => ({
-                module,
-                installable: false,
-                installedInLibrary: false,
-            }));
-            emptyMessage = _('No installed modules found.');
-        }
-        else {
-            const featuredAvailable = availableModules
-                .map(module => this.getAvailableListModule(module, installedModules))
-                .filter(module => this.moduleMatchesSearch(module))
-                .slice()
-                .sort((left, right) => left.title.localeCompare(right.title));
-
-            cards = featuredAvailable.map(module => ({
-                module,
-                installable: true,
-                installedInLibrary: installedModules.some(installed => installed.name === module.name),
-            }));
-            emptyMessage = _('No additional modules available right now.');
-        }
+        const cards = this.getVisibleModuleCards(installedModules, availableModules);
+        const emptyMessage = this.getEmptyMessage();
 
         if (renderVersion !== this.renderVersion)
             return;
@@ -288,21 +357,37 @@ export default class ModulesAuxView extends AuxView {
         await this.updateModuleSection(cards, emptyMessage, renderVersion);
     }
 
+    async loadTranslators(modules: IModuleMeta[]): Promise<void> {
+        await Promise.all(modules
+            .filter(module => ! this.translators.has(module.getTranslator))
+            .map(async module => {
+                this.translators.set(module.getTranslator, await module.getTranslator);
+            }));
+    }
+
+    translate(module: IModuleMeta, value: string): string {
+        const translator = this.translators.get(module.getTranslator);
+        return translator ? translator(value) : value;
+    }
+
     async updateModuleSection(cards: ModuleCardState[], emptyMessage: string, renderVersion: number): Promise<void> {
         if (this.listElement === null || renderVersion !== this.renderVersion)
             return;
 
-        const existingSection = this.listElement.querySelector<HTMLElement>(':scope > .aux-module-section');
-        let section: HTMLElement;
-        let scrollAnchor: { moduleName: string; offset: number; scrollTop: number } | null = null;
+        let section = this.listElement.querySelector<HTMLElement>(':scope > .aux-module-section');
+        const preserveScroll = section !== null && section.dataset.filter === this.selectedFilter;
 
-        if (existingSection !== null && existingSection.dataset.tab === this.selectedTab) {
-            section = existingSection;
-            scrollAnchor = this.captureListScrollAnchor(section);
-        }
-        else {
-            section = h('div', { class: 'aux-module-section' });
-            section.dataset.tab = this.selectedTab;
+        // if the card holding focus is removed, focus moves to the card that
+        // takes its place
+        const focusedCard = section !== null && document.activeElement !== null
+            ? document.activeElement.closest<HTMLElement>('.aux-module-card')
+            : null;
+        const focusedCardIndex = focusedCard !== null && section !== null
+            ? Array.from(section.querySelectorAll(':scope > .aux-module-card')).indexOf(focusedCard)
+            : -1;
+        const scrollAnchor = preserveScroll ? this.captureListScrollAnchor(section) : null;
+        if (! preserveScroll) {
+            section = h('div', { class: 'aux-module-section', 'data-filter': this.selectedFilter });
             this.listElement.replaceChildren(section);
         }
 
@@ -311,7 +396,7 @@ export default class ModulesAuxView extends AuxView {
         const removedCards = currentCards.filter(card => {
             const moduleName = card.dataset.moduleName;
             return moduleName !== undefined
-                && this.selectedTab === 'installed'
+                && this.selectedFilter === 'installed'
                 && ! nextModuleNames.has(moduleName)
                 && this.pendingInstalledRemovals.has(moduleName);
         });
@@ -346,11 +431,10 @@ export default class ModulesAuxView extends AuxView {
                 section.append(item);
 
             this.restoreListScrollAnchor(section, scrollAnchor, renderVersion);
+            this.restoreCardFocus(section, focusedCard, focusedCardIndex);
             for (const card of removedCards) {
-                if (card.dataset.moduleName !== undefined) {
+                if (card.dataset.moduleName !== undefined)
                     this.pendingInstalledRemovals.delete(card.dataset.moduleName);
-                    this.pendingInstalledRemovalFocus.delete(card.dataset.moduleName);
-                }
             }
             return;
         }
@@ -389,48 +473,26 @@ export default class ModulesAuxView extends AuxView {
                 card.remove();
         }
         this.restoreListScrollAnchor(section, scrollAnchor, renderVersion);
-        this.restoreInstalledRemovalFocus(section, removedCards);
+        this.restoreCardFocus(section, focusedCard, focusedCardIndex);
 
         for (const card of removedCards) {
-            if (card.dataset.moduleName !== undefined) {
+            if (card.dataset.moduleName !== undefined)
                 this.pendingInstalledRemovals.delete(card.dataset.moduleName);
-                this.pendingInstalledRemovalFocus.delete(card.dataset.moduleName);
-            }
         }
+    }
+
+    restoreCardFocus(section: HTMLElement, focusedCard: HTMLElement | null, focusedCardIndex: number): void {
+        if (focusedCard === null || focusedCard.isConnected)
+            return;
+
+        const cards = Array.from(section.querySelectorAll<HTMLElement>(':scope > .aux-module-card'));
+        const card = cards[Math.min(focusedCardIndex, cards.length - 1)];
+        const target = (card && findInitialFocus(card)) || this.searchElement;
+        target?.focus();
     }
 
     canReuseModuleCard(card: HTMLElement, installable: boolean): boolean {
         return card.classList.contains('available-in-library') === installable;
-    }
-
-    captureInstalledRemovalFocusTarget(moduleName: string): string | null {
-        if (this.listElement === null || this.selectedTab !== 'installed')
-            return null;
-
-        const cards = Array.from(this.listElement.querySelectorAll<HTMLElement>('.aux-module-section > .aux-module-card[data-module-name]'));
-        const index = cards.findIndex(card => card.dataset.moduleName === moduleName);
-        if (index === -1)
-            return null;
-
-        return cards[index + 1]?.dataset.moduleName
-            || cards[index - 1]?.dataset.moduleName
-            || null;
-    }
-
-    restoreInstalledRemovalFocus(section: HTMLElement, removedCards: HTMLElement[]): void {
-        for (const removedCard of removedCards) {
-            const removedModuleName = removedCard.dataset.moduleName;
-            if (removedModuleName === undefined || ! this.pendingInstalledRemovalFocus.has(removedModuleName))
-                continue;
-
-            const focusModuleName = this.pendingInstalledRemovalFocus.get(removedModuleName);
-            const focusCard = (focusModuleName === null || focusModuleName === undefined)
-                ? section.querySelector<HTMLElement>(':scope > .aux-module-card[data-module-name]')
-                : section.querySelector<HTMLElement>(`:scope > .aux-module-card[data-module-name="${ CSS.escape(focusModuleName) }"]`);
-
-            focusCard?.focus();
-            return;
-        }
     }
 
     captureListScrollAnchor(section: HTMLElement): { moduleName: string; offset: number; scrollTop: number } | null {
@@ -503,20 +565,70 @@ export default class ModulesAuxView extends AuxView {
         });
     }
 
-    updateTabState(): void {
-        if (this.tabsElement === null)
+    updateFilterState(): void {
+        if (this.filtersElement === null)
             return;
 
-        this.tabsElement.querySelectorAll<HTMLButtonElement>('.aux-module-tab').forEach(button => {
-            const active = button.dataset.tab === this.selectedTab;
+        this.filtersElement.querySelectorAll<HTMLButtonElement>('.aux-module-tab').forEach(button => {
+            const active = button.dataset.filter === this.selectedFilter;
             button.classList.toggle('active', active);
             button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
 
         if (this.searchElement)
-            this.searchElement.setAttribute('aria-label', this.selectedTab === 'available'
-                ? _('Search available modules')
-                : _('Search installed modules'));
+            this.searchElement.setAttribute('aria-label', _('Search modules'));
+    }
+
+    canAddRemoveModules(): boolean {
+        return this.model.settings().getSetting('permissions_library_add_remove', false);
+    }
+
+    canShowHideModules(): boolean {
+        return this.model.settings().getSetting('permissions_library_show_hide', false);
+    }
+
+    canBrowseLibrary(): boolean {
+        return this.model.settings().getSetting('permissions_library_browseable', true);
+    }
+
+    onBrowseableChanged(): void {
+        if (this.canBrowseLibrary() && this.shown)
+            this.model.modules().available().retrieve();
+        this.requestUpdate();
+    }
+
+    updateMessage(): void {
+        if (this.messageElement === null)
+            return;
+
+        let message = '';
+        if (! this.canBrowseLibrary())
+            message = _('The jamovi library is not available to your session.');
+        else
+            message = this.model.modules().available().get('message') || '';
+
+        if (message === '' && ! this.canAddRemoveModules())
+            message = _('Installing modules is not available on your plan');
+
+        this.messageElement.textContent = message;
+        this.messageElement.hidden = message === '';
+    }
+
+    canSideloadModules(): boolean {
+        return host.isElectron && this.model.settings().getSetting('permissions_library_side_load', false);
+    }
+
+    updateSideloadButton(): void {
+        if (this.sideloadButton === null)
+            return;
+
+        const canSideload = this.canSideloadModules();
+        this.sideloadButton.disabled = ! canSideload;
+        this.sideloadButton.hidden = ! canSideload;
+        this.sideloadButton.setAttribute('aria-hidden', canSideload ? 'false' : 'true');
+        this.sideloadButton.title = canSideload
+            ? _('Install module from file')
+            : _('Side-loading modules is not available.');
     }
 
     getInstalledModules(): IModuleMeta[] {
@@ -524,7 +636,13 @@ export default class ModulesAuxView extends AuxView {
     }
 
     getAvailableModules(): IModuleMeta[] {
+        if (! this.canBrowseLibrary())
+            return [];
         return this.model.modules().available().get('modules') || [];
+    }
+
+    getInstalledModuleNames(installedModules: IModuleMeta[]): Set<string> {
+        return new Set(installedModules.map(module => module.name));
     }
 
     getAvailableListModule(module: IModuleMeta, installedModules: IModuleMeta[]): IModuleMeta {
@@ -532,27 +650,34 @@ export default class ModulesAuxView extends AuxView {
         if (installedModule === undefined)
             return module;
 
+        const availableSource = module.url || module.path;
         const ops: ModuleOp[] = [];
         if (module.ops.includes('old') || module.ops.includes('unavailable')) {
             ops.push(...module.ops.filter(op => op === 'old' || op === 'unavailable'));
         }
         else if (installedModule.incompatible) {
-            if (module.url !== '' && module.version >= installedModule.version)
+            if (availableSource !== '' && module.version >= installedModule.version)
                 ops.push('update');
             ops.push('incompatible');
         }
-        else if (module.version > installedModule.version && module.url !== '') {
+        else if (module.version > installedModule.version && availableSource !== '') {
             ops.push('update');
         }
         else {
             ops.push('installed');
         }
 
-        if (installedModule.ops.includes('remove'))
-            ops.push('remove');
+        for (const op of installedModule.ops) {
+            if (op === 'show' || op === 'hide' || op === 'remove')
+                ops.push(op);
+        }
 
         return {
-            ...module,
+            ...installedModule,
+            path: module.path,
+            url: availableSource || installedModule.url,
+            version: Math.max(module.version, installedModule.version),
+            minAppVersion: module.minAppVersion,
             isSystem: installedModule.isSystem,
             visible: installedModule.visible,
             incompatible: installedModule.incompatible,
@@ -560,46 +685,119 @@ export default class ModulesAuxView extends AuxView {
         };
     }
 
-    getVisibleModules(installedModules = this.getInstalledModules(), availableModules = this.getAvailableModules()): IModuleMeta[] {
-        if (this.selectedTab === 'installed')
-            return installedModules
-                .filter(module => this.moduleMatchesSearch(module))
-                .slice()
-                .sort((left, right) => left.title.localeCompare(right.title));
+    getModuleCards(installedModules = this.getInstalledModules(), availableModules = this.getAvailableModules()): ModuleCardState[] {
+        const installedNames = this.getInstalledModuleNames(installedModules);
+        const availableCards = availableModules.map(module => {
+            const installedInLibrary = installedNames.has(module.name);
+            return {
+                module: this.getAvailableListModule(module, installedModules),
+                installable: true,
+                installedInLibrary,
+            };
+        });
 
-        return availableModules
-            .map(module => this.getAvailableListModule(module, installedModules))
-            .filter(module => this.moduleMatchesSearch(module))
-            .slice()
-            .sort((left, right) => left.title.localeCompare(right.title));
+        const availableNames = new Set(availableCards.map(card => card.module.name));
+        const installedOnlyCards = installedModules
+            .filter(module => ! availableNames.has(module.name))
+            .map(module => ({
+                module,
+                installable: false,
+                installedInLibrary: true,
+            }));
+
+        return [ ...availableCards, ...installedOnlyCards ];
+    }
+
+    getVisibleModuleCards(installedModules = this.getInstalledModules(), availableModules = this.getAvailableModules()): ModuleCardState[] {
+        return this.getModuleCards(installedModules, availableModules)
+            .filter(card => this.cardMatchesFilter(card))
+            .filter(card => this.moduleMatchesSearch(card.module))
+            .sort((left, right) => this.compareModuleCards(left, right));
+    }
+
+    compareModuleCards(left: ModuleCardState, right: ModuleCardState): number {
+        const leftBase = this.isBaseModuleCard(left);
+        const rightBase = this.isBaseModuleCard(right);
+        if (leftBase !== rightBase)
+            return leftBase ? -1 : 1;
+
+        return this.translate(left.module, left.module.title).localeCompare(this.translate(right.module, right.module.title));
+    }
+
+    isBaseModuleCard(card: ModuleCardState): boolean {
+        return card.module.isSystem || ! card.installable;
+    }
+
+    getVisibleModules(installedModules = this.getInstalledModules(), availableModules = this.getAvailableModules()): IModuleMeta[] {
+        return this.getVisibleModuleCards(installedModules, availableModules)
+            .map(card => card.module);
+    }
+
+    cardMatchesFilter(card: ModuleCardState): boolean {
+        const isInstalled = card.installedInLibrary || ! card.installable || card.module.ops.includes('installed') || card.module.ops.includes('remove');
+        switch (this.selectedFilter) {
+            case 'installed':
+                return isInstalled;
+            case 'not-installed':
+                return ! isInstalled;
+            case 'updates':
+                return card.module.ops.includes('update');
+            case 'all':
+            default:
+                return true;
+        }
+    }
+
+    getEmptyMessage(): string {
+        switch (this.selectedFilter) {
+            case 'installed':
+                return _('No installed modules found.');
+            case 'not-installed':
+                return _('No additional modules available right now.');
+            case 'updates':
+                return _('No module updates found.');
+            case 'all':
+            default:
+                return _('No modules found.');
+        }
     }
 
     updateSummaryProgress(installedModules = this.getInstalledModules(), availableModules = this.getAvailableModules()): void {
-        if (this.summaryProgressElement === null)
+        const summary = this.summaryProgressElement;
+        if (summary === null)
             return;
 
+        // the summary's controls are replaced as installs start and finish
+        // (i.e. Update all becomes Cancel all), so focus is kept within it
+        const hadFocus = document.activeElement !== null && summary.contains(document.activeElement);
+        this.renderSummaryProgress(summary, installedModules, availableModules);
+        if (hadFocus && ! summary.contains(document.activeElement))
+            (findInitialFocus(summary) || this.searchElement)?.focus();
+    }
+
+    renderSummaryProgress(summary: HTMLDivElement, installedModules: IModuleMeta[], availableModules: IModuleMeta[]): void {
         const activeInstalls = [ ...this.installStates.values() ];
         if (activeInstalls.length === 0) {
             const updateableModules = this.getVisibleModules(installedModules, availableModules)
                 .filter(module => module.ops.includes('update'))
                 .filter(module => ! this.installStates.has(module.name));
 
-            if (updateableModules.length > 0) {
+            if (updateableModules.length > 0 && this.canAddRemoveModules()) {
                 const button = this.createActionButton(
                     _('Update all ({count})', { count: updateableModules.length.toString() }),
                     () => this.updateAll(updateableModules),
                     false,
                     'primary');
                 button.classList.add('aux-module-summary-action');
-                this.summaryProgressElement.classList.add('active');
-                this.summaryProgressElement.setAttribute('aria-hidden', 'false');
-                this.summaryProgressElement.replaceChildren(button);
+                summary.classList.add('active');
+                summary.setAttribute('aria-hidden', 'false');
+                summary.replaceChildren(button);
                 return;
             }
 
-            this.summaryProgressElement.classList.remove('active');
-            this.summaryProgressElement.setAttribute('aria-hidden', 'true');
-            this.summaryProgressElement.replaceChildren();
+            summary.classList.remove('active');
+            summary.setAttribute('aria-hidden', 'true');
+            summary.replaceChildren();
             return;
         }
 
@@ -609,20 +807,20 @@ export default class ModulesAuxView extends AuxView {
             ? Math.max(0, Math.min(100, Math.round((100 * totalValue) / totalMax)))
             : 0;
         const allCancelling = activeInstalls.every(state => state.cancelRequested);
+        const anyCancellable = activeInstalls.some(state => state.cancellable && ! state.cancelRequested);
 
         const summaryState: ModuleInstallState = {
             source: '',
             progress: [ totalValue, totalMax ],
             percent,
             cancelRequested: allCancelling,
+            cancellable: anyCancellable,
         };
-        const summaryText = activeInstalls.length === 1
-            ? _('Installing 1 module')
-            : _('Installing {count} modules', { count: activeInstalls.length.toString() });
+        const summaryText = n_('Installing {n} module', 'Installing {n} modules', activeInstalls.length, { n: activeInstalls.length.toLocaleString() });
 
-        this.summaryProgressElement.classList.add('active');
-        this.summaryProgressElement.setAttribute('aria-hidden', 'false');
-        const existingWrap = this.summaryProgressElement.querySelector<HTMLElement>('.aux-module-progress-wrap-summary');
+        summary.classList.add('active');
+        summary.setAttribute('aria-hidden', 'false');
+        const existingWrap = summary.querySelector<HTMLElement>('.aux-module-progress-wrap-summary');
         if (existingWrap !== null) {
             this.updateInstallProgress(existingWrap, summaryState, summaryText);
             return;
@@ -635,7 +833,7 @@ export default class ModulesAuxView extends AuxView {
             cancelLabel: _('Cancel all'),
         });
 
-        this.summaryProgressElement.replaceChildren(wrap);
+        summary.replaceChildren(wrap);
     }
 
     updateAll(modules: IModuleMeta[]): void {
@@ -654,7 +852,7 @@ export default class ModulesAuxView extends AuxView {
         }
 
         for (const [ moduleName, state ] of this.installStates) {
-            if (state.cancelRequested)
+            if (state.cancelRequested || ! state.cancellable)
                 continue;
 
             const module = modulesBySource.get(state.source);
@@ -690,7 +888,7 @@ export default class ModulesAuxView extends AuxView {
     }
 
     moduleMatchesSearch(module: IModuleMeta): boolean {
-        const rawSearch = this.searchTerm.trim().toLowerCase();
+        const rawSearch = this.searchTerm.trim().toLocaleLowerCase();
         if (rawSearch === '')
             return true;
 
@@ -707,19 +905,26 @@ export default class ModulesAuxView extends AuxView {
             return term === '' || module.name.toLowerCase().startsWith(term);
         }
 
-        const haystack = [
-            module.name,
+        // match against both the translated text shown on the card, and the
+        // original text, so english search terms still work
+        const texts = [
             module.title,
             module.description,
-            module.category,
-            ...module.authors,
             ...module.analyses.map(analysis => analysis.title),
             ...module.analyses.map(analysis => analysis.menuTitle),
             ...module.analyses.map(analysis => analysis.menuSubtitle),
+        ].filter(value => value);
+
+        const haystack = [
+            module.name,
+            module.category,
+            ...module.authors,
+            ...texts,
+            ...texts.map(text => this.translate(module, text)),
         ]
             .filter(value => value)
             .join('\n')
-            .toLowerCase();
+            .toLocaleLowerCase();
 
         return haystack.includes(rawSearch);
     }
@@ -731,111 +936,36 @@ export default class ModulesAuxView extends AuxView {
     }
 
     createModuleCardShell(moduleName: string, installable: boolean): HTMLElement {
-        const card = h('div', {
-            class: 'aux-panel-placeholder aux-module-card',
-            role: 'group',
-            tabindex: '0',
-        });
-        card.dataset.moduleName = moduleName;
-        card.classList.toggle('available-in-library', installable);
-        this.bindModuleCardEntry(card);
-
-        const header = h('div', { class: 'aux-module-header' });
-
-        const icon = h('div', {
-            class: 'aux-module-icon',
-            'aria-hidden': 'true',
-        });
-
-        const titleWrap = h('div', { class: 'aux-module-title-wrap' });
-
-        const title = h('div', { class: 'aux-module-title' });
-
-        const name = h('span', { class: 'aux-module-name' });
-
-        const version = h('span', { class: 'aux-module-version' });
-
-        const packageMeta = h('div', { class: 'aux-module-package-meta' });
-        packageMeta.append(name, version);
-
-        titleWrap.append(title, packageMeta);
-        header.append(icon, titleWrap);
-
-        const installedBadge = installable
-            ? this.createStatusChip(_('Installed'))
-            : null;
-        if (installedBadge !== null) {
-            installedBadge.classList.add('aux-module-installed-badge', 'hidden');
-            installedBadge.setAttribute('aria-hidden', 'true');
-        }
+        const installedBadge = this.createStatusChip(_('Installed'));
+        installedBadge.classList.add('aux-module-installed-badge', 'hidden');
+        installedBadge.setAttribute('aria-hidden', 'true');
 
         const meta = h('div', { class: 'aux-module-meta' });
         this.bindModuleMetaToggle(meta);
 
-        const authors = h('div', { class: 'aux-module-authors' });
-        authors.hidden = true;
-
-        const actions = h('div', { class: 'aux-module-actions' });
-        actions.hidden = true;
-
-        const analyses = h('div', { class: 'aux-module-analyses-host' });
-        analyses.hidden = true;
-
-        card.append(header);
-        if (installedBadge !== null)
-            card.append(installedBadge);
-        card.append(meta, authors, actions, analyses);
+        const card = h('div', {
+            class: installable ? 'aux-panel-placeholder aux-module-card available-in-library' : 'aux-panel-placeholder aux-module-card',
+            'data-module-name': moduleName,
+        },
+            h('div', { class: 'aux-module-header' },
+                h('div', { class: 'aux-module-icon', 'aria-hidden': 'true' }),
+                h('div', { class: 'aux-module-title-wrap' },
+                    h('div', { class: 'aux-module-title' }),
+                    h('div', { class: 'aux-module-package-meta' },
+                        h('span', { class: 'aux-module-name' }),
+                        h('span', { class: 'aux-module-version' }),
+                    ),
+                ),
+            ),
+            installedBadge,
+            meta,
+            h('div', { class: 'aux-module-authors', hidden: '' }),
+            h('div', { class: 'aux-module-notice', hidden: '' }),
+            h('div', { class: 'aux-module-actions', hidden: '' }),
+            h('div', { class: 'aux-module-analyses-host', hidden: '' }),
+        );
 
         return card;
-    }
-
-    bindModuleCardEntry(card: HTMLElement): void {
-        card.addEventListener('keydown', event => {
-            if (event.target !== card)
-                return;
-
-            if (event.key !== 'Enter' && event.key !== ' ')
-                return;
-
-            const nextFocus = this.getFirstFocusableCardElement(card);
-            if (nextFocus === null)
-                return;
-
-            event.preventDefault();
-            nextFocus.focus();
-        });
-    }
-
-    getFirstFocusableCardElement(card: HTMLElement): HTMLElement | null {
-        const selectors = [
-            '.aux-module-actions button:not(:disabled)',
-            '.aux-module-analyses-host summary',
-            '.aux-module-analyses-host button:not(:disabled)',
-            '.aux-module-meta[tabindex]:not([tabindex="-1"])',
-            'a[href]',
-            'button:not(:disabled)',
-            'summary',
-            '[tabindex]:not([tabindex="-1"])',
-        ];
-
-        for (const selector of selectors) {
-            const focusable = Array.from(card.querySelectorAll<HTMLElement>(selector));
-            const element = focusable.find(element => element !== card && this.isVisibleFocusableElement(element));
-            if (element !== undefined)
-                return element;
-        }
-
-        return null;
-    }
-
-    isVisibleFocusableElement(element: HTMLElement): boolean {
-        if (element.hidden || element.getAttribute('aria-hidden') === 'true')
-            return false;
-
-        if (element.closest('[hidden], [aria-hidden="true"]') !== null)
-            return false;
-
-        return element.offsetParent !== null || element.getClientRects().length > 0;
     }
 
     bindModuleMetaToggle(meta: HTMLElement): void {
@@ -845,6 +975,8 @@ export default class ModulesAuxView extends AuxView {
 
             const expanded = meta.classList.toggle('expanded');
             meta.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            if (! expanded)
+                this.checkDescriptionClamp(meta);
         };
 
         meta.addEventListener('click', event => {
@@ -872,9 +1004,6 @@ export default class ModulesAuxView extends AuxView {
         card.className = 'aux-panel-placeholder aux-module-card';
         card.classList.toggle('available-in-library', installable);
         card.classList.toggle('installed-in-library', installedInLibrary);
-        card.setAttribute('aria-label', _('{title} module', {
-            title: translator(module.title),
-        }));
 
         this.updateModuleCardHeader(card, module, translator, highlightTerm);
         this.updateInstalledBadge(card, module, installable, installedInLibrary);
@@ -904,11 +1033,6 @@ export default class ModulesAuxView extends AuxView {
 
     updateInstalledBadge(card: HTMLElement, module: IModuleMeta, installable: boolean, installedInLibrary: boolean): void {
         let installedBadge = card.querySelector<HTMLElement>('.aux-module-installed-badge');
-        if (! installable) {
-            installedBadge?.remove();
-            return;
-        }
-
         if (installedBadge === null) {
             installedBadge = this.createStatusChip(_('Installed'));
             installedBadge.classList.add('aux-module-installed-badge', 'hidden');
@@ -919,9 +1043,43 @@ export default class ModulesAuxView extends AuxView {
                 card.prepend(installedBadge);
         }
 
-        const showInstalledBadge = installedInLibrary && module.ops.includes('installed');
+        const showInstalledBadge = installedInLibrary || ! installable || module.ops.includes('installed') || module.ops.includes('remove');
+        const needsUpdate = showInstalledBadge && this.moduleNeedsUpdate(module);
+        const updateAvailable = showInstalledBadge && module.ops.includes('update');
+
+        let badgeLabel = _('Installed');
+        let tone: ModuleStatusTone = 'default';
+        if (needsUpdate) {
+            badgeLabel = _('Needs update');
+            tone = 'warning';
+        }
+        else if (updateAvailable) {
+            badgeLabel = _('Update available');
+            tone = 'info';
+        }
+
+        installedBadge.dataset.tone = tone;
+        installedBadge.replaceChildren(this.createStatusIcon(tone), h('span', {}, badgeLabel));
         installedBadge.classList.toggle('hidden', ! showInstalledBadge);
         installedBadge.setAttribute('aria-hidden', showInstalledBadge ? 'false' : 'true');
+
+        // an incompatible module can't be used until it's updated, so the
+        // card calls this out rather than relying on the badge
+        card.classList.toggle('needs-update', needsUpdate);
+        const notice = card.querySelector<HTMLElement>('.aux-module-notice');
+        if (notice !== null) {
+            notice.hidden = ! needsUpdate;
+            if (needsUpdate) {
+                const message = module.ops.includes('update')
+                    ? _("This module won't work until it's updated.")
+                    : _("This module won't work until it's updated, but no update is available yet.");
+                notice.replaceChildren(this.createStatusIcon('warning'), h('span', {}, message));
+            }
+        }
+    }
+
+    moduleNeedsUpdate(module: IModuleMeta): boolean {
+        return module.incompatible === true || module.ops.includes('incompatible');
     }
 
     updateModuleCardDescription(card: HTMLElement, module: IModuleMeta, translator: (value: string) => string, highlightTerm: string): void {
@@ -931,22 +1089,22 @@ export default class ModulesAuxView extends AuxView {
 
         const description = translator(module.description).trim();
         meta.replaceChildren();
-        meta.classList.remove('expanded');
+        meta.classList.remove('expanded', 'clamped');
 
         if (description) {
             meta.append(this.createDescriptionContent(description, highlightTerm));
-            meta.title = description;
+            meta.title = meta.textContent || '';
             meta.tabIndex = 0;
             meta.dataset.expandable = 'true';
             meta.setAttribute('role', 'button');
             meta.setAttribute('aria-expanded', 'false');
+            this.updateDescriptionClamp(meta);
             this.expandDescriptionForHiddenHighlight(meta);
             return;
         }
 
-        meta.textContent = _('{analysisCount} analyses', {
-            analysisCount: module.analyses.length.toLocaleString(),
-        });
+        const analysisCount = module.analyses.length;
+        meta.textContent = n_('{n} analysis', '{n} analyses', analysisCount, { n: analysisCount.toLocaleString() });
         meta.removeAttribute('title');
         meta.removeAttribute('role');
         meta.removeAttribute('aria-expanded');
@@ -966,15 +1124,44 @@ export default class ModulesAuxView extends AuxView {
             authors.append(this.createHighlightedTextContent(authorList.join(', '), highlightTerm));
     }
 
+    getModuleLabel(module: IModuleMeta): string {
+        // trim any leading short name from the title, i.e. 'GAMLj - General
+        // Analyses for Linear Models' becomes 'General Analyses for Linear Models'
+        let label = this.translate(module, module.title);
+        if (label.slice(0, module.name.length).toLocaleLowerCase() === module.name.toLocaleLowerCase()) {
+            const separator = label.slice(module.name.length).match(/^[ :-]{1,3}/);
+            if (separator !== null)
+                label = label.slice(module.name.length + separator[0].length);
+        }
+        if (module.name !== module.title)
+            label = `${ module.name } - ${ label }`;
+        return label;
+    }
+
+    createInstallButton(module: IModuleMeta, action: 'install' | 'update'): HTMLButtonElement {
+        const version = Version.stringify(module.version, 3);
+        const moduleName = this.getModuleLabel(module);
+        const button = this.createActionButton(
+            action === 'install' ? _('Install') : _('Update'),
+            () => this.installModule(module), false, this.moduleNeedsUpdate(module) ? 'attention' : 'primary', '', 'install');
+        button.dataset.installAction = action;
+        button.dataset.action = action;
+        button.setAttribute('aria-label', action === 'install'
+            ? _('Install module {moduleName} version {version}', { moduleName, version })
+            : _('Update module {moduleName} to version {version}', { moduleName, version }));
+        return button;
+    }
+
     updateModuleCardActions(card: HTMLElement, module: IModuleMeta, installable: boolean, installedInLibrary: boolean): void {
         const actions = card.querySelector<HTMLElement>('.aux-module-actions');
         if (actions === null)
             return;
 
-        const actionFocusKey = this.captureActionFocusKey(card);
         const installState = this.installStates.get(module.name);
         const isInstalling = installState !== undefined;
-        const canInstall = module.ops.includes('install') || module.ops.includes('update');
+        const addRemove = this.canAddRemoveModules();
+        const showHide = this.canShowHideModules();
+        const canInstall = addRemove && installable && (module.ops.includes('install') || module.ops.includes('update'));
         if (canInstall)
             actions.dataset.role = 'module-actions';
         else
@@ -986,20 +1173,22 @@ export default class ModulesAuxView extends AuxView {
             isInstalling ? 'installing' : 'idle',
             module.ops.join(','),
             module.visible ? 'visible' : 'hidden',
+            addRemove ? 'add-remove' : 'no-add-remove',
+            showHide ? 'show-hide' : 'no-show-hide',
         ].join('|');
 
         if (actions.dataset.signature === signature) {
             if (isInstalling && installState !== undefined) {
                 const progressElement = actions.querySelector<HTMLElement>('[data-role="install-progress"]');
-                if (progressElement !== null) {
+                if (progressElement !== null)
                     this.updateInstallProgress(progressElement, installState);
-                    this.restoreActionFocus(card, actionFocusKey);
-                }
             }
             return;
         }
 
         actions.dataset.signature = signature;
+
+        const focusedAction = this.captureActionFocus(actions);
         actions.replaceChildren();
 
         if (isInstalling && canInstall) {
@@ -1007,43 +1196,65 @@ export default class ModulesAuxView extends AuxView {
                 cancelAction: () => this.cancelInstallModule(module),
             }));
         }
-        else if (installable && module.ops.includes('install')) {
-            const button = this.createActionButton(
-                _('Install'),
-                () => this.installModule(module), false, 'primary');
-            button.dataset.installAction = 'install';
+        else if (addRemove && installable && module.ops.includes('install')) {
+            actions.append(this.createInstallButton(module, 'install'));
+        }
+
+        if (addRemove && ! isInstalling && module.ops.includes('update'))
+            actions.append(this.createInstallButton(module, 'update'));
+
+        if (addRemove && module.ops.includes('remove')) {
+            const button = this.createActionButton(_('Remove'), () => this.uninstallModule(module), false, 'subtle', '', 'remove');
+            button.dataset.action = 'remove';
+            button.setAttribute('aria-label', _('Remove module {moduleName}', { moduleName: this.getModuleLabel(module) }));
             actions.append(button);
         }
 
-        if (! isInstalling && module.ops.includes('update')) {
-            const button = this.createActionButton(
-                _('Update'),
-                () => this.installModule(module), false, 'primary');
-            button.dataset.installAction = 'update';
-            actions.append(button);
-        }
-
-        if (module.ops.includes('remove'))
-            actions.append(this.createActionButton(_('Remove'), event => this.uninstallModule(module, event), false, 'subtle'));
-
-        if (! installedInLibrary && (module.ops.includes('show') || module.ops.includes('hide'))) {
+        if (showHide && (module.ops.includes('show') || module.ops.includes('hide'))) {
             const label = module.visible ? _('Hide') : _('Show');
-            actions.append(this.createActionButton(label, () => this.toggleVisibility(module), false, 'subtle'));
+            const button = this.createActionButton(label, () => this.toggleVisibility(module), false, 'subtle', '', module.visible ? 'hide' : 'show');
+            button.dataset.action = 'visibility';
+            button.setAttribute('aria-label', module.visible
+                ? _('Hide module {moduleName} from the Analyses ribbon', { moduleName: this.getModuleLabel(module) })
+                : _('Show module {moduleName} in the Analyses ribbon', { moduleName: this.getModuleLabel(module) }));
+            actions.append(button);
         }
 
         if (! isInstalling) {
-            if (module.ops.includes('installed') && ! installedInLibrary)
-                actions.append(this.createStatusChip(_('Installed')));
+            if (module.ops.includes('installed') && ! installedInLibrary) {
+                const chip = this.createStatusChip(_('Installed'));
+                chip.setAttribute('aria-label', _('Module {moduleName} is installed', { moduleName: this.getModuleLabel(module) }));
+                chip.setAttribute('role', 'img');
+                actions.append(chip);
+            }
             if (module.ops.includes('unavailable'))
                 actions.append(this.createStatusChip(_('Unavailable'), 'warning'));
             if (module.ops.includes('old'))
                 actions.append(this.createStatusChip(_('Requires newer jamovi'), 'warning'));
-            if (module.ops.includes('incompatible'))
-                actions.append(this.createStatusChip(_('Needs update'), 'warning'));
         }
 
         actions.hidden = actions.childElementCount === 0;
-        this.restoreActionFocus(card, actionFocusKey);
+        this.restoreActionFocus(card, actions, focusedAction);
+    }
+
+    // a card's actions are rebuilt as its state changes, so if one has focus
+    // it's restored to its replacement (i.e. Hide becomes Show), or the next
+    // action available
+    captureActionFocus(actions: HTMLElement): string | null {
+        const activeElement = document.activeElement;
+        if (! (activeElement instanceof HTMLElement) || ! actions.contains(activeElement))
+            return null;
+        return activeElement.dataset.action || '';
+    }
+
+    restoreActionFocus(card: HTMLElement, actions: HTMLElement, focusedAction: string | null): void {
+        if (focusedAction === null)
+            return;
+
+        const target = (focusedAction !== '' ? actions.querySelector<HTMLElement>(`[data-action="${ focusedAction }"]`) : null)
+            || findInitialFocus(actions)
+            || card.querySelector<HTMLElement>('.aux-module-meta[tabindex]');
+        target?.focus();
     }
 
     updateModuleCardAnalyses(card: HTMLElement, module: IModuleMeta, installable: boolean, installedInLibrary: boolean, translator: (value: string) => string, highlightTerm: string): void {
@@ -1053,11 +1264,12 @@ export default class ModulesAuxView extends AuxView {
 
         analysesHost.replaceChildren();
 
-        const analyses = installedInLibrary
-            ? null
+        const isInstalled = installedInLibrary || ! installable || module.ops.includes('installed') || module.ops.includes('remove');
+        const analyses = isInstalled
+            ? this.createInstalledAnalyses(module, translator, highlightTerm)
             : installable
             ? this.createAvailableAnalyses(module, translator, highlightTerm)
-            : this.createInstalledAnalyses(module, translator, highlightTerm);
+            : null;
 
         analysesHost.hidden = analyses === null || analyses.childElementCount === 0;
         if (analyses !== null && analyses.childElementCount > 0)
@@ -1087,183 +1299,85 @@ export default class ModulesAuxView extends AuxView {
     }
 
     createInstalledAnalyses(module: IModuleMeta, translator: (value: string) => string, highlightTerm = ''): HTMLElement {
-        const details = h('details', { class: 'aux-module-analyses-list' });
-
-        const summary = h('summary', { class: 'aux-module-analyses-summary' }, _('Analyses ({count})', {
-            count: module.analyses.length.toLocaleString(),
-        }));
-
         const list = h('div', { class: 'aux-module-analyses-items' });
 
         for (const analysis of module.analyses) {
-            const button = h('button', {
-                type: 'button',
-                class: 'aux-module-analysis-link',
-            });
-            button.append(this.createHighlightedTextContent(translator(analysis.menuTitle || analysis.title), highlightTerm));
+            const button = h('button', { type: 'button', class: 'aux-module-analysis-link' },
+                this.createHighlightedTextContent(translator(analysis.menuTitle || analysis.title), highlightTerm));
             button.addEventListener('click', () => this.runAnalysis(module, analysis.name, analysis.title));
             list.append(button);
         }
 
-        details.append(summary, list);
-        return details;
+        return h('details', { class: 'aux-module-analyses-list' },
+            h('summary', { class: 'aux-module-analyses-summary' },
+                _('Analyses ({count})', { count: module.analyses.length.toLocaleString() })),
+            list,
+        );
     }
 
-    createActionButton(label: string, action: (event: ModuleActionEvent) => void, secondary = false, emphasis: 'default' | 'primary' | 'subtle' = 'default', highlightTerm = ''): HTMLButtonElement {
+    createActionButton(label: string, action: () => void, secondary = false, emphasis: 'default' | 'primary' | 'subtle' | 'attention' = 'default', highlightTerm = '', iconType: ModuleActionIcon | null = null): HTMLButtonElement {
         const button = h('button', {
             type: 'button',
             class: secondary ? 'aux-module-analysis-button' : 'aux-module-action-button',
+            'data-emphasis': emphasis,
         });
-        button.dataset.emphasis = emphasis;
-        button.dataset.actionFocusKey = label;
-        button.addEventListener('keydown', event => {
-            if (event.key === 'Enter' || event.key === ' ')
-                button.dataset.keyboardTriggered = 'true';
-        });
-        const icon = this.createActionIcon(label, secondary);
+
+        const icon = this.createActionIcon(iconType, secondary);
         if (icon)
             button.append(icon);
 
-        const text = h('span', { class: 'aux-module-action-label' });
-        text.append(this.createHighlightedTextContent(label, highlightTerm));
-        button.append(text);
-        button.addEventListener('click', event => {
-            const keyboardTriggered = button.dataset.keyboardTriggered === 'true' || event.detail === 0;
-            delete button.dataset.keyboardTriggered;
-            action(Object.assign(event, { keyboardTriggered }));
-        });
+        button.append(h('span', { class: 'aux-module-action-label' }, this.createHighlightedTextContent(label, highlightTerm)));
+        button.addEventListener('click', action);
         return button;
     }
 
-    captureActionFocusKey(card: HTMLElement): string | null {
-        const activeElement = document.activeElement;
-        if (! (activeElement instanceof HTMLElement) || ! card.contains(activeElement))
+    createActionIcon(iconType: ModuleActionIcon | null, secondary: boolean): HTMLSpanElement | null {
+        if (secondary || iconType === null)
             return null;
 
-        const action = activeElement.closest<HTMLElement>('[data-action-focus-key]');
-        if (action === null || ! card.contains(action))
-            return null;
-
-        return action.dataset.actionFocusKey || '';
+        return h('span', { class: 'aux-module-action-icon' }, htmlTrusted(actionIcons[iconType]));
     }
 
-    restoreActionFocus(card: HTMLElement, actionFocusKey: string | null): void {
-        if (actionFocusKey === null)
-            return;
-
-        const focusTarget = this.findActionFocusTarget(card, actionFocusKey);
-        focusTarget?.focus();
-    }
-
-    findActionFocusTarget(card: HTMLElement, actionFocusKey: string): HTMLElement | null {
-        const escapedFocusKey = CSS.escape(actionFocusKey);
-        const matchingAction = card.querySelector<HTMLElement>(`.aux-module-actions [data-action-focus-key="${ escapedFocusKey }"]:not(:disabled)`);
-        if (matchingAction !== null && this.isVisibleFocusableElement(matchingAction))
-            return matchingAction;
-
-        const fallbackActions = Array.from(card.querySelectorAll<HTMLElement>('.aux-module-actions [data-action-focus-key]:not(:disabled)'));
-        return fallbackActions.find(action => this.isVisibleFocusableElement(action)) || null;
-    }
-
-    createActionIcon(label: string, secondary: boolean): HTMLSpanElement | null {
-        if (secondary)
-            return null;
-
-        const icon = h('span', { class: 'aux-module-action-icon' });
-
-        let svg = '';
-        switch (label) {
-            case _('Install'):
-            case _('Update'):
-                svg = `
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M8 3v6" />
-                        <path d="M5.5 6.5 8 9l2.5-2.5" />
-                        <path d="M3.5 12.5h9" />
-                    </svg>`;
-                break;
-            case _('Remove'):
-                svg = `
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M3.5 4.5h9" />
-                        <path d="M6.5 2.5h3" />
-                        <path d="M5 4.5v8" />
-                        <path d="M11 4.5v8" />
-                        <path d="M4.5 4.5l.5 8h6l.5-8" />
-                    </svg>`;
-                break;
-            case _('Hide'):
-                svg = `
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M2 8s2.2-3 6-3 6 3 6 3-2.2 3-6 3-6-3-6-3Z" />
-                        <path d="M6.8 7.9a1.2 1.2 0 1 0 2.4 0 1.2 1.2 0 0 0-2.4 0Z" />
-                        <path d="M3 13 13 3" />
-                    </svg>`;
-                break;
-            case _('Show'):
-                svg = `
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M2 8s2.2-3 6-3 6 3 6 3-2.2 3-6 3-6-3-6-3Z" />
-                        <path d="M6.8 7.9a1.2 1.2 0 1 0 2.4 0 1.2 1.2 0 0 0-2.4 0Z" />
-                    </svg>`;
-                break;
-        }
-
-        if (svg === '')
-            return null;
-
-        icon.append(htmlTrusted<SVGElement>(svg));
-        return icon;
+    createStatusIcon(tone: ModuleStatusTone = 'default'): HTMLSpanElement {
+        return h('span', { class: 'aux-module-status-icon', 'aria-hidden': 'true' }, htmlTrusted(statusIcons[tone]));
     }
 
     createStatusChip(label: string, tone: 'default' | 'warning' = 'default'): HTMLSpanElement {
-        const chip = h('span', { class: 'aux-module-status-chip' });
-        chip.dataset.tone = tone;
-
-        if (tone === 'default') {
-            const icon = h('span', {
-                class: 'aux-module-status-icon',
-                'aria-hidden': 'true',
-            });
-            icon.textContent = '✓';
-            chip.append(icon);
-        }
-
-        const text = h('span', {}, label);
-        chip.append(text);
-        return chip;
+        return h('span', { class: 'aux-module-status-chip', 'data-tone': tone },
+            ...(tone === 'default' ? [ this.createStatusIcon() ] : []),
+            h('span', {}, label),
+        );
     }
 
     createInstallProgress(state: ModuleInstallState, options?: { text?: string; className?: string; cancelAction?: () => void; cancelLabel?: string }): HTMLDivElement {
-        const wrap = h('div', { class: options?.className || 'aux-module-progress-wrap' });
-        wrap.dataset.role = 'install-progress';
-
-        const progressText = h('div', { class: 'aux-module-progress-text' }, options?.text || (state.cancelRequested ? _('Cancelling') : _('Installing')));
-
-        const progressBar = h('div', {
-            class: 'aux-module-progress',
-            role: 'progressbar',
-            'aria-valuemin': '0',
-            'aria-valuemax': '100',
-            'aria-valuenow': state.percent.toString(),
-        });
-
-        const progressBarFill = h('div', { class: 'aux-module-progress-bar' });
-        progressBarFill.style.width = `${ state.percent }%`;
-
-        const progressLabel = h('div', { class: 'aux-module-progress-label' }, _('{percent}%', { percent: state.percent.toString() }));
-
-        progressBar.append(progressBarFill);
-        wrap.append(progressText, progressBar, progressLabel);
+        const wrap = h('div', { class: options?.className || 'aux-module-progress-wrap', 'data-role': 'install-progress' },
+            h('div', { class: 'aux-module-progress-text' },
+                options?.text || (state.cancelRequested ? _('Cancelling') : _('Installing'))),
+            h('div', {
+                class: 'aux-module-progress',
+                role: 'progressbar',
+                'aria-valuemin': '0',
+                'aria-valuemax': '100',
+                'aria-valuenow': state.percent.toString(),
+            }, h('div', { class: 'aux-module-progress-bar', style: `width: ${ state.percent }%` })),
+            h('div', { class: 'aux-module-progress-label' }, _('{percent}%', { percent: state.percent.toString() })),
+        );
 
         if (options?.cancelAction !== undefined) {
+            const cancelAction = options.cancelAction;
             const cancelButton = this.createActionButton(
                 options.cancelLabel || _('Cancel'),
-                options.cancelAction,
+                () => {
+                    if (cancelButton.getAttribute('aria-disabled') !== 'true')
+                        cancelAction();
+                },
                 false,
                 'subtle');
             cancelButton.classList.add('aux-module-progress-cancel');
-            cancelButton.disabled = state.cancelRequested;
+            cancelButton.dataset.action = 'cancel';
+            // aria-disabled rather than disabled, so it keeps focus when the
+            // install can no longer be cancelled
+            cancelButton.setAttribute('aria-disabled', state.cancelRequested || ! state.cancellable ? 'true' : 'false');
             wrap.append(cancelButton);
         }
 
@@ -1289,14 +1403,14 @@ export default class ModulesAuxView extends AuxView {
 
         const cancelButton = progressElement.querySelector<HTMLButtonElement>('.aux-module-progress-cancel');
         if (cancelButton !== null)
-            cancelButton.disabled = state.cancelRequested;
+            cancelButton.setAttribute('aria-disabled', state.cancelRequested || ! state.cancellable ? 'true' : 'false');
     }
 
     updateInstallCard(module: IModuleMeta): void {
         if (this.listElement === null)
             return;
 
-        const card = this.listElement.querySelector<HTMLElement>(`.aux-module-card[data-module-name="${ module.name }"]`);
+        const card = this.listElement.querySelector<HTMLElement>(`.aux-module-card[data-module-name="${ CSS.escape(module.name) }"]`);
         if (card === null)
             return;
 
@@ -1306,19 +1420,18 @@ export default class ModulesAuxView extends AuxView {
         if (actions === null)
             return;
 
-        const actionFocusKey = this.captureActionFocusKey(card);
         if (isInstalling) {
             const progressElement = actions.querySelector<HTMLElement>('[data-role="install-progress"]');
             if (progressElement !== null) {
                 this.updateInstallProgress(progressElement, installState);
-                this.restoreActionFocus(card, actionFocusKey);
                 return;
             }
 
+            const focusedAction = this.captureActionFocus(actions);
             actions.replaceChildren(this.createInstallProgress(installState, {
                 cancelAction: () => this.cancelInstallModule(module),
             }));
-            this.restoreActionFocus(card, actionFocusKey);
+            this.restoreActionFocus(card, actions, focusedAction);
             return;
         }
 
@@ -1326,54 +1439,78 @@ export default class ModulesAuxView extends AuxView {
         if (! source)
             return;
 
+        const focusedAction = this.captureActionFocus(actions);
         actions.replaceChildren();
 
-        if (module.ops.includes('install')) {
-            const button = this.createActionButton(_('Install'), () => this.installModule(module), false, 'primary');
-            button.dataset.installAction = 'install';
-            actions.append(button);
+        if (this.canAddRemoveModules()) {
+            if (module.ops.includes('install'))
+                actions.append(this.createInstallButton(module, 'install'));
+
+            if (module.ops.includes('update'))
+                actions.append(this.createInstallButton(module, 'update'));
         }
 
-        if (module.ops.includes('update')) {
-            const button = this.createActionButton(_('Update'), () => this.installModule(module), false, 'primary');
-            button.dataset.installAction = 'update';
-            actions.append(button);
-        }
-
-        this.restoreActionFocus(card, actionFocusKey);
+        this.restoreActionFocus(card, actions, focusedAction);
     }
 
     installModule(module: IModuleMeta): void {
         const source = module.url || module.path;
+        if (! source || ! this.canAddRemoveModules())
+            return;
+
+        this.installModuleFromSource(source, module.name, this.translate(module, module.title));
+    }
+
+    async sideloadModule(): Promise<void> {
+        if (! this.canSideloadModules())
+            return;
+
+        const filters = [ { name: _('jamovi modules'), extensions: [ 'jmo' ] } ];
+        const result = await host.showOpenDialog({ filters }) as { cancelled: boolean; paths?: string[] };
+        if (result.cancelled)
+            return;
+
+        const source = result.paths?.[0];
         if (! source)
             return;
 
+        this.installModuleFromSource(source, source, _('Selected module'), false);
+        this.sideloadButton?.focus();
+    }
+
+    installModuleFromSource(source: string, installKey: string, moduleTitle: string, cancellable = true): void {
+        if (this.installStates.has(installKey))
+            return;
+
         this.cancelledInstallSources.delete(source);
-        this.installStates.set(module.name, {
+        this.installStates.set(installKey, {
             source,
             progress: [ 0, 1 ],
             percent: 0,
             cancelRequested: false,
+            cancellable,
         });
         this.updateSummaryProgress();
-        this.updateInstallCard(module);
+        const module = this.getModuleByInstallKey(installKey);
+        if (module !== null)
+            this.updateInstallCard(module);
 
         void this.model.installModule(source).then(() => {
             this.cancelledInstallSources.delete(source);
-            this.installStates.delete(module.name);
+            this.installStates.delete(installKey);
             this.updateSummaryProgress();
             this.model.modules().available().retrieve();
             this.model.trigger('notification', new Notify({
                 title: _('Module installed'),
-                message: _('{module} was installed successfully', { module: module.title }),
+                message: _('{module} was installed successfully', { module: moduleTitle }),
                 duration: 3000,
                 type: 'success'
             }));
             this.update();
         }, error => {
-            const wasCancelled = this.installStates.get(module.name)?.cancelRequested === true
+            const wasCancelled = this.installStates.get(installKey)?.cancelRequested === true
                 || this.cancelledInstallSources.delete(source);
-            this.installStates.delete(module.name);
+            this.installStates.delete(installKey);
             this.updateSummaryProgress();
             if (! wasCancelled) {
                 this.model.trigger('notification', new Notify({
@@ -1385,27 +1522,35 @@ export default class ModulesAuxView extends AuxView {
             }
             this.update();
         }, progress => {
-            const previousState = this.installStates.get(module.name);
+            const previousState = this.installStates.get(installKey);
             if (previousState === undefined && this.cancelledInstallSources.has(source))
                 return;
 
             const value = progress?.[0] || 0;
             const total = progress?.[1] || 1;
             const percent = Math.max(0, Math.min(100, Math.round((100 * value) / total)));
-            this.installStates.set(module.name, {
+            this.installStates.set(installKey, {
                 source,
                 progress: [ value, total ],
                 percent,
                 cancelRequested: previousState?.cancelRequested === true,
+                cancellable: cancellable && value < total,
             });
             this.updateSummaryProgress();
-            this.updateInstallCard(module);
+            const module = this.getModuleByInstallKey(installKey);
+            if (module !== null)
+                this.updateInstallCard(module);
         });
+    }
+
+    getModuleByInstallKey(installKey: string): IModuleMeta | null {
+        return [ ...this.getAvailableModules(), ...this.getInstalledModules() ]
+            .find(module => module.name === installKey) || null;
     }
 
     cancelInstallModule(module: IModuleMeta): void {
         const installState = this.installStates.get(module.name);
-        if (installState === undefined || installState.cancelRequested)
+        if (installState === undefined || installState.cancelRequested || ! installState.cancellable)
             return;
 
         this.installStates.set(module.name, {
@@ -1458,24 +1603,23 @@ export default class ModulesAuxView extends AuxView {
         }));
     }
 
-    uninstallModule(module: IModuleMeta, event?: ModuleActionEvent): void {
-        if (this.selectedTab === 'installed') {
+    uninstallModule(module: IModuleMeta): void {
+        if (! this.canAddRemoveModules())
+            return;
+
+        if (this.selectedFilter === 'installed')
             this.pendingInstalledRemovals.add(module.name);
-            if (event?.keyboardTriggered)
-                this.pendingInstalledRemovalFocus.set(module.name, this.captureInstalledRemovalFocusTarget(module.name));
-        }
 
         void this.model.modules().uninstall(module.name).then(() => {
             this.model.trigger('notification', new Notify({
                 title: _('Module uninstalled'),
-                message: _('{module} was uninstalled successfully', { module: module.title }),
+                message: _('{module} was uninstalled successfully', { module: this.translate(module, module.title) }),
                 duration: 3000,
                 type: 'success'
             }));
             this.update();
         }, error => {
             this.pendingInstalledRemovals.delete(module.name);
-            this.pendingInstalledRemovalFocus.delete(module.name);
             this.model.trigger('notification', new Notify({
                 title: _('Unable to uninstall module'),
                 message: error.message || '',
@@ -1486,6 +1630,9 @@ export default class ModulesAuxView extends AuxView {
     }
 
     toggleVisibility(module: IModuleMeta): void {
+        if (! this.canShowHideModules())
+            return;
+
         this.model.modules().toggleModuleVisibility(module.name);
         void this.update();
     }
@@ -1499,14 +1646,4 @@ export default class ModulesAuxView extends AuxView {
             });
         });
     }
-
-    describeModule(module: IModuleMeta): string {
-        const hiddenState = module.visible ? _('visible') : _('hidden');
-        return _('{title} ({analysisCount} analyses, {hiddenState})', {
-            title: module.title,
-            analysisCount: module.analyses.length.toLocaleString(),
-            hiddenState,
-        });
-    }
-
 }

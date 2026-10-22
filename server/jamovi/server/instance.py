@@ -106,6 +106,8 @@ class Instance:
         self._project.analyses.weights_changed += self._on_weights_changed
 
         self._session.modules.add_listener(self._module_event)
+        self._module_tasks = set()
+        self._module_install_tasks = { }
 
         handler = Instance.LogHandler(self)
         handler.setLevel('DEBUG')
@@ -296,6 +298,8 @@ class Instance:
 
     def close(self):
         self._session.modules.remove_listener(self._module_event)
+        for task in list(self._module_tasks):
+            task.cancel()
         self._controllers = { }
         self._project.close()
 
@@ -1537,17 +1541,37 @@ class Instance:
                 if self._perms.library.addRemove is False:
                     raise PermissionError()
 
-                try:
-                    stream = modules.install(request.path)
-                    async for progress in stream:
-                        self._coms.send(None, self._instance_id, request, complete=False, progress=progress)
-
-                    self._coms.send(None, self._instance_id, request)
-                    self._session.notify_global_changes()
-                except Exception as e:
-                    log.exception(e)
+                if request.path in self._module_install_tasks:
                     if self._coms is not None:
-                        self._coms.send_error(_('Unable to install module'), str(e), self._instance_id, request)
+                        self._coms.send_error(_('Unable to install module'), _('This module is already being installed'), self._instance_id, request)
+                    return
+
+                install = { 'request': request, 'stream': None }
+                task = create_task(self._install_module(install))
+                install['task'] = task
+                self._module_tasks.add(task)
+                task.add_done_callback(self._module_tasks.discard)
+                self._module_install_tasks[request.path] = install
+                task.add_done_callback(lambda f, path=request.path: self._module_install_tasks.pop(path, None))
+
+            elif request.command == jcoms.ModuleRR.ModuleCommand.Value('CANCEL_INSTALL'):
+                install = self._module_install_tasks.get(request.path)
+                if install is not None:
+                    stream = install['stream']
+                    if stream is not None and not stream.cancellable:
+                        # the download has finished and the module is being
+                        # extracted, which can't be safely interrupted
+                        if self._coms is not None:
+                            self._coms.send_error(_('Unable to cancel install'), _('The module is already being installed'), self._instance_id, request)
+                        return
+
+                    del self._module_install_tasks[request.path]
+                    install['task'].cancel()
+                    if self._coms is not None:
+                        self._coms.send_error(_('Module installation cancelled'), None, self._instance_id, install['request'])
+
+                if self._coms is not None:
+                    self._coms.send(None, self._instance_id, request)
 
             elif request.command == jcoms.ModuleRR.ModuleCommand.Value('UNINSTALL'):
                 if self._perms.library.addRemove is False:
@@ -1578,6 +1602,30 @@ class Instance:
         except PermissionError as e:
             if self._coms is not None:
                 self._coms.send_error(_('Unable to perform request'), str(e), self._instance_id, request)
+
+    async def _install_module(self, install):
+        modules = self._session.modules
+        request = install['request']
+        stream = None
+
+        try:
+            stream = modules.install(request.path)
+            install['stream'] = stream
+            async for progress in stream:
+                if self._coms is not None:
+                    self._coms.send(None, self._instance_id, request, complete=False, progress=progress)
+
+            if self._coms is not None:
+                self._coms.send(None, self._instance_id, request)
+            self._session.notify_global_changes()
+        except asyncio.CancelledError:
+            if stream is not None:
+                stream.cancel()
+            raise
+        except Exception as e:
+            log.exception(e)
+            if self._coms is not None:
+                self._coms.send_error(_('Unable to install module'), str(e), self._instance_id, request)
 
     def _set_module_visibility(self, name, value):
         modules = self._session.modules

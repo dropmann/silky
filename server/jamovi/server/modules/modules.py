@@ -5,6 +5,9 @@ import logging
 import shutil
 import json
 from zipfile import ZipFile
+from asyncio import CancelledError
+from asyncio import Lock
+from asyncio import shield
 from asyncio import ensure_future as create_task
 from collections import namedtuple
 from functools import lru_cache
@@ -203,6 +206,7 @@ class Modules:
         self._listeners = [ ]
         self._original: list | None = None
         self._read_task = None
+        self._install_lock = Lock()
 
     def get(self, name):
         for module in self._modules:
@@ -397,18 +401,22 @@ class Modules:
 
     async def install_from_file(self, path, update: bool = False):
 
-        with ZipFile(path) as zip_file:
+        # installs are serialised, so that concurrent installs can't
+        # interleave their extraction and rereading of the module list
+        async with self._install_lock:
 
-            module_dir = os.path.join(Dirs.app_data_dir(), 'modules')
-            module_name = zip_file.namelist()[0].split('/')[0]
-            module_path = os.path.join(module_dir, module_name)
+            with ZipFile(path) as zip_file:
 
-            shutil.rmtree(module_path, ignore_errors=True)
-            zip_file.extractall(module_dir)
+                module_dir = os.path.join(Dirs.app_data_dir(), 'modules')
+                module_name = zip_file.namelist()[0].split('/')[0]
+                module_path = os.path.join(module_dir, module_name)
 
-        meta = self._read_module(module_path)
+                shutil.rmtree(module_path, ignore_errors=True)
+                zip_file.extractall(module_dir)
 
-        await self._reread_installed()
+            meta = self._read_module(module_path)
+
+            await self._reread_installed()
 
         if update:
             self._notify_listeners({ 'type': 'moduleUpdated', 'data': { 'name': meta.name }})
@@ -417,6 +425,10 @@ class Modules:
     def install(self, path):
 
         out_stream = ProgressStream()
+
+        # an install can only be cancelled while it is downloading, once
+        # extraction begins it runs to completion
+        out_stream.cancellable = True
 
         async def download_and_install(path):
 
@@ -429,16 +441,31 @@ class Modules:
                     path = in_stream.result()
                     verify_jmo(path)
 
-                await self.install_from_file(path)
+                out_stream.cancellable = False
+                await shield(self.install_from_file(path))
                 out_stream.set_result((1, 1))
+
+            except CancelledError:
+                if in_stream:
+                    in_stream.cancel()
+                if not out_stream.done():
+                    out_stream.cancel()
+                raise
 
             except Exception as e:
                 if in_stream:
                     in_stream.cancel()
                 out_stream.set_exception(e)
 
+        def complete_install(future):
+            try:
+                future.result()
+            except CancelledError:
+                pass
+
         t = create_task(download_and_install(path))
-        t.add_done_callback(lambda f: f.result())
+        t.add_done_callback(complete_install)
+        out_stream.add_done_callback(lambda f: t.cancel() if f.cancelled() else None)
 
         return out_stream
 
