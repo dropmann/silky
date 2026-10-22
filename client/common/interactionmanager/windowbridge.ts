@@ -3,6 +3,7 @@ export class WindowBridge {
     readonly mainWindow: Window;
 
     private setBlurring: (value: boolean) => void;
+    private isolatedFrames = new Set<HTMLIFrameElement>();
 
     constructor(setBlurring: (value: boolean) => void) {
         this.setBlurring = setBlurring;
@@ -18,6 +19,28 @@ export class WindowBridge {
                 otherWindow.contentWindow.focus();
             }, 100);
         }
+    }
+
+    /**
+     * Excludes an iframe from the bridge. Its messages are ignored, and
+     * broadcasts are not sent to it. Use for frames hosting untrusted content.
+     */
+    isolateFrame(iframe: HTMLIFrameElement): () => void {
+        this.isolatedFrames.add(iframe);
+        return () => {
+            this.isolatedFrames.delete(iframe);
+        };
+    }
+
+    isIsolatedSource(source: MessageEventSource | null): boolean {
+        if (source === null)
+            return false;
+
+        for (const iframe of this.isolatedFrames) {
+            if (iframe.contentWindow === source)
+                return true;
+        }
+        return false;
     }
 
     invoke(invokeWindow: Window, id: string, args: any[], transferFocus: boolean): void {
@@ -38,8 +61,9 @@ export class WindowBridge {
             this.mainWindow.postMessage(data, '*');
 
         for (let i = 0; i < this.mainWindow.frames.length; i++) {
-            if (window !== this.mainWindow.frames[i])
-                this.mainWindow.frames[i].postMessage(data, '*');
+            const frame = this.mainWindow.frames[i];
+            if (window !== frame && ! this.isIsolatedSource(frame))
+                frame.postMessage(data, '*');
         }
     }
 }

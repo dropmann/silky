@@ -2,6 +2,7 @@ import AnalysisAuxView from './analysis';
 import AssistantAuxView from './assistant';
 import DataQualityAuxView from './data-quality';
 import DatasetAuxView from './dataset';
+import datasetSummaryExtensionEntry from './entries/dataset-summary-extension';
 import GuidanceAuxView from './guidance';
 import HelpAuxView from './help';
 import HistoryAuxView from './history';
@@ -32,6 +33,7 @@ export const auxEntries: AuxEntry[] = [
     createEntry('assistant', 10, () => new AssistantAuxView()),
     createEntry('results-toc', 20, ({ instance }) => new ResultsTocAuxView(instance)),
     createEntry('dataset', 30, ({ instance }) => new DatasetAuxView(instance)),
+    datasetSummaryExtensionEntry,
     createEntry('analysis', 40, ({ instance }) => new AnalysisAuxView(instance)),
     createEntry('help', 50, () => new HelpAuxView()),
     createEntry('variable-info', 60, () => new VariableInfoAuxView()),

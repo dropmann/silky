@@ -1,5 +1,13 @@
 import { marked } from 'marked';
 
+const htmlNamespace = 'http://www.w3.org/1999/xhtml';
+const svgNamespace = 'http://www.w3.org/2000/svg';
+
+// svg attributes whose values can reference other content with url()
+const svgReferenceAttributes = new Set([
+    'fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end',
+]);
+
 const urlAttributes = new Set([
     'background',
     'cite',
@@ -21,6 +29,9 @@ export type RichOptions = {
     tags?: readonly string[];
     attributes?: Partial<Record<string, readonly string[]>>;
     linkTarget?: '_blank';
+    // what happens to an element that isn't allowed: 'flatten' (the default)
+    // keeps its content, 'drop' removes it along with its content
+    disallowed?: 'flatten' | 'drop';
 };
 
 export const richDescriptionOptions: RichOptions = {
@@ -87,6 +98,34 @@ export function htmlTrusted<T extends HTMLElement> (html: string) : T {
     if (child === null)
         throw new Error('htmlTrusted() expected trusted HTML with a root element.');
     return child as T;
+}
+
+const svgTags = [ 'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon' ];
+const svgAttributes = [
+    'viewBox', 'd', 'x', 'y', 'width', 'height', 'rx', 'ry', 'cx', 'cy', 'r',
+    'x1', 'y1', 'x2', 'y2', 'points', 'transform',
+    'fill', 'fill-opacity', 'fill-rule', 'clip-rule', 'opacity',
+    'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'stroke-opacity',
+];
+
+export const svgOptions: RichOptions = {
+    tags: svgTags,
+    attributes: Object.fromEntries(svgTags.map(tag => [ tag, svgAttributes ])),
+    // the content of a disallowed svg element isn't meaningful on its own
+    disallowed: 'drop',
+};
+
+/**
+ * Sanitizes untrusted SVG markup into an svg made only of basic shapes and
+ * presentation attributes. Returns null when the result has no svg root.
+ * Safe use: use for SVG markup from untrusted sources, such as icons in
+ * extension manifests.
+ */
+export function svg(input: string): SVGSVGElement | null {
+    let root = rich(input.trim(), svgOptions).firstElementChild;
+    if (root === null || root.namespaceURI !== svgNamespace || root.localName !== 'svg')
+        return null;
+    return root as SVGSVGElement;
 }
 
 /**
@@ -187,6 +226,9 @@ export function attrs(attributes: HTMLAttributes): SafeHTMLAttributes {
         if (lowerAttribute === 'style' || lowerAttribute === 'srcdoc' || lowerAttribute === 'srcset')
             continue;
 
+        if (svgReferenceAttributes.has(lowerAttribute) && /url\s*\(/i.test(value))
+            continue;
+
         if (urlAttributes.has(lowerAttribute)) {
             let safeValue = url(value);
             if (safeValue === '')
@@ -212,7 +254,7 @@ function createSanitizer(options: RichOptions, blockTags: ReadonlySet<string> = 
     let allowedTags = new Set(options.tags ?? richBaseOptions.tags);
     let allowedAttributes = options.attributes ?? {};
 
-    function sanitizeAttributes(element: HTMLElement, tag: string): SafeHTMLAttributes {
+    function sanitizeAttributes(element: Element, tag: string): SafeHTMLAttributes {
         let tagAttributes = allowedAttributes[tag] ?? [];
         let rawAttributes: HTMLAttributes = {};
 
@@ -232,10 +274,14 @@ function createSanitizer(options: RichOptions, blockTags: ReadonlySet<string> = 
         if (node.nodeType !== Node.ELEMENT_NODE)
             return [];
 
-        let element = node as HTMLElement;
+        let element = node as Element;
         let tag = element.tagName.toLowerCase();
+        let foreign = element.namespaceURI !== htmlNamespace;
 
         if (tag === 'script' || tag === 'style')
+            return [];
+
+        if (options.disallowed === 'drop' && ! allowedTags.has(tag))
             return [];
 
         let sanitizedChildren = Array.from(element.childNodes)
@@ -247,7 +293,10 @@ function createSanitizer(options: RichOptions, blockTags: ReadonlySet<string> = 
             if (tag === 'a' && safeAttributes.href === undefined)
                 return sanitizedChildren;
 
-            let cleanElement = document.createElement(tag);
+            // rebuilt in the source element's namespace, so svg stays svg
+            let cleanElement = foreign
+                ? document.createElementNS(element.namespaceURI, element.localName)
+                : document.createElement(tag);
             setSafeAttrs(cleanElement, safeAttributes);
             if (tag === 'a' && options.linkTarget === '_blank') {
                 cleanElement.setAttribute('target', '_blank');

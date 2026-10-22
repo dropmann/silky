@@ -23,6 +23,7 @@ An `AuxView` owns:
 - `onShow()` / `onHide()`: runs when the view becomes visible or hidden.
 - `listen(target, eventName, handler)`: registers a model listener, which is removed when the view is disposed. `addCleanup()` registers any other disposal work.
 - `requestUpdate()`: use as the handler for model changes. It updates the view if it's showing; a hidden view isn't updated, and catches up in `onShow()`, so views should call `update()` from `onShow()`.
+- `onRequestExit`: set by the shell. Call it to leave the panel and return focus to where it came from (the panel is closed when it is an overlay). Escape already does this for views built from regular DOM, views hosting an iframe need to call it themselves.
 
 `AuxView.createPanelElement()` wraps the body in the standard panel container. The panel as a whole is a single focus loop, so Tab moves through the panel's header buttons and the active view's content together. Entry code should usually build only the body content returned by `getBody()`.
 

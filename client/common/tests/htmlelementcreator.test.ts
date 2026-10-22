@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { attrs, h, htmlTrusted, rich, richBaseOptions, richBoldOptions, richDescriptionOptions, richMarkdown, richMarkdownOptions, richParagraphs, setAttrsSafely, setSafeAttrs, setRich, setText, text, url } from '../htmlelementcreator';
+import { attrs, h, htmlTrusted, rich, richBaseOptions, richBoldOptions, richDescriptionOptions, richMarkdown, richMarkdownOptions, richParagraphs, setAttrsSafely, setSafeAttrs, setRich, setText, svg, svgOptions, text, url } from '../htmlelementcreator';
 
 function renderFragment(fragment: DocumentFragment): string {
     const container = document.createElement('div');
@@ -447,5 +447,45 @@ describe('update helpers', () => {
         setRich(element, 'See <a href="https://example.com">docs</a>', richDescriptionOptions);
 
         expect(element.innerHTML).toBe('See <a href="https://example.com">docs</a>');
+    });
+});
+
+
+describe('svg', () => {
+    it('keeps html sanitizing unchanged alongside svg', () => {
+        const fragment = rich('<b>bold</b> <svg><path d="M0 0" /></svg>', { tags: [ 'b', ...(svgOptions.tags ?? []) ], attributes: svgOptions.attributes });
+        const container = document.createElement('div');
+        container.append(fragment);
+
+        expect(container.querySelector('b')!.namespaceURI).toBe('http://www.w3.org/1999/xhtml');
+        expect(container.querySelector('path')!.namespaceURI).toBe('http://www.w3.org/2000/svg');
+    });
+
+    it('keeps basic shapes and presentation attributes', () => {
+        const icon = svg('<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 4h16" /><rect x="2" y="2" width="4" height="4" rx="1" /></svg>');
+
+        expect(icon).not.toBeNull();
+        expect(icon!.namespaceURI).toBe('http://www.w3.org/2000/svg');
+        expect(icon!.getAttribute('viewBox')).toBe('0 0 24 24');
+        expect(icon!.querySelectorAll('path, rect')).toHaveLength(2);
+        expect(icon!.querySelector('path')!.getAttribute('d')).toBe('M4 4h16');
+    });
+
+    it('removes scripts, event handlers and embedded content', () => {
+        const icon = svg('<svg onload="alert(1)"><script>alert(1)</script><foreignObject><div>x</div></foreignObject><path d="M0 0" onclick="alert(1)" /></svg>');
+
+        expect(icon!.outerHTML).toBe('<svg><path d="M0 0"></path></svg>');
+    });
+
+    it('removes links and url references', () => {
+        const icon = svg('<svg><use href="#a" /><a href="javascript:alert(1)"><path d="M1 1" /></a><path d="M2 2" fill="url(https://example.org/x)" style="fill: red" /></svg>');
+
+        expect(icon!.outerHTML).toBe('<svg><path d="M2 2"></path></svg>');
+    });
+
+    it('returns null without an svg root', () => {
+        expect(svg('<div><svg></svg></div>')).toBeNull();
+        expect(svg('<img src="x" onerror="alert(1)">')).toBeNull();
+        expect(svg('')).toBeNull();
     });
 });

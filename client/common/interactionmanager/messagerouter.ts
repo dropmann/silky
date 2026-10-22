@@ -25,7 +25,10 @@ export class FocusLoopMessageRouter {
     installMessageListener(): void {
         window.addEventListener('message', event => {
             const data = event.data;
-            if (event.source === window || data.type !== 'focusLoop')
+            if (event.source === window || ! data || data.type !== 'focusLoop')
+                return;
+
+            if (this.windowBridge.isIsolatedSource(event.source))
                 return;
 
             const registration = this.handlers[data.id];

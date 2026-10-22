@@ -682,6 +682,20 @@ controller by passing the loop's modal id:
   shortcuts.register('Escape', () => closeDialog(), 'Close dialog', true, loop.modalId);
 
 
+Child windows
+-------------
+
+Child windows (such as the results iframes) run their own InteractionManager,
+and communicate with the main window through focus loop messages. These
+messages can change the focus mode and run shortcuts, so an iframe hosting
+untrusted content must be excluded from the bridge:
+
+  const release = interactionManager.isolateFrame(iframe);
+
+Messages from an isolated frame are ignored, and broadcasts are not sent to it.
+Call the returned function to remove the exclusion when the frame is removed.
+
+
 Active Loop Reactivation
 --------------------
 

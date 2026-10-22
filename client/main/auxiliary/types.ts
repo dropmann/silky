@@ -1,5 +1,5 @@
 import type { GroupBatchingEventEmittier } from '../../common/eventmap';
-import { h, htmlTrusted } from '../../common/htmlelementcreator';
+import { h, htmlTrusted, svg } from '../../common/htmlelementcreator';
 import type Instance from '../instance';
 import type Selection from '../selection';
 
@@ -28,10 +28,11 @@ export function findInitialFocus(element: HTMLElement): HTMLElement | null {
     return null;
 }
 
-export type AuxViewId =
+export type BuiltInAuxViewId =
     | 'assistant'
     | 'results-toc'
     | 'dataset'
+    | 'dataset-summary-extension'
     | 'analysis'
     | 'help'
     | 'variable-info'
@@ -45,6 +46,10 @@ export type AuxViewId =
     | 'modules'
     | 'guidance'
     | 'review';
+
+// extensions declare their own ids, so beyond the built in views any id is
+// allowed (manifests validate the format)
+export type AuxViewId = BuiltInAuxViewId | (string & {});
 
 export type AuxViewSelection = AuxViewId | null;
 export type AuxPresentation = 'hidden' | 'overlay' | 'docked';
@@ -72,6 +77,12 @@ export class AuxView {
     // set by the shell while the view is showing
     shown = false;
     private cleanups: Array<() => void> = [];
+    // whether iconSvg is fixed internal markup; views showing icons from an
+    // untrusted source (such as an extension manifest) set this to false
+    iconTrusted = true;
+    // set by the shell, views call this to close the panel (or leave it, when
+    // docked) and return focus to where it came from
+    onRequestExit: (() => void) | null = null;
 
     constructor(id: AuxViewId) {
         this.id = id;
@@ -95,11 +106,14 @@ export class AuxView {
         return this.createBodyElement();
     }
 
-    // the icon markup is fixed internal markup
     createIcon(className: string): HTMLElement {
         const icon = h('div', { class: className, 'aria-hidden': 'true' });
-        if (this.iconSvg.trim() !== '')
-            icon.append(htmlTrusted(this.iconSvg));
+        if (this.iconSvg.trim() === '')
+            return icon;
+
+        const markup = this.iconTrusted ? htmlTrusted(this.iconSvg) : svg(this.iconSvg);
+        if (markup !== null)
+            icon.append(markup);
         return icon;
     }
 

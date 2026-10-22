@@ -320,6 +320,16 @@ export class InteractionManager extends EventEmitter {
     }
 
     /**
+     * Excludes an iframe hosting untrusted content from the window bridge, so
+     * it can't invoke focus loop messages (such as shortcuts) in this window,
+     * and doesn't receive broadcasts. Returns a function that removes the
+     * exclusion.
+     */
+    isolateFrame(iframe: HTMLIFrameElement): () => void {
+        return this.windowBridge.isolateFrame(iframe);
+    }
+
+    /**
      * Transfers focus ownership to another window or iframe.
      */
     transferFocus(otherWindow: Window | HTMLIFrameElement): void {

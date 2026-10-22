@@ -60,6 +60,9 @@ export default class AuxShell {
         this.panel.onResizeEnd = event => this.handleResizeEnd(event);
         this.panel.onResizeKey = event => this.handleResizeKey(event);
 
+        for (const view of views)
+            view.onRequestExit = () => this.exitPanel();
+
         // in the keyboard focus modes, Escape deactivates the panel's loop
         // and FocusLoop returns focus to the exit selector, the panel itself
         // then only needs closing (when it's an overlay)
@@ -414,6 +417,8 @@ export default class AuxShell {
         this.panel.element.removeEventListener('keydown', this.handlePanelKeyDown);
         this.toolbar.element.removeEventListener('keydown', this.handleToolbarKeyDown);
         this.panel.loop.off('deactivate', this.handleLoopDeactivate);
+        for (const view of this.views)
+            view.onRequestExit = null;
         document.removeEventListener('pointerdown', this.handleDocumentPointerDown, true);
 
         for (const view of this.views)
