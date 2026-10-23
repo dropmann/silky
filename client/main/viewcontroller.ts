@@ -232,14 +232,16 @@ class ViewController extends EventEmitter {
             // remove the selected columns sorted in this direction
             newKeys = sortKeys.filter(key => ! (ids.includes(key.columnId) && key.descending === descending));
         }
+        else if (ids.some(id => ! sortedIds.includes(id))) {
+            // a selected column isn't sorted yet, so this is a new sort:
+            // the previous sorts are cleared, and the selected columns are
+            // applied in the order they were selected
+            newKeys = ids.map(id => ({ columnId: id, descending }));
+        }
         else {
-            // change the direction of those sorted (retaining their priority),
-            // and add those which aren't
+            // all the selected columns are sorted, so change their direction
+            // (retaining their priority)
             newKeys = sortKeys.map(key => ids.includes(key.columnId) ? { columnId: key.columnId, descending } : key);
-            for (let id of ids) {
-                if ( ! sortedIds.includes(id))
-                    newKeys.push({ columnId: id, descending });
-            }
         }
 
         this.setSort(newKeys);
