@@ -56,6 +56,10 @@
     background-image: url('../../assets/menu-variable-insert.svg');
 }
 
+.jmv-ribbon-button[data-name=sort] > .jmv-ribbon-button-icon {
+    background-image: url('../../assets/menu-sort.svg');
+}
+
 .jmv-ribbon-button[data-name=sortasc] > .jmv-ribbon-button-icon {
     background-image: url('../../assets/menu-sort-ascending.svg');
 }
