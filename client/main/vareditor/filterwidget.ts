@@ -81,12 +81,27 @@ class FilterWidget extends HTMLElement {
         let filtersVisible = this.model.get('filtersVisible');
 
         this.$showFilter = h('button', { class: `filter-button filter-button-tooltip ${(filtersVisible ? 'show-filter-columns' : 'hide-filter-columns')}`, 'aria-label': _('Show filter columns') });
-        $filterListButtons.append()
+        $filterListButtons.append(this.$showFilter);
         this.$showFilter.addEventListener('click', (event) => {
             this.model.toggleFilterVisibility();
         });
 
         this.model.on('change:filtersVisible', event => this._updateEyeButton());
+
+        // a single listener for every formula box; records the caret position
+        // on whichever formula holds the selection, for the formula toolbar
+        document.addEventListener('selectionchange', () => {
+            const sel = window.getSelection();
+            if ( ! sel || sel.rangeCount === 0 || ! sel.anchorNode)
+                return;
+            const $anchor = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode.parentElement;
+            const $formula = $anchor?.closest('.formula');
+            if ( ! $formula || ! this.$filterList.contains($formula))
+                return;
+            const range = sel.getRangeAt(0);
+            $formula.setAttribute('sel-start', range.startOffset.toString());
+            $formula.setAttribute('sel-end', range.endOffset.toString());
+        });
 
     }
 
@@ -137,7 +152,7 @@ class FilterWidget extends HTMLElement {
     _isColumnRoot(column: Column) {
         let columns = this.model.attributes.columns;
         for (let i = 0; i < columns.length; i++) {
-            if (column.columnType !== 'filter')
+            if (columns[i].columnType !== 'filter')
                 break;
 
             if (columns[i].id === column.id)
@@ -481,15 +496,6 @@ class FilterWidget extends HTMLElement {
         let $formula = h('div', { class: 'formula' + ((rIndex > 0) ? ' and-formula' : ''), type: 'text', spellcheck: 'false', placeholder: 'e.g. ' + _example, contenteditable: 'true', tabindex: '0' }) as HTMLTextAreaElement;
         $formulaPair.append($formula);
 
-        document.addEventListener("selectionchange", () => {
-            const sel = window.getSelection();
-            if ($formula && ($formula.contains(sel.anchorNode) || sel.anchorNode === $formula)) {
-                let range = sel.getRangeAt(0);
-                $formula.setAttribute('sel-start', range.startOffset.toString());
-                $formula.setAttribute('sel-end', range.endOffset.toString());
-            }
-        });
-
         $formula.addEventListener('keydown', (event) => {
             if (event.keyCode === 9) {    //tab
                 if (dropdown.isVisible()) {
@@ -551,8 +557,8 @@ class FilterWidget extends HTMLElement {
 
         let $filter = h('div', { class: 'jmv-filter-options filter-hidden', 'data-columnid': column.id.toString() });
         if (insertBefore !== -1) {
-            this.$filterList.insertBefore($filters[insertBefore], $filter);
-            this.$filterList.insertBefore($filters[insertBefore], h('div', { class: 'jmv-filter-splitter' }));
+            this.$filterList.insertBefore($filter, $filters[insertBefore]);
+            this.$filterList.insertBefore(h('div', { class: 'jmv-filter-splitter' }), $filters[insertBefore]);
         }
         else {
             if (index !== 0)
@@ -673,12 +679,16 @@ class FilterWidget extends HTMLElement {
 
         element.style.height = value === undefined ? `${sectionHeight}px` : value;
 
-        element.addEventListener('transitionend', (e) => {
-            element.removeEventListener('transitionend', e.callee);
+        const done = (e: TransitionEvent) => {
+            // transitions on child elements bubble up; only react to this element's own
+            if (e.target !== element)
+                return;
+            element.removeEventListener('transitionend', done);
             element.style.height = null;
             element.setAttribute('data-expanding', 'false');
             dropdown.updatePosition();
-        });
+        };
+        element.addEventListener('transitionend', done);
     }
 
     _stickyBottom($element: Element) {
@@ -773,7 +783,6 @@ class FilterWidget extends HTMLElement {
 
         try {
             await this.model.deleteColumn(id);
-            this._removingFilter = false;
         }
         catch(error) {
             this._notifyEditProblem({
@@ -781,6 +790,9 @@ class FilterWidget extends HTMLElement {
                 message: error.cause,
                 type: 'error',
             });
+        }
+        finally {
+            this._removingFilter = false;
         }
 
         event.stopPropagation();
