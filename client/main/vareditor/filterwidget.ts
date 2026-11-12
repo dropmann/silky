@@ -5,499 +5,175 @@ import formulaToolbar from './formulatoolbar';
 import dropdown from './dropdown';
 import Notify from '../notification';
 import { h }  from '../../common/htmlelementcreator';
-import DataSetViewModel, { Column, ColumnActiveChangedEvent, ColumnType } from '../dataset';
+import DataSetViewModel, { Column, ColumnType } from '../dataset';
 import { NotifData } from '../ribbon/notifs';
 
-type FilterDetails = { 
-    $filter: HTMLElement; 
-    isBase: boolean;
-    fcount: number;
-    $splitter: HTMLElement;
-    $formulaBox: HTMLElement
- };
+const EXAMPLE_FORMULAS = [
+    "gender == 'female'",
+    "score == 10",
+    "consent == 'yes'",
+    "Q1 != 'don\'t know'",
+    "ROW() <= 100",
+    "ROW() % 2",
+    "-1.5 < Z(score) < 1.5",
+    "ROW() != 33 and ROW() != 37",
+    "score > 0.5"
+];
 
-class FilterWidget extends HTMLElement {
+function randomExample() {
+    return EXAMPLE_FORMULAS[Math.floor(Math.random() * EXAMPLE_FORMULAS.length)];
+}
 
-    model: DataSetViewModel;
-    _exampleFormulas: string[] = [
-            "gender == 'female'",
-            "score == 10",
-            "consent == 'yes'",
-            "Q1 != 'don\'t know'",
-            "ROW() <= 100",
-            "ROW() % 2",
-            "-1.5 < Z(score) < 1.5",
-            "ROW() != 33 and ROW() != 37",
-            "score > 0.5"
-        ];
-    attached: boolean = false;
-    _editNote: Notify = new Notify({ duration: 3000 });
-    formulaSetup: formulaToolbar;
-    _internalCreate: boolean;
-    _clickedButton: boolean;
-    _removingFilter: boolean;
-    _editorClicked: boolean;
-    _stickyBottomCount: number;
-    _stickyBottomHeight: number;
+// the number of characters of el's text before (node, offset)
+function charOffset(el: HTMLElement, node: Node, offset: number) {
+    let range = document.createRange();
+    range.selectNodeContents(el);
+    range.setEnd(node, offset);
+    return range.toString().length;
+}
 
-    $filterList: HTMLElement;
-    $showFilter: HTMLButtonElement;
-    _$wasEditingFormula: HTMLElement;
-    
+function placeCaret(el: HTMLElement, offset: number) {
+    let text = el.firstChild;
+    if (text && text.nodeType === Node.TEXT_NODE)
+        window.getSelection()?.setBaseAndExtent(text, offset, text, offset);
+    else
+        window.getSelection()?.setBaseAndExtent(el, 0, el, 0);
+}
 
-    constructor(model: DataSetViewModel) {
-        super();
+// collapses el's contents to a single text node (or nothing, when empty, so
+// :empty and the placeholder apply), keeping the caret where it was
+function flattenText(el: HTMLElement) {
+    let first = el.firstChild;
+    if (el.childNodes.length === 0 || (el.childNodes.length === 1 && first?.nodeType === Node.TEXT_NODE && first.textContent !== ''))
+        return;
 
-        this.model = model;
+    let sel = window.getSelection();
+    let caret = sel && sel.rangeCount > 0 && el.contains(sel.anchorNode) ? charOffset(el, sel.anchorNode!, sel.anchorOffset) : null;
+    el.textContent = el.textContent;
+    if (caret !== null)
+        placeCaret(el, Math.min(caret, el.textContent.length));
+}
 
-        this.removeNested = this.removeNested.bind(this);
+/*
+ The widget is a view of the leading filter columns of the data set. Filter
+ columns sharing a filterNo form one filter (the first is its root, the rest
+ its nested 'and' formulas). Rather than patching the DOM for each column
+ event, every event calls _sync(), which works out the filters from the model
+ and reconciles them against the FilterGroup/FormulaBox elements it holds,
+ keyed by filterNo and column id.
+*/
 
-        dropdown.init();
-        this.formulaSetup = new formulaToolbar(this.model);
+class FormulaBox {
 
-        this.classList.add('jmv-filter-widget', 'FilterWidget');
-        let $filterListButtons = h('div', { class: 'jmv-filter-list-buttons' });
-        this.append($filterListButtons);
-        this.$filterList = h('div', { class: 'jmv-filter-list-box' });
-        this.append(this.$filterList);
+    readonly el: HTMLElement;
+    readonly $formula: HTMLElement;
+    columnId: number;
 
-        let $addFilter = h('button', { class: 'filter-button filter-button-tooltip add-filter', 'aria-label': _('Add new filter') });
-        $filterListButtons.append($addFilter);
-        $addFilter.addEventListener('click', (event) => {
-            this._internalCreate = true;
-            this._addFilter();
+    private widget: FilterWidget;
+    private group: FilterGroup;
+    private isFirst: boolean | undefined;
+    private shownFormula: string | undefined;
+    private shownMessage: string | undefined;
+    private $equal: HTMLElement;
+    private $equalText: HTMLElement;
+    private $nested: HTMLButtonElement;
+    private $nestedIcon: HTMLElement;
+    private $showEditor: HTMLButtonElement;
+    private $field: HTMLElement;
+    private $message: HTMLElement;
 
-        });
-        $addFilter.addEventListener('mouseout', event => {
-            this._clickedButton = false;
-        });
+    constructor(widget: FilterWidget, group: FilterGroup, column: Column) {
+        this.widget = widget;
+        this.group = group;
+        this.columnId = column.id;
 
-        this.model.on('dataSetLoaded', this._dataSetLoaded, this);
-        this.model.on('columnsDeleted', event => this._columnsDeleted(event));
-        this.model.on('columnsInserted', event => this._columnsInserted(event));
-        this.model.on('columnsActiveChanged', (event: ColumnActiveChangedEvent) => this._columnsActiveChanged(event));
-        this.model.on('columnsChanged', event => this._columnsChanged(event));
+        // the prefix ('=' or 'and'), the formula and the nested button sit side
+        // by side inside .formula-field, which draws the box around them. Being
+        // in the flow (rather than overlaid on an indented formula) keeps the
+        // formula text, its wrapped lines and the caret clear of the prefix.
+        // the prefix holds an invisible copy of the translated 'and' so that an
+        // '=' prefix takes the same width, and the formulas line up in any language
+        this.$equalText = h('span');
+        this.$equal = h('div', { class: 'equal', 'aria-hidden': 'true' },
+            this.$equalText,
+            h('span', { class: 'equal-sizer' }, _('and')));
+        this.$nestedIcon = h('span');
+        this.$nested = h('button', { }, this.$nestedIcon) as HTMLButtonElement;
+        this.$showEditor = h('button', { 'aria-controls': widget.formulaSetup.id, class: 'show-editor', 'aria-label': _('Show formula editor') },
+            h('div', { class: 'down-arrow' })) as HTMLButtonElement;
+        this.$formula = h('div', { class: 'formula', role: 'textbox', 'aria-label': _('Formula'), spellcheck: 'false', placeholder: 'e.g. ' + randomExample(), contenteditable: 'true', tabindex: '0' });
+        this.$field = h('div', { class: 'formula-field' }, this.$equal, this.$formula, this.$nested);
+        this.$message = h('div', { class: 'formulaMessage' });
 
-        let filtersVisible = this.model.get('filtersVisible');
+        this.el = h('div', { class: 'formula-box filter-hidden' },
+            this.$showEditor,
+            h('div', { class: 'formula-pair' },
+                this.$field,
+                h('div', { class: 'formulaMessageBox' }, this.$message)));
 
-        this.$showFilter = h('button', { class: `filter-button filter-button-tooltip ${(filtersVisible ? 'show-filter-columns' : 'hide-filter-columns')}`, 'aria-label': _('Show filter columns') });
-        $filterListButtons.append(this.$showFilter);
-        this.$showFilter.addEventListener('click', (event) => {
-            this.model.toggleFilterVisibility();
-        });
-
-        this.model.on('change:filtersVisible', event => this._updateEyeButton());
-
-        // a single listener for every formula box; records the caret position
-        // on whichever formula holds the selection, for the formula toolbar
-        document.addEventListener('selectionchange', () => {
-            const sel = window.getSelection();
-            if ( ! sel || sel.rangeCount === 0 || ! sel.anchorNode)
+        // clicks on the prefix or the padding around the formula edit it
+        this.$field.addEventListener('mousedown', (event) => {
+            let target = event.target as Element;
+            if (target === this.$formula || this.$formula.contains(target) || target.closest('button'))
                 return;
-            const $anchor = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode.parentElement;
-            const $formula = $anchor?.closest('.formula');
-            if ( ! $formula || ! this.$filterList.contains($formula))
-                return;
-            const range = sel.getRangeAt(0);
-            $formula.setAttribute('sel-start', range.startOffset.toString());
-            $formula.setAttribute('sel-end', range.endOffset.toString());
+            event.preventDefault();
+            this.$formula.focus();
+            placeCaret(this.$formula, this.$formula.textContent.length);
         });
 
-    }
-
-    _updateEyeButton() {
-        if (this.model.get('filtersVisible')) {
-            this.$showFilter.classList.remove('show-filter-columns');
-            this.$showFilter.classList.add('hide-filter-columns');
-            this.$showFilter.setAttribute('title', _('Hide filter columns'));
-        }
-        else {
-            this.$showFilter.classList.remove('hide-filter-columns');
-            this.$showFilter.classList.add('show-filter-columns');
-            this.$showFilter.setAttribute('title', _('Show filter columns'));
-        }
-    }
-
-    async _addFilter() {
-        let i = -1;
-        let column = null;
-        do {
-            i += 1;
-            column = this.model.getColumn(i);
-        } while(column.columnType === 'filter');
-
-        try {
-            await this.model.insertColumn({ index: i, columnType: ColumnType.FILTER, hidden: this.model.get('filtersVisible') === false });
-            column = this.model.getColumn(i);
-            this.setColumnForEdit(column.id);
-        }
-        catch(error) {
-            this._notifyEditProblem({
-                title: error.message,
-                message: error.cause,
-                type: 'error',
-            });
-        }
-    }
-
-    _notifyEditProblem(details: Partial<NotifData>) {
-        this._editNote.set(details);
-        this.dispatchEvent(new CustomEvent('notification', { detail: this._editNote }));
-    }
-
-    setColumnForEdit(id: number) {
-        this.model.set('editingVar', [id]);
-    }
-
-    _isColumnRoot(column: Column) {
-        let columns = this.model.attributes.columns;
-        for (let i = 0; i < columns.length; i++) {
-            if (columns[i].columnType !== 'filter')
-                break;
-
-            if (columns[i].id === column.id)
-                return true;
-            else if (columns[i].filterNo === column.filterNo)
-                break;
-        }
-
-        return false;
-    }
-
-    _columnsActiveChanged(event: ColumnActiveChangedEvent) {
-        for (let c = event.start; c <= event.end; c++) {
-            let column = this.model.getColumn(c);
-            if (column.columnType === 'filter' && this._isColumnRoot(column)) {
-                let $filter = this.$filterList.querySelector('.jmv-filter-options[data-columnid="' + column.id + '"]:not(.remove)');
-
-                this._setActive($filter, event.value);
+        // keep the formula a single text node: pastes come in as plain text on
+        // one line, and anything the browser adds while editing (such as the
+        // <br> left after deleting everything) is flattened back to text
+        this.$formula.addEventListener('paste', (event) => {
+            event.preventDefault();
+            let text = (event.clipboardData?.getData('text/plain') ?? '').replace(/\s*[\r\n]+\s*/g, ' ');
+            // insertText keeps the browser's undo history; insert by hand where it's unavailable
+            if ( ! document.execCommand('insertText', false, text)) {
+                let sel = window.getSelection();
+                if ( ! sel || sel.rangeCount === 0)
+                    return;
+                let range = sel.getRangeAt(0);
+                range.deleteContents();
+                let node = document.createTextNode(text);
+                range.insertNode(node);
+                range.setStartAfter(node);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                flattenText(this.$formula);
             }
-        }
-    }
+        });
+        this.$formula.addEventListener('input', () => flattenText(this.$formula));
 
-    _getFilterDetails($filters: NodeListOf<HTMLElement>, columnIndex: number): FilterDetails {
-        let $filter: HTMLElement = null;
-        let widgetIndex = 0;
-        let widgetColumnIndex = 0;
-        let nextWidgetColumnIndex = 0;
-        if ($filters.length === 0)
-            return null;
-
-        let $formulaBoxes: NodeListOf<HTMLElement> = null;
-        let found = false;
-        for (widgetIndex = 0; widgetIndex < $filters.length; widgetIndex++) {
-            $filter = $filters[widgetIndex] as HTMLElement;
-            $formulaBoxes = $filter.querySelectorAll<HTMLElement>('.formula-box:not(.remove)');
-            widgetColumnIndex = nextWidgetColumnIndex;
-            nextWidgetColumnIndex += $formulaBoxes.length;
-            if (columnIndex >= widgetColumnIndex && columnIndex < nextWidgetColumnIndex) {
-                found = true;
-                break;
-            }
-        }
-
-        if (!found)
-            return null;
-
-        let details: FilterDetails = { $filter: $filter, isBase: columnIndex === widgetColumnIndex, fcount: $formulaBoxes.length, $splitter: undefined, $formulaBox: undefined };
-
-        let $splitters = this.$filterList.querySelectorAll<HTMLElement>('.jmv-filter-splitter:not(.remove)');
-
-        let splitterIndex = widgetIndex;
-        if (widgetIndex >= $splitters.length)
-            splitterIndex = widgetIndex - 1;
-
-        details.$splitter = $splitters[splitterIndex];
-
-        let formulaIndex = columnIndex - widgetColumnIndex;
-        details.$formulaBox = $formulaBoxes[formulaIndex];
-
-        return details;
-    }
-
-    _dataSetLoaded() {
-        this.$filterList.innerHTML = '';
-        let columns = this.model.attributes.columns;
-        let index = 0;
-        for (let i = 0; i < columns.length; i++) {
-            let column = columns[i];
-            if (column.columnType !== 'filter')
-                break;
-
-            if (this._isColumnRoot(column))
-                this._createFilter(column, index++);
-        }
-    }
-
-    _columnsDeleted(event) {
-        let removed = false;
-
-        let removeBase = (details: FilterDetails) => {
-            if (this.attached) {
-                
-                details.$filter.addEventListener('transitionend', (event) => {
-                    details.$filter.remove();
-                    if (details.$splitter)
-                        details.$splitter.remove();
-                }, { once: true });
-
-                details.$filter.classList.add('remove');
-                if (details.$splitter)
-                    details.$splitter.classList.add('remove');
-
-                this._collapseSection(details.$filter);
-                if (details.$splitter)
-                    this._collapseSection(details.$splitter);
-            }
-            else {
-                details.$filter.remove();
-                if (details.$splitter)
-                    details.$splitter.remove();
-            }
-        };
-
-        let removeSub = (details: FilterDetails) => {
-            if (this.attached) {
-                details.$formulaBox.addEventListener('transitionend', (event) => {
-                    details.$formulaBox.remove();
-                }, { once: true });
-
-                details.$formulaBox.classList.add('remove');
-
-                this._collapseSection(details.$formulaBox);
-            }
-            else {
-                details.$formulaBox.remove();
-            }
-        };
-
-        let indices = structuredClone(event.indices);
-
-        event.ids.sort((a,b) => indices[a].index - indices[b].index);
-
-        for (let id of event.ids) {
-            let index = indices[id].index;
-            let $filters = this.$filterList.querySelectorAll<HTMLElement>('.jmv-filter-options:not(.remove)');
-            let details = this._getFilterDetails($filters, index);
-            if (details === null)
-                break;
-
-            removed = true;
-
-            for (let x in indices) {
-                let i = indices[x];
-                if (i.index > index)
-                    i.index -= 1;
-            }
-
-            if (details.isBase) {
-                removeSub(details);
-                let $formulaBoxes = details.$filter.querySelectorAll('.formula-box:not(.remove)');
-                if ($formulaBoxes.length === 0)
-                    removeBase(details);
-                else {
-                    details.$filter.setAttribute('data-columnid', $formulaBoxes[0].getAttribute('data-columnid'));
-                    this._convertRemoveBoxToAddBox($formulaBoxes[0]);
-                }
-            }
+        this.$nested.addEventListener('click', (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            if (this.isFirst)
+                widget._addNested(group);
             else
-                removeSub(details);
-        }
-    }
-
-    _convertRemoveBoxToAddBox($element: Element) {
-        let columnId =  parseInt($element.getAttribute('data-columnid'));
-        $element.querySelector('.equal').textContent = '=';
-        $element.querySelector('.formula').classList.remove('and-formula');
-        let $removeButton = $element.querySelector('.remove-nested');
-        $removeButton.removeEventListener('click', this.removeNested);
-        this.addNestedEvents($removeButton, columnId);
-        $removeButton.classList.remove('remove-nested');
-        $removeButton.classList.add('add-nested');
-        $removeButton.setAttribute('title', _('Add another nested filter'));
-        $removeButton.querySelector('span').classList.remove('mif-cross')
-        $removeButton.querySelector('span').classList.add('mif-plus');
-    }
-
-    _columnsInserted(event) {
-
-        if (event.ids.length === 0)
-            return;
-
-        let ids = event.ids.slice();
-        ids.sort((a, b) => event.indices[a].dIndex - event.indices[b].dIndex);
-
-        for (let id of ids) {
-            let c = event.indices[id].index;
-            let column = this.model.getColumn(c);
-            if (column.columnType === 'filter') {
-                let columns = this.model.attributes.columns;
-                if (this._isColumnRoot(column)) {
-                    let index = 0;
-                    for (let i = 0; i < columns.length; i++) {
-                        let existingColumn = columns[i];
-                        if (i >= c)
-                            break;
-                        if (existingColumn.columnType === 'filter') {
-                            if (this._isColumnRoot(existingColumn))
-                                index += 1;
-                        }
-                        else
-                            break;
-                    }
-                    this._createFilter(column, index);
-                }
-                else {
-                    let rootInfo = this.rootOf(column.id);
-                    let rColumn = rootInfo.column;
-                    let $filter = this.$filterList.querySelector('.jmv-filter-options[data-columnid="' + rColumn.id + '"]:not(.remove)');
-                    let $formulaList = $filter.querySelector('.formula-list');
-                    this._createFormulaBox(rColumn, column, column.index - rColumn.index, $filter, $formulaList);
-                }
-            }
-        }
-        setTimeout(() => {
-            this.$filterList.querySelectorAll('[contenteditable="false"]').forEach(el => el.setAttribute('contenteditable', 'true'));
-        }, 0);
-    }
-
-    _columnsChanged(event) {
-
-        for (let changes of event.changes) {
-
-            if (changes.created || changes.deleted)
-                continue;
-
-            let column = this.model.getColumnById(changes.id);
-            if (column.columnType !== 'filter')
-                continue;
-
-            let $formulaBox = this.$filterList.querySelector('.formula-box[data-columnid="' + column.id + '"]:not(.remove)');
-            this._setFormula($formulaBox, column.formula, column.formulaMessage);
-
-            if (this._isColumnRoot(column)) {
-                let $filter = this.$filterList.querySelector('.jmv-filter-options[data-columnid="' + column.id + '"]:not(.remove)');
-
-                let $label = $filter.querySelector('.label');
-                $label.textContent = column.name;
-
-                this._setDescription($filter, column.description);
-            }
-        }
-    }
-
-    _removeFilter(id: number) {
-        if (id === -1 && id !== null)
-            return Promise.resolve();
-
-        let column = this.model.getColumnById(id);
-        if (column === undefined || column.columnType !== 'filter')
-            return Promise.resolve();
-
-        let relatedColumns = this.columnsOf(id);
-        if (relatedColumns.length === 0)
-            return Promise.resolve();
-
-        let ids: number[] = [];
-        for (let i = 0; i < relatedColumns.length; i++)
-            ids.push(relatedColumns[i].column.id);
-
-        return this.model.deleteColumns(ids).catch((error) => {
-            this._notifyEditProblem({
-                title: error.message,
-                message: error.cause,
-                type: 'error',
-            });
+                widget._removeNested(this.columnId);
         });
-    }
 
-    _setFormula($formulaBox: Element, formula, formulaMessage) {
-        let $formula = $formulaBox.querySelector('.formula');
-        let $formulaMessage = $formulaBox.querySelector('.formulaMessage');
+        this.$showEditor.addEventListener('mousedown', () => {
+            widget._wasEditingFormula = dropdown.focusedOn();
+            widget._editorClicked = true;
+        });
 
-        $formula.textContent = formula;
-
-        if (formulaMessage === '')
-            $formula.classList.remove('in-errror');
-        else
-            $formula.classList.add('in-errror');
-        $formulaMessage.textContent = formulaMessage;
-    }
-
-    _setDescription($filter: Element, description: string) {
-        let $description = $filter.querySelector('.description');
-        $description.textContent = description;
-    }
-
-    _setActive($filter: Element, active) {
-        let $status = $filter.querySelector('.status');
-        let $active = $filter.querySelector('.active');
-        if (active) {
-            $status.textContent = _('active');
-            $active.classList.remove('filter-disabled');
-            $active.setAttribute('title', _('Filter is active'));
-        }
-        else {
-            $status.textContent = _('inactive');
-            $active.classList.add('filter-disabled');
-            $active.setAttribute('title', _('Filter is inactive'));
-        }
-
-
-    }
-
-    _createFormulaBox(rootColumn: Column, relatedColumn: Column, rIndex: number, $filter: Element, $formulaList: Element) {
-        let $formulaBox = h('div', { class: 'formula-box filter-hidden', 'data-columnid': relatedColumn.id.toString(), 'data-rootid': rootColumn.id.toString() });
-
-        let $list = $formulaList.querySelectorAll('.formula-box:not(.remove)');
-        if (rIndex >= $list.length)
-            $formulaList.append($formulaBox);
-        else
-            $formulaList.insertBefore($formulaBox, $list[rIndex]);
-
-        if (rIndex > 0) {
-            $formulaBox.append(h('div', { class: 'equal' }, _('and')));
-            let $removeNested = h('button', { class: 'remove-nested', 'aria-label': _('Remove nested filter'), 'data-id': relatedColumn.id.toString() },
-                h('span', { class: 'mif-cross' }));
-            $formulaBox.append($removeNested);
-            this.removeNestedEvents($removeNested);
-        }
-        else {
-            $formulaBox.append(h('div', { class: 'equal' }, '='));
-            let $addNested = h('button', { class: 'add-nested', 'aria-label': _('Add another nested filter') },
-                h('span', { class: 'mif-plus' }));
-            $formulaBox.append($addNested);
-            this.addNestedEvents($addNested, rootColumn.id);
-        }
-
-        let $showEditor = h('button', { 'aria-controls': this.formulaSetup.id, class: 'show-editor', 'aria-label': _('Show formula editor') },
-            h('div', { class: 'down-arrow' }));
-        $formulaBox.append($showEditor);
-
-        $showEditor.addEventListener('click', (event) => {
-            if (this._$wasEditingFormula !== $formula) {
-                dropdown.show($formula, this.formulaSetup, $formulaBox.getAttribute('data-expanding') === 'true' || $filter.getAttribute('data-expanding') === 'true');
-                this.formulaSetup.show($formula, null);
-                $showEditor.classList.add('is-active');
+        this.$showEditor.addEventListener('click', (event) => {
+            if (widget._wasEditingFormula !== this.$formula) {
+                let expanding = this.el.getAttribute('data-expanding') === 'true' || group.el.getAttribute('data-expanding') === 'true';
+                dropdown.show(this.$formula, widget.formulaSetup, expanding, undefined, this.$field);
+                widget.formulaSetup.show(this.$formula as HTMLDivElement, null);
+                this.$showEditor.classList.add('is-active');
             }
             event.stopPropagation();
             event.preventDefault();
         });
 
-        $showEditor.addEventListener('mousedown', (event) => {
-            this._$wasEditingFormula = dropdown.focusedOn();
-            this._editorClicked = true;
-        });
-
-        let $formulaPair = h('div', { class: 'formula-pair' });
-        $formulaBox.append($formulaPair);
-
-        let _example = this._exampleFormulas[Math.floor(Math.random() * Math.floor(this._exampleFormulas.length - 1))];
-        let $formula = h('div', { class: 'formula' + ((rIndex > 0) ? ' and-formula' : ''), type: 'text', spellcheck: 'false', placeholder: 'e.g. ' + _example, contenteditable: 'true', tabindex: '0' }) as HTMLTextAreaElement;
-        $formulaPair.append($formula);
-
-        $formula.addEventListener('keydown', (event) => {
-            if (event.keyCode === 9) {    //tab
+        this.$formula.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && event.shiftKey)  // a formula is one line; plain Enter commits it
+                event.preventDefault();
+            if (event.key === 'Tab') {
                 if (dropdown.isVisible()) {
                     dropdown.enter();
                     event.stopPropagation();
@@ -506,158 +182,489 @@ class FilterWidget extends HTMLElement {
             }
         });
 
-        $formula.addEventListener('input', (event) => {
-            dropdown.updatePosition();
+        this.$formula.addEventListener('input', () => dropdown.updatePosition());
+
+        this.$formula.addEventListener('editor:closing', () => {
+            this.$showEditor.classList.remove('is-active');
         });
 
-        $formula.addEventListener('editor:closing', () => {
-            $showEditor.classList.remove('is-active');
-        });
-
-        let $formulaMessageBox = h('div', { class: 'formulaMessageBox' });
-        $formulaPair.append($formulaMessageBox);
-        let $formulaMessage = h('div', { class: 'formulaMessage' });
-        $formulaMessageBox.append($formulaMessage);
-
-        $formula.textContent = relatedColumn.formula;
-        $formulaMessage.textContent = relatedColumn.formulaMessage;
-        if (relatedColumn.formulaMessage === '')
-            $formula.classList.remove('in-errror');
-        else
-            $formula.classList.add('in-errror');
-
-        $formula.classList.add('selected');
-
-        this.addEvents($filter, $formula, 'formula', relatedColumn);
-
-        setTimeout(() => {
-            if (this.attached)
-                this._expandSection($formulaBox);
-            $formulaBox.classList.remove('filter-hidden');
-
-            if (this._internalCreate) {
-                setTimeout(() => {
-                    this.focusOn($formula);
-                }, 0);
-            }
-        }, 10);
-
+        widget._addEditEvents(group, this.$formula, () => this.columnId, 'formula');
     }
 
-    _isRealBlur() {
-        return dropdown.clicked() || this._editorClicked;
+    update(column: Column, isFirst: boolean) {
+        this.columnId = column.id;
+
+        if (isFirst !== this.isFirst) {
+            this.isFirst = isFirst;
+            this.$equalText.textContent = isFirst ? '=' : _('and');
+            this.$nested.className = isFirst ? 'add-nested' : 'remove-nested';
+            this.$nested.setAttribute('aria-label', isFirst ? _('Add another nested filter') : _('Remove nested filter'));
+            this.$nestedIcon.className = isFirst ? 'mif-plus' : 'mif-cross';
+        }
+
+        // only touch the text when the model's value has changed, so that
+        // unrelated updates don't overwrite what the user is typing
+        if (column.formula !== this.shownFormula) {
+            this.shownFormula = column.formula;
+            this.$formula.textContent = column.formula;
+        }
+        if (column.formulaMessage !== this.shownMessage) {
+            this.shownMessage = column.formulaMessage;
+            this.$message.textContent = column.formulaMessage;
+            this.$formula.classList.toggle('in-errror', column.formulaMessage !== '');
+        }
     }
+}
 
-    _createFilter(column, index) {
-        let $filters = this.$filterList.querySelectorAll('.jmv-filter-options:not(.remove)');
+class FilterGroup {
 
-        let insertBefore = -1;
-        if ($filters.length > 0 && index < $filters.length)
-            insertBefore = index;
+    readonly el: HTMLElement;
+    readonly filterNo: number;
+    readonly $titleBox: HTMLElement;
+    $splitter: HTMLElement | null = null;
+    columns: Column[] = [];
+    boxes = new Map<number, FormulaBox>();
 
-        let $filter = h('div', { class: 'jmv-filter-options filter-hidden', 'data-columnid': column.id.toString() });
-        if (insertBefore !== -1) {
-            this.$filterList.insertBefore($filter, $filters[insertBefore]);
-            this.$filterList.insertBefore(h('div', { class: 'jmv-filter-splitter' }), $filters[insertBefore]);
-        }
-        else {
-            if (index !== 0)
-                this.$filterList.append(h('div', { class: 'jmv-filter-splitter' }));
-            this.$filterList.append($filter);
-        }
+    private widget: FilterWidget;
+    private shownDescription: string | undefined;
+    private $label: HTMLElement;
+    private $active: HTMLElement;
+    private $status: HTMLElement;
+    private $formulaList: HTMLElement;
+    private $description: HTMLElement;
 
-        let $titleBox = h('div', { class: 'title-box' });
-        $filter.append($titleBox);
-        $titleBox.append(h('div', { class: 'label-parent' },
-            h('div', { class: 'label' }, _('Filter {i}', {i: (index + 1)} ))));
-        let $middle = h('div', { class: 'middle-box' });
-        $titleBox.append($middle);
-        let $statusBox = h('div', { class: 'status-box', tabindex: '0' });
-        $middle.append($statusBox);
-        let $active = h('div', { class: 'active', 'aria-label': _('Filter is active') },
-            h('div', { class: 'switch' }));
-        $statusBox.append($active);
-        let $status = h('div', { class: 'status' }, _('active'));
-        $statusBox.append($status);
-        $titleBox.append(h('div', { class: 'header-splitter' }));
+    constructor(widget: FilterWidget, filterNo: number) {
+        this.widget = widget;
+        this.filterNo = filterNo;
 
-
+        this.$label = h('div', { class: 'label' });
+        this.$active = h('div', { class: 'active' }, h('div', { class: 'switch' }));
+        this.$status = h('div', { class: 'status' });
+        let $statusBox = h('div', { class: 'status-box', tabindex: '0' }, this.$active, this.$status);
         let $removeButton = h('button', { class: 'remove-filter-btn', 'aria-label': _('Remove filter') },
             h('span', { class: 'mif-cross' }));
-        $titleBox.append($removeButton);
 
+        this.$titleBox = h('div', { class: 'title-box' },
+            h('div', { class: 'label-parent' }, this.$label),
+            h('div', { class: 'middle-box' }, $statusBox),
+            h('div', { class: 'header-splitter' }),
+            $removeButton);
 
-        let $formulaList = h('div', { class: 'formula-list' });
-        $filter.append($formulaList);
-        let $description = h('div', { class: 'description', type: 'text', spellcheck: 'true', placeholder: _('Description'), tabindex: '0' }) as HTMLTextAreaElement;
-        $filter.append($description);
+        this.$formulaList = h('div', { class: 'formula-list' });
+        this.$description = h('div', { class: 'description', type: 'text', spellcheck: 'true', placeholder: _('Description'), tabindex: '0', contenteditable: 'true' });
 
-        $removeButton.addEventListener('click', async (event) => {
-            if (this._removingFilter)
-                return;
+        this.el = h('div', { class: 'jmv-filter-options filter-hidden' },
+            this.$titleBox,
+            this.$formulaList,
+            this.$description);
 
-            let columnId = parseInt($filter.getAttribute('data-columnid'));
-            this._removingFilter = true;
-            await this._removeFilter(columnId);
-            this._removingFilter = false;
-
+        $removeButton.addEventListener('click', (event) => {
             event.stopPropagation();
             event.preventDefault();
+            widget._removeFilter(this);
         });
 
-        $filter.addEventListener('click', (event) => {
-            if ($filter.classList.contains('remove'))
-                return;
-
-            let columnId = parseInt($filter.getAttribute('data-columnid'));
-            this.model.set('editingVar', [columnId]);
+        this.el.addEventListener('click', () => {
+            if ( ! this.el.classList.contains('remove'))
+                widget._editColumn(this.rootId);
         });
 
-        let relatedColumns = this.columnsOf(column.id);
-        for (let i = 0; i < relatedColumns.length; i++)
-            this._createFormulaBox(column, relatedColumns[i].column, i, $filter, $formulaList);
-
-        $active.classList.remove('filter-disabled');
-        $status.textContent = column.active ? _('active') : _('inactive');
-        if ( ! column.active)
-            $active.classList.add('filter-disabled');
-
-        let activeChanged = (event) => {
-
-            let columnId = parseInt($filter.getAttribute('data-columnid'));
-            let fColumn = this.model.getColumnById(columnId);
-            let active = fColumn.active;
-            let related = this.columnsOf(fColumn.id);
-            let pairs = [];
-            for (let colInfo of related)
-                pairs.push({id: colInfo.column.id, values: { active: !active } });
-
-            this.setColumnProperties($filter, pairs);
+        let toggleActive = (event: Event) => {
             event.stopPropagation();
             event.preventDefault();
+            let active = this.columns[0].active;
+            widget._setColumnProperties(this, this.columns.map(column => ({ id: column.id, values: { active: ! active } })));
         };
-
-        $statusBox.addEventListener('click', activeChanged);
+        $statusBox.addEventListener('click', toggleActive);
         $statusBox.addEventListener('keydown', (event) => {
-            if (event.keyCode === 13 || event.keyCode === 32)   //enter  - space
-                activeChanged(event);
+            if (event.key === 'Enter' || event.key === ' ')
+                toggleActive(event);
         });
 
-        $description.textContent = column.description;
+        widget._addEditEvents(this, this.$description, () => this.rootId, 'description');
+    }
 
-        this.addEvents($filter, $description, 'description', column);
+    get rootId() {
+        return this.columns[0].id;
+    }
 
-        $description.setAttribute('contenteditable', 'true');
+    // returns the boxes created by this sync, so the widget can reveal them
+    sync(columns: Column[], index: number) {
+        this.columns = columns;
+
+        let ids = new Set(columns.map(column => column.id));
+        for (let [id, box] of this.boxes) {
+            if ( ! ids.has(id)) {
+                this.boxes.delete(id);
+                this.widget._removeElement(box.el);
+            }
+        }
+
+        let created: FormulaBox[] = [];
+        let order = columns.map((column, i) => {
+            let box = this.boxes.get(column.id);
+            if (box === undefined) {
+                box = new FormulaBox(this.widget, this, column);
+                this.boxes.set(column.id, box);
+                created.push(box);
+            }
+            box.update(column, i === 0);
+            return box.el;
+        });
+        this.widget._arrange(this.$formulaList, order);
+
+        let root = columns[0];
+        this.$label.textContent = root.name || _('Filter {i}', { i: index + 1 });
+        this._setActive(root.active);
+
+        if (root.description !== this.shownDescription) {
+            this.shownDescription = root.description;
+            this.$description.textContent = root.description;
+        }
+
+        return created;
+    }
+
+    private _setActive(active: boolean) {
+        this.$status.textContent = active ? _('active') : _('inactive');
+        this.$active.classList.toggle('filter-disabled', ! active);
+        this.$active.setAttribute('title', active ? _('Filter is active') : _('Filter is inactive'));
+    }
+}
+
+class FilterWidget extends HTMLElement {
+
+    model: DataSetViewModel;
+    attached: boolean = false;
+    formulaSetup: formulaToolbar;
+    _wasEditingFormula: HTMLElement | null = null;
+    _editorClicked = false;
+
+    private _editNote: Notify = new Notify({ duration: 3000 });
+    private _groups = new Map<number, FilterGroup>();
+    private _focusNewFormula = false;
+    private _removingFilter = false;
+    private _stickyBottomCount = 0;
+    private _stickyBottomHeight = 0;
+
+    private $filterList: HTMLElement;
+    private $showFilter: HTMLButtonElement;
+
+    constructor(model: DataSetViewModel) {
+        super();
+
+        this.model = model;
+
+        dropdown.init();
+        this.formulaSetup = new formulaToolbar(this.model);
+
+        this.classList.add('jmv-filter-widget', 'FilterWidget');
+
+        let $addFilter = h('button', { class: 'filter-button filter-button-tooltip add-filter', 'aria-label': _('Add new filter') });
+        $addFilter.addEventListener('click', () => this._addFilter());
+
+        let filtersVisible = this.model.get('filtersVisible');
+        this.$showFilter = h('button', { class: `filter-button filter-button-tooltip ${(filtersVisible ? 'show-filter-columns' : 'hide-filter-columns')}`, 'aria-label': _('Show filter columns') }) as HTMLButtonElement;
+        this.$showFilter.addEventListener('click', () => this.model.toggleFilterVisibility());
+
+        this.$filterList = h('div', { class: 'jmv-filter-list-box' });
+
+        this.append(
+            h('div', { class: 'jmv-filter-list-buttons' }, $addFilter, this.$showFilter),
+            this.$filterList);
+
+        this.model.on('dataSetLoaded', this._dataSetLoaded, this);
+        this.model.on('columnsDeleted', this._sync, this);
+        this.model.on('columnsInserted', this._sync, this);
+        this.model.on('columnsActiveChanged', this._sync, this);
+        this.model.on('columnsChanged', this._sync, this);
+        this.model.on('change:filtersVisible', this._updateEyeButton, this);
+
+        // a single listener for every formula box; records the caret position
+        // on whichever formula holds the selection, for the formula toolbar
+        document.addEventListener('selectionchange', () => {
+            const sel = window.getSelection();
+            if ( ! sel || sel.rangeCount === 0 || ! sel.anchorNode)
+                return;
+            const $anchor = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode.parentElement;
+            const $formula = $anchor?.closest<HTMLElement>('.formula');
+            if ( ! $formula || ! this.$filterList.contains($formula))
+                return;
+            // offsets count characters from the start of the formula, whatever
+            // node the selection is in, as the formula toolbar expects
+            const range = sel.getRangeAt(0);
+            $formula.setAttribute('sel-start', charOffset($formula, range.startContainer, range.startOffset).toString());
+            $formula.setAttribute('sel-end', charOffset($formula, range.endContainer, range.endOffset).toString());
+        });
+    }
+
+    /* ---- reconciling the DOM with the model ---- */
+
+    _dataSetLoaded() {
+        this._groups.clear();
+        this.$filterList.textContent = '';
+        this._sync();
+    }
+
+    _sync() {
+        let wanted = new Map<number, Column[]>();
+        for (let column of this.model.attributes.columns) {
+            if (column.columnType !== ColumnType.FILTER)
+                break;
+            let columns = wanted.get(column.filterNo);
+            if (columns === undefined)
+                wanted.set(column.filterNo, columns = []);
+            columns.push(column);
+        }
+
+        for (let [filterNo, group] of this._groups) {
+            if ( ! wanted.has(filterNo)) {
+                this._groups.delete(filterNo);
+                this._removeElement(group.el);
+                if (group.$splitter)
+                    this._removeElement(group.$splitter);
+            }
+        }
+
+        let order: HTMLElement[] = [];
+        let newGroups: FilterGroup[] = [];
+        let newBoxes: FormulaBox[] = [];
+        let index = 0;
+        for (let [filterNo, columns] of wanted) {
+            let group = this._groups.get(filterNo);
+            if (group === undefined) {
+                group = new FilterGroup(this, filterNo);
+                this._groups.set(filterNo, group);
+                newGroups.push(group);
+            }
+
+            if (index > 0 && group.$splitter === null)
+                group.$splitter = h('div', { class: 'jmv-filter-splitter' });
+            else if (index === 0 && group.$splitter !== null) {
+                this._removeElement(group.$splitter);
+                group.$splitter = null;
+            }
+
+            if (group.$splitter)
+                order.push(group.$splitter);
+            order.push(group.el);
+
+            newBoxes.push(...group.sync(columns, index));
+            index++;
+        }
+
+        this._arrange(this.$filterList, order);
+        this._reveal(newGroups, newBoxes);
+    }
+
+    // puts the live children of $parent in the given order, leaving any
+    // that are animating out (.remove) where they are
+    _arrange($parent: HTMLElement, order: HTMLElement[]) {
+        let nextLive = (el: Element | null) => {
+            while (el && el.classList.contains('remove'))
+                el = el.nextElementSibling;
+            return el;
+        };
+        let $ref = nextLive($parent.firstElementChild);
+        for (let el of order) {
+            if (el === $ref)
+                $ref = nextLive($ref.nextElementSibling);
+            else
+                $parent.insertBefore(el, $ref);
+        }
+    }
+
+    private _reveal(groups: FilterGroup[], boxes: FormulaBox[]) {
+        if (groups.length === 0 && boxes.length === 0)
+            return;
+
+        let $focus = this._focusNewFormula && boxes.length > 0 ? boxes[boxes.length - 1].$formula : null;
+        if ($focus)
+            this._focusNewFormula = false;
 
         setTimeout(() => {
-            if (this.attached)
-                this._expandSection($filter, '100px');
-            this._stickyBottom(this.$filterList);
-            $filter.classList.remove('filter-hidden');
+            for (let group of groups) {
+                if (this.attached)
+                    this._expandSection(group.el, '100px');
+                group.el.classList.remove('filter-hidden');
+            }
+            for (let box of boxes) {
+                if (this.attached)
+                    this._expandSection(box.el);
+                box.el.classList.remove('filter-hidden');
+            }
+            if (groups.length > 0)
+                this._stickyBottom(this.$filterList);
+            if ($focus)
+                setTimeout(() => $focus.focus(), 0);
         }, 10);
     }
 
-    _collapseSection(element: HTMLElement) {
+    _removeElement(el: HTMLElement) {
+        if ( ! this.attached) {
+            el.remove();
+            return;
+        }
+
+        let done = (e: TransitionEvent) => {
+            if (e.target !== el)
+                return;
+            el.removeEventListener('transitionend', done);
+            el.remove();
+        };
+        el.addEventListener('transitionend', done);
+        el.classList.add('remove');
+        this._collapseSection(el);
+    }
+
+    /* ---- actions ---- */
+
+    async _addFilter() {
+        let columns = this.model.attributes.columns;
+        let index = 0;
+        while (index < columns.length && columns[index].columnType === ColumnType.FILTER)
+            index++;
+
+        this._focusNewFormula = true;
+        try {
+            await this.model.insertColumn({ index, columnType: ColumnType.FILTER, hidden: this.model.get('filtersVisible') === false } as Column);
+            this._editColumn(this.model.getColumn(index).id);
+        }
+        catch (error) {
+            this._focusNewFormula = false;
+            this._notifyEditProblem(error);
+        }
+    }
+
+    async _addNested(group: FilterGroup) {
+        let last = group.columns[group.columns.length - 1];
+        let index = last.index + 1;
+
+        this._focusNewFormula = true;
+        try {
+            await this.model.insertColumn({
+                index,
+                columnType: ColumnType.FILTER,
+                filterNo: group.filterNo,
+                hidden: this.model.get('filtersVisible') === false,
+                active: group.columns[0].active
+            } as Column);
+            this._editColumn(this.model.getColumn(index).id);
+        }
+        catch (error) {
+            this._focusNewFormula = false;
+            this._notifyEditProblem(error);
+        }
+    }
+
+    async _removeNested(columnId: number) {
+        await this._deleteColumns([columnId]);
+    }
+
+    async _removeFilter(group: FilterGroup) {
+        await this._deleteColumns(group.columns.map(column => column.id));
+    }
+
+    private async _deleteColumns(ids: number[]) {
+        if (this._removingFilter || ids.length === 0)
+            return;
+
+        this._removingFilter = true;
+        try {
+            await this.model.deleteColumns(ids);
+        }
+        catch (error) {
+            this._notifyEditProblem(error);
+        }
+        finally {
+            this._removingFilter = false;
+        }
+    }
+
+    async _setColumnProperties(group: FilterGroup, pairs: { id: number; values: Partial<Column> }[]) {
+        if (pairs.length === 0)
+            return;
+
+        let timeoutId = setTimeout(() => group.$titleBox.classList.add('think'), 400);
+        try {
+            await this.model.changeColumns(pairs);
+        }
+        catch (error) {
+            this._notifyEditProblem(error);
+        }
+        finally {
+            clearTimeout(timeoutId);
+            group.$titleBox.classList.remove('think');
+        }
+    }
+
+    // makes the column the one being edited. The model compares editingVar by
+    // reference, so setting an equal array still fires a change, and the
+    // variable editor responds by re-attaching the editor panel, which closes
+    // any open dropdown (such as the formula editor after inserting a function)
+    _editColumn(id: number) {
+        let current = this.model.get('editingVar');
+        if (current && current.length === 1 && current[0] === id)
+            return;
+        this.model.set('editingVar', [id]);
+    }
+
+    // focus/blur/enter handling shared by the formulas and the description;
+    // the column is looked up when needed, as a group's root can change
+    _addEditEvents(group: FilterGroup, $element: HTMLElement, getColumnId: () => number, property: 'formula' | 'description') {
+
+        $element.addEventListener('click', (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+        });
+
+        $element.addEventListener('focus', () => {
+            if (this._removingFilter) {
+                $element.blur();
+                return;
+            }
+            setTimeout(() => { //so that the focusloop handler can process the focus mode before editingVar is set. Otherwise the spreadsheet gets the focus.
+                this._editColumn(getColumnId());
+            }, 0);
+        });
+
+        $element.addEventListener('blur', () => {
+            if (dropdown.clicked() || this._editorClicked) {
+                this._editorClicked = false;
+                return;
+            }
+
+            let column = this.model.getColumnById(getColumnId());
+            if (column !== undefined && $element.textContent !== column[property])
+                this._setColumnProperties(group, [{ id: column.id, values: { [property]: $element.textContent } }]);
+
+            window.clearTextSelection();
+        });
+
+        $element.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && ! event.shiftKey) {
+                dropdown.hide();
+                $element.blur();
+            }
+        });
+    }
+
+    private _notifyEditProblem(error: any) {
+        let details: Partial<NotifData> = { title: error.message, message: error.cause, type: 'error' };
+        this._editNote.set(details);
+        this.dispatchEvent(new CustomEvent('notification', { detail: this._editNote }));
+    }
+
+    /* ---- presentation ---- */
+
+    private _updateEyeButton() {
+        let visible = this.model.get('filtersVisible');
+        this.$showFilter.classList.toggle('hide-filter-columns', visible);
+        this.$showFilter.classList.toggle('show-filter-columns', ! visible);
+        this.$showFilter.setAttribute('title', visible ? _('Hide filter columns') : _('Show filter columns'));
+    }
+
+    private _collapseSection(element: HTMLElement) {
         let sectionHeight = element.scrollHeight;
 
         let elementTransition = element.style.transition;
@@ -672,8 +679,7 @@ class FilterWidget extends HTMLElement {
         });
     }
 
-    _expandSection(element: HTMLElement, value?: string) {
-
+    private _expandSection(element: HTMLElement, value?: string) {
         element.setAttribute('data-expanding', 'true');
         let sectionHeight = element.scrollHeight;
 
@@ -691,10 +697,8 @@ class FilterWidget extends HTMLElement {
         element.addEventListener('transitionend', done);
     }
 
-    _stickyBottom($element: Element) {
-        if (this._stickyBottomCount === undefined)
-            this._stickyBottomCount = 0;
-
+    // keeps the list scrolled to the bottom while a new filter expands
+    private _stickyBottom($element: HTMLElement) {
         if (this._stickyBottomCount < 3) {
             let height = $element.scrollHeight;
             if (height !== this._stickyBottomHeight) {
@@ -705,259 +709,51 @@ class FilterWidget extends HTMLElement {
             else
                 this._stickyBottomCount += 1;
 
-            setTimeout(() => {
-                this._stickyBottom($element);
-            }, 10);
+            setTimeout(() => this._stickyBottom($element), 10);
         }
         else
             this._stickyBottomCount = 0;
     }
 
-    focusOn($element: HTMLElement) {
-        setTimeout(() => {
-            this._internalCreate = false;
-            $element.focus();
-        }, 0);
-    }
-
-    async setColumnProperties($filter: Element, pairs: {
-        index: number;
-        id: number;
-        values: Partial<Column>;
-    }[]) {
-        if (pairs.length === 0)
-            return;
-
-        let $title = $filter.querySelector(".title-box");
-        let timeoutId = setTimeout(function () {
-            $title.classList.add('think');
-        }, 400);
-
-        try {
-            await this.model.changeColumns(pairs);
-            clearTimeout(timeoutId);
-            $title.classList.remove("think");
-        }
-        catch (error) {
-            this._notifyEditProblem({
-                title: error.message,
-                message: error.cause,
-                type: 'error',
-            });
-        }
-    }
-
-    addNestedEvents($element: Element, id: number) {
-        $element.addEventListener('click', async (event) => {
-            let relatedColumns = this.columnsOf(id);
-            let parentInfo = relatedColumns[relatedColumns.length - 1];
-            let index = parentInfo.index + 1;
-            let filterNo = parentInfo.column.filterNo;
-            this._internalCreate = true;
-
-            try {
-                await this.model.insertColumn({ index: index, columnType: ColumnType.FILTER, filterNo: filterNo, hidden: this.model.get('filtersVisible') === false, active: relatedColumns[0].column.active });
-                let column = this.model.getColumn(index);
-                this.setColumnForEdit(column.id);
-            }
-            catch(error) {
-                this._notifyEditProblem({
-                    title: error.message,
-                    message: error.cause,
-                    type: 'error',
-                });
-            }
-            event.stopPropagation();
-            event.preventDefault();
+    private _cleanUp() {
+        // clean up any removes that exist because the transitionend was not called
+        this.$filterList.querySelectorAll('.remove').forEach(el => el.remove());
+        this.$filterList.querySelectorAll<HTMLElement>('[data-expanding="true"]').forEach(el => {
+            el.style.height = '';
+            el.setAttribute('data-expanding', 'false');
         });
     }
 
-    async removeNested(event: MouseEvent){
-        if (this._removingFilter)
-            return;
+    /* ---- called by the editor widget ---- */
 
-        let id = parseInt((event.currentTarget as HTMLButtonElement).getAttribute('data-id'));
-
-
-        this._removingFilter = true;
-
-        try {
-            await this.model.deleteColumn(id);
-        }
-        catch(error) {
-            this._notifyEditProblem({
-                title: error.message,
-                message: error.cause,
-                type: 'error',
-            });
-        }
-        finally {
-            this._removingFilter = false;
-        }
-
-        event.stopPropagation();
-        event.preventDefault();
-    }
-
-    removeNestedEvents($element: HTMLElement) {
-        $element.addEventListener('click', this.removeNested);
-    }
-
-    addEvents($filter: Element, $element: HTMLTextAreaElement, name: string, column: Column) {
-        $element.dataset.id = column.id.toString();
-
-        $element.addEventListener('click', (event) => {
-            event.stopPropagation();
-            event.preventDefault();
-        });
-
-        $element.addEventListener('focus', () => {
-            if (this._removingFilter) {
-                $element.blur();
-                return;
-            }
-
-            setTimeout(() => { //so that the focusloop handler can process the focus mode before editingVar is set. Otherwise the spreadsheet gets the focus.
-                this.model.set('editingVar', [column.id]);
-            }, 0);
-        });
-        $element.addEventListener('blur', (event) => {
-            if (this._isRealBlur()) {
-                this._editorClicked = false;
-                return;
-            }
-
-            if ($element.textContent !== column[name]) {
-                let data = { };
-                data[name] = $element.textContent;
-                this.setColumnProperties($filter, [{ id: column.id, values: data }]);
-            }
-
-            window.clearTextSelection();
-        });
-        $element.addEventListener('keydown', (event) => {
-            if (event.keyCode === 13 && event.shiftKey === false) {    //enter
-                dropdown.hide();
-                $element.blur();
-            }
-        });
-    }
-
-    _moveRight() {
-        let colNo = this.model.getColumnById(this.model.attributes.editingVar[0]).index;
-        colNo++;
-        if (colNo <= this.model.attributes.vColumnCount - 1) {
-            let column = this.model.getColumn(colNo);
-            if (column.columnType === 'filter')
-                this.model.set('editingVar', [column.id]);
-        }
-    }
-
-    _moveLeft() {
-        let colNo = this.model.getColumnById(this.model.attributes.editingVar[0]).index;
-        colNo--;
-        if (colNo >= 0) {
-            let column = this.model.getColumn(colNo);
-            if (column.columnType === 'filter')
-                this.model.set('editingVar', [column.id]);
-        }
+    attach() {
+        this._cleanUp();
+        this.attached = true;
+        this.update();
     }
 
     detach() {
         if ( ! this.attached)
             return;
 
-        this.querySelectorAll('.remove').forEach(el => el.remove()); //clean up any removes that exist because the transistionend was not called.
-
-        this.attached = false;
-    }
-
-    columnsOf(id: number) {
-        let children: { column: Column, index: number, id: number }[] = [];
-        let column = this.model.getColumnById(id);
-        let columns = this.model.get("columns");
-        for (let i = 0; i < columns.length; i++) {
-            let col = columns[i];
-            if (col.columnType !== 'filter')
-                break;
-
-            if (column.filterNo === col.filterNo)
-                children.push({ column: col, index: i, id: col.id });
-        }
-
-        return children;
-    }
-
-    rootOf(id: number) {
-        let column = this.model.getColumnById(id);
-        let children = [];
-        let columns = this.model.get("columns");
-        for (let i = 0; i < columns.length; i++) {
-            let col = columns[i];
-            if (col.columnType !== 'filter')
-                break;
-
-            if (col.filterNo === column.filterNo)
-                return { column: col, index: i };
-        }
-    }
-
-    _cleanUp() {
-        let $toRemove = this.$filterList.querySelectorAll('.remove');
-        if ($toRemove.length > 0) {
-            $toRemove.forEach(el => el.remove());
-        }
-        let $test = this.$filterList.querySelectorAll<HTMLElement>('[data-expanding="true"]');
-        $test.forEach(el => {
-            el.style.height = '';
-            el.setAttribute('data-expanding', 'false');
-        });
-    }
-
-    attach() {
-
         this._cleanUp();
-
-        this.attached = true;
-
-        this.update();
-
-        setTimeout(() => {
-            this.$filterList.querySelectorAll('[contenteditable="false"]').forEach(el => el.setAttribute('contenteditable', 'true'));
-        }, 0);
-
+        this.attached = false;
     }
 
     update() {
         this._updateEyeButton();
 
-        let $filters = this.$filterList.querySelectorAll('.jmv-filter-options:not(.remove)');
-
-        let edittingIds = this.model.get('editingVar');
-        let $scrollTo: Element = null;
-        for (let i = 0; i < $filters.length; i++) {
-            let $filter = $filters[i];
-
-            let columnId = parseInt($filter.getAttribute('data-columnid'));
-            $filter.classList.remove('selected');
-
-            let relatedColumns = this.columnsOf(columnId);
-            for (let rc = 0; rc < relatedColumns.length; rc++) {
-                let relatedColumn = relatedColumns[rc];
-                if (edittingIds.includes(relatedColumn.id)) {
-                    $filter.classList.add('selected');
-                    let $formula = $filter.querySelectorAll('.formula')[rc];
-                    $formula.classList.add('selected');
-                    if ($scrollTo === null)
-                        $scrollTo = $filter;
-                }
-            }
+        let editingIds: number[] = this.model.get('editingVar');
+        let $scrollTo: HTMLElement | null = null;
+        for (let group of this._groups.values()) {
+            let selected = group.columns.some(column => editingIds.includes(column.id));
+            group.el.classList.toggle('selected', selected);
+            if (selected && $scrollTo === null)
+                $scrollTo = group.el;
         }
-        if ($scrollTo && this.$filterList.scrollHeight > this.$filterList.clientHeight) {  // don't call scrollIntoView timer if there is no scrollbar
-            setTimeout(() => {
-                $scrollTo.scrollIntoView(false);
-            }, 250);
 
+        if ($scrollTo && this.$filterList.scrollHeight > this.$filterList.clientHeight) {  // don't call scrollIntoView timer if there is no scrollbar
+            setTimeout(() => $scrollTo.scrollIntoView(false), 250);
         }
     }
 }

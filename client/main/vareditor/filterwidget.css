@@ -204,42 +204,12 @@
 .jmv-filter-options > .formula-list > .formula-box {
     display: flex;
     flex-direction: row;
-    position: relative;
     margin-bottom: 5px;
     transition: 0.4s opacity, 0.4s visibility, 0.2s height, 0.2s margin, 0.2s padding, 0.2s border-width;
 }
 
-.jmv-filter-options > .formula-list > .formula-box > .equal {
-    padding-top: 5px;
-    padding-inline-end: 5px;
-    padding-bottom: 0px;
-    padding-inline-start: 37px;
-    position: absolute;
-    top: 0;
-    inset-inline-start: 0;
-    pointer-events: none;
-    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-    font-size: 12px;
-}
-
-.jmv-filter-options > .formula-list > .formula-box > .add-nested {
-    position: absolute;
-    inset-inline-end: 6px;
-    font-size: 11px;
-    color: #658ec2;
-    cursor: default;
-    line-height: 20px;
-    border: none;
-    background-color: transparent;
-}
-
-.jmv-filter-options > .formula-list > .formula-box .formula-pair {
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-}
-
 .jmv-filter-options > .formula-list > .formula-box .show-editor {
+    position: relative;
     filter: hue-rotate(40deg) saturate(5) grayscale(100%);
     width: 28px;
     border: 1px solid #dadada;
@@ -268,26 +238,128 @@
     top: 50%;
     margin-top: -3px;
     width: 5px;
-    inset-inline-start: 18px;
+    inset-inline-start: 17px;
     height: 5px;
 }
 
-.jmv-filter-options > .formula-list > .formula-box > .add-nested:hover {
-    color: #3c5472;
+.jmv-filter-options > .formula-list > .formula-box .formula-pair {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-width: 0;
 }
 
-.jmv-filter-options > .formula-list > .formula-box > .remove-nested {
+/* the box around a formula: its prefix ('=' or 'and'), the formula itself and
+   the add/remove nested button, side by side. They are top aligned rather than
+   baseline aligned: they share a font and line height, so their text lines up
+   anyway, and an empty formula (which has no baseline) can't shift the prefix */
+.jmv-filter-options > .formula-list > .formula-box .formula-field {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    background-color: #FFFFFF;
+    border: 1px solid #CCCCCC;
+    padding-block: 4px;
+    padding-inline-start: 5px;
+    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+    font-size: 12px;
+    line-height: calc(1em + 2px);  /* scales with a minimum font size setting */
+    cursor: text;
+}
+
+/* the field shows the focus ring for the formula inside it, following the
+   same mouse/keyboard rules as everything else (see focusoutline.css) */
+.jmv-filter-options > .formula-list > .formula-box .formula-field:has(> .formula:focus) {
+    outline: auto 1px;
+    outline: -webkit-focus-ring-color auto 1px;
+}
+
+body[focusmode="default"] .jmv-filter-options > .formula-list > .formula-box .formula-field:has(> .formula:focus),
+body[focusmode="hover"] .jmv-filter-options > .formula-list > .formula-box .formula-field:has(> .formula:focus) {
+    outline: none;
+}
+
+/* the visible prefix and an invisible copy of 'and' share one grid cell, so
+   every prefix is as wide as 'and' in the current language, and the formulas
+   of a filter line up */
+.jmv-filter-options > .formula-list > .formula-box .equal {
+    flex: none;
+    display: inline-grid;
+    margin-inline-end: 0.75ch;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.jmv-filter-options > .formula-list > .formula-box .equal > span {
+    grid-area: 1 / 1;
+    justify-self: end;  /* '=' sits against the formula, the same gap as 'and' */
+}
+
+.jmv-filter-options > .formula-list > .formula-box .equal > .equal-sizer {
+    visibility: hidden;
+}
+
+.jmv-filter-options > .formula-list > .formula-box .formula {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    min-height: 14px;
+    min-height: 1lh;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    outline: none;
+    cursor: text;
+}
+
+/* overlaid, so the caret of an empty formula sits at its start */
+.jmv-filter-options > .formula-list > .formula-box .formula:empty::before {
     position: absolute;
-    inset-inline-end: 6px;
-    font-size: 10px;
-    color: #bbbbbb;
+    inset-inline-start: 0;
+    top: 0;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.jmv-filter-options > .formula-list > .formula-box .add-nested,
+.jmv-filter-options > .formula-list > .formula-box .remove-nested {
+    flex: none;
+    align-self: flex-start;
+    /* exactly one line of the field tall, with the icon centred in it, so it
+       sits level with the first line of the formula, wrapped or not */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: inherit;
+    height: 14px;
+    height: 1lh;
+    padding: 0px;
+    margin-inline: 4px 6px;
     cursor: default;
-    line-height: 21px;
     border: none;
     background-color: transparent;
 }
 
-.jmv-filter-options > .formula-list > .formula-box > .remove-nested:hover {
+.jmv-filter-options > .formula-list > .formula-box .add-nested > span,
+.jmv-filter-options > .formula-list > .formula-box .remove-nested > span {
+    display: block;
+    line-height: 1;
+}
+
+.jmv-filter-options > .formula-list > .formula-box .add-nested {
+    font-size: 11px;
+    color: #658ec2;
+}
+
+.jmv-filter-options > .formula-list > .formula-box .add-nested:hover {
+    color: #3c5472;
+}
+
+.jmv-filter-options > .formula-list > .formula-box .remove-nested {
+    font-size: 10px;
+    color: #bbbbbb;
+}
+
+.jmv-filter-options > .formula-list > .formula-box .remove-nested:hover {
     color: #c15050;
 }
 
@@ -305,42 +377,10 @@
     display: none;
 }
 
-.jmv-filter-options > .formula-list > .formula-box .formula {
-    flex: 1;
-    resize: none;
-    text-indent: 1em;
-    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-    font-size: 12px;
-    padding-top: 5px;
-    padding-inline-end: 20px;
-    padding-bottom: 5px;
-    padding-inline-start: 5px;
-    background-color: #FFFFFF;
-    border: 1px solid #CCCCCC;
-    cursor: text;
-    overflow-y: auto;
-    line-height: 1em;
-    min-height: 1em;
-}
-
-.jmv-filter-options > .formula-list > .formula-box .formula.and-formula {
-    text-indent: 2em;
-}
-
 [contenteditable=true]:empty:before {
     content: attr(placeholder);
     display: block; /* For Firefox */
     color: #CCCCCC;
-}
-
-.jmv-filter-options > .formula-list > .formula-box .caret {
-    border-inline-start: 1px solid #888888;
-    top: 2px;
-    inset-inline-start: 15px;
-    height: calc(1em + 2px);
-    position: absolute;
-    transition: .05s left ease-out, .05s top ease-out;
-    pointer-events: none;
 }
 
 .jmv-filter-options > .description{
