@@ -4,6 +4,7 @@
 
 import formulaToolbar from './formulatoolbar';
 import dropdown from './dropdown';
+import FormulaField from './formulafield';
 import { h }  from '../../common/htmlelementcreator';
 import VariableModel from './variablemodel';
 
@@ -26,6 +27,7 @@ class ComputedVarWidget extends HTMLElement{
 
     $formula: HTMLInputElement;
     $showEditor: HTMLElement;
+    $field!: HTMLElement;
     $formulaMessage: HTMLElement;
     _$wasEditingFormula: HTMLElement;
 
@@ -104,8 +106,6 @@ class ComputedVarWidget extends HTMLElement{
         let $formulaBox = h('div', { class: 'formula-box' });
         $parent.append($formulaBox);
 
-        $formulaBox.append(h('div', { class: 'equal' }, '='))
-
         this.$showEditor = h('button', { class: 'show-editor', 'aria-label': _('Show formula editor'), 'aria-controls': this.formulasetup.id },
             h('div', { class: 'down-arrow' }));
         $formulaBox.append(this.$showEditor);
@@ -113,7 +113,7 @@ class ComputedVarWidget extends HTMLElement{
         this.$showEditor.addEventListener('click', (event) => {
             if (this._$wasEditingFormula !== this.$formula) {
                 this.formulasetup.show(this.$formula, this.model.get('name'));
-                dropdown.show(this.$formula, this.formulasetup).then(() => {
+                dropdown.show(this.$formula, this.formulasetup, false, undefined, this.$field).then(() => {
                     this._editorClicked = false;
                 });
                 //this.$formula.focus();
@@ -129,18 +129,11 @@ class ComputedVarWidget extends HTMLElement{
         let $formulaPair = h('div', { class: 'formula-pair' });
         $formulaBox.append($formulaPair);
 
-        let _example = this._exampleFormulas[Math.floor(Math.random() * Math.floor(this._exampleFormulas.length - 1))];
-        this.$formula = h('div', { class: 'formula', type: 'text', placeholder: 'eg: ' + _example, contenteditable: 'true', spellcheck: 'false', 'aria-label': 'formula', tabindex: '0' }) as HTMLInputElement;
-        $formulaPair.append(this.$formula);
-
-        document.addEventListener("selectionchange", () => {
-            const sel = window.getSelection();
-            if (this.$formula && (this.$formula.contains(sel.anchorNode) || sel.anchorNode === this.$formula)) {
-                let range = sel.getRangeAt(0);
-                this.$formula.setAttribute('sel-start', range.startOffset.toString());
-                this.$formula.setAttribute('sel-end', range.endOffset.toString());
-            }
-        });
+        let _example = this._exampleFormulas[Math.floor(Math.random() * this._exampleFormulas.length)];
+        let field = new FormulaField({ prefix: '=', placeholder: 'eg: ' + _example });
+        this.$formula = field.$formula as HTMLInputElement;
+        this.$field = field.el;
+        $formulaPair.append(field.el);
 
         this.$formula.addEventListener('input', (event) => {
             dropdown.updatePosition();

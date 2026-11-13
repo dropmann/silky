@@ -29,6 +29,7 @@
 @import "variablesview.css";
 @import "tableview.css";
 @import "editorpanel.css";
+@import "vareditor/formulafield.css";
 @import "editors/transformeditor.css";
 @import "editors/missingvalueeditor.css";
 @import "variableeditor.css";

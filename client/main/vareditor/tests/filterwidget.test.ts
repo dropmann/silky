@@ -154,7 +154,7 @@ describe('FilterWidget', () => {
         let { widget } = setup([col(0), col(0), dataCol()]);
         let $fields = widget.querySelectorAll('.formula-field');
         expect($fields.length).toBe(2);
-        expect(Array.from($fields[1].children).map((el: any) => el.className)).toEqual(['equal', 'formula', 'remove-nested']);
+        expect(Array.from($fields[1].children).map((el: any) => el.className)).toEqual(['equal', 'formula-text', 'remove-nested']);
     });
 
     it('does not re-set editingVar when focusing a formula already being edited', async () => {

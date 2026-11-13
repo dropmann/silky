@@ -4,6 +4,7 @@ import opsToolbar from './operatordropdown';
 import tarp from '../utils/tarp';
 import formulaToolbar from '../vareditor/formulatoolbar';
 import dropdown from '../vareditor/dropdown';
+import FormulaField from '../vareditor/formulafield';
 import VariableList from '../vareditor/variablelist';
 import MeasureList from '../vareditor/measurelist';
 import ColourPalette from './colourpalette';
@@ -34,17 +35,8 @@ type TransformDetails = {
     $formulaMessage: HTMLElement;
 };
 
-function prefixChildren(prefix: string): Array<string | Node> {
-    let indexOfDollar = prefix.indexOf('$');
-    if (indexOfDollar === -1)
-        return [prefix];
-
-    return [
-        prefix.slice(0, indexOfDollar),
-        h('span', {}, prefix.slice(indexOfDollar, indexOfDollar + 1)),
-        prefix.slice(indexOfDollar + 1)
-    ];
-}
+// each formula's field, by its element
+const fields = new WeakMap<Element, FormulaField>();
 
 class TransformEditor extends HTMLElement {
     model: DataSetViewModel;
@@ -476,17 +468,6 @@ class TransformEditor extends HTMLElement {
             event.stopPropagation();
         });
 
-        document.addEventListener("selectionchange", () => {
-            const sel = window.getSelection();
-            for (let i = 0; i < elements.$formulas.length; i++) {
-                if (elements.$formulas[i] && (elements.$formulas[i].contains(sel.anchorNode) || sel.anchorNode === elements.$formulas[i])) {
-                    let range = sel.getRangeAt(0);
-                    elements.$formulas[i].setAttribute('sel-start', range.startOffset.toString());
-                    elements.$formulas[i].setAttribute('sel-end', range.endOffset.toString());
-                    break;
-                }
-            }
-        });
 
         if (hasCondition) {
             this._createSubFormula(elements, _('use'), false, formula2, 1);
@@ -513,21 +494,10 @@ class TransformEditor extends HTMLElement {
     }
 
     _updateLastFormulaTag() {
-        let $equal = this.$options.querySelector('.recode-else .equal');
-        if ($equal) {
-            let $formula = this.$options.querySelector<HTMLElement>('.recode-else .formula');
-            let tag = '=';
-            if (this.formula.length > 1)
-                tag = _('else use');
-
-            setTimeout(() => {
-                let indent = ($equal.clientWidth + 1) + 'px';
-                $formula.style.textIndent = indent;
-            }, 10);
-
-            
-            $equal.textContent = tag;
-        }
+        let $field = this.$options.querySelector('.recode-else .formula-field');
+        let field = $field ? fields.get($field) : undefined;
+        if (field)
+            field.prefix = this.formula.length > 1 ? _('else use') : '=';
     }
 
     _applyFormula() {
@@ -813,7 +783,11 @@ class TransformEditor extends HTMLElement {
             _sign = this._exampleFormulas[Math.floor(Math.random() * Math.floor(this._exampleFormulas.length - 1))].s + ' ';
         }
 
-        let $fp = h('div', { class: 'formula-list-item item-' + index, style: 'grid-column-start: ' + (index + 1) + '; grid-row-start: 1;' });
+        let field = new FormulaField({ prefix, placeholder: _sign + 'e.g. ' + _example, className: 'formula-list-item item-' + index });
+        let $fp = field.el;
+        fields.set($fp, field);
+        $fp.style.gridColumnStart = (index + 1).toString();
+        $fp.style.gridRowStart = '1';
         if (!hasOp) {
             $fp.style.gridColumnEnd = '-2';
         }
@@ -823,15 +797,9 @@ class TransformEditor extends HTMLElement {
         if (elements.$formulas === undefined)
             elements.$formulas = [ ];
 
-        let $formula = h('div', { class: 'formula', tabindex: '0', type: 'text', spellcheck: 'false', placeholder: _sign + 'e.g. ' + _example, contenteditable: 'true', 'data-index': index.toString() }, formula);
-        $fp.append($formula);
-
-        let $equal = h('div', { class: 'equal' }, ...prefixChildren(prefix));
-        $fp.append($equal);
-        setTimeout(() => {
-            let indent = ($equal.clientWidth + 1) + 'px';
-            $formula.style.textIndent = indent;
-        }, 10);
+        let $formula = field.$formula;
+        $formula.dataset.index = index.toString();
+        $formula.textContent = formula;
 
         elements.$formulas.push($formula);
 
@@ -872,19 +840,16 @@ class TransformEditor extends HTMLElement {
         });
 
         if (hasOp) {
+            // over the operator at the start of the formula; opens the operator list
             $opEdit = h('div', { class: 'down-arrow' }, 'a');
-            $fp.append($opEdit)
-            setTimeout(() => {
-                let indent = ($equal.clientWidth + 1) + 'px';
-                $opEdit.style.insetInlineStart = indent;
-            }, 10);
+            field.$text.append($opEdit);
             $opEdit.style.width = _sign.length + 'ch';
             $opEdit.style.display = 'none';
 
             $opEdit.addEventListener('click', (event) => {
                 if (this._$wasEditingOpsFormula !== $formula || dropdown.content() !== this.opsToolbar) {
                     this.opsToolbar.show($formula);
-                    dropdown.show($formula, this.opsToolbar, false, this.$contents);
+                    dropdown.show($formula, this.opsToolbar, false, this.$contents, $fp);
 
                     let sel = window.getSelection();
 

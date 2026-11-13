@@ -284,7 +284,6 @@
     color: #999999 ;
 }
 
-
 .jmv-transform-editor-options > .formula-box .show-editor {
     filter: hue-rotate(40deg) saturate(5) grayscale(100%);
     width: 28px;
@@ -319,52 +318,6 @@
     height: 5px;
 }
 
-.jmv-transform-editor-options > .formula-box .formula-list-item > .down-arrow {
-    position: absolute;
-    background-image: url('../../assets/filters-down-arrow.svg');
-    background-position: right 2px top 1px;
-    background-repeat: no-repeat;
-    background-size: 5px 5px;
-    top: 0px;
-    border-top: 1px solid transparent;
-    border-bottom: 1px solid transparent;
-    width: 3ch;
-    margin-inline-start: 0.5ch;
-    border-inline-end: 1px dashed rgba(62, 109, 169, 0.28);
-    border-inline-start: 1px dashed rgba(62, 109, 169, 0.28);
-    box-sizing: border-box;
-    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-    font-size: 12px;
-    color: rgba(220, 220, 220, 0);
-    line-height: 2;
-}
-
-.jmv-transform-editor-options > .formula-box .formula-list-item > .down-arrow:hover {
-    background-color: rgba(62, 109, 169, 0.05);
-    border-inline-end: 1px solid rgba(62, 109, 169, 0.28);
-    border-inline-start: 1px solid rgba(62, 109, 169, 0.28);
-}
-
-.jmv-transform-editor-options > .formula-box .equal {
-    position: absolute;
-    top: 0;
-    inset-inline-start: 0;
-    pointer-events: none;
-    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-    font-size: 12px;
-    color: #3e6da9;
-    line-height: inherit;
-    padding-top: 0;
-    padding-inline-end: 0;
-    padding-bottom: 0px;
-    padding-inline-start: 1ch;
-    border: 1px solid transparent;
-}
-
-.jmv-transform-editor-options > .formula-box .equal span {
-    color: rgba(62, 109, 169, 0.35);
-}
-
 .jmv-transform-editor-options > .formula-box .formula-grid {
     display: grid;
     background-color: transparent;
@@ -378,11 +331,6 @@
     margin-top: 10px;
 }
 
-.jmv-transform-editor-options > .formula-box .formula-list-item {
-    position: relative;
-    height: 100%;
-}
-
 .jmv-transform-editor-options > .formula-box .formula-message-box > .formula-message {
     background-color: pink;
     padding: 5px;
@@ -394,40 +342,58 @@
     display: none;
 }
 
-.jmv-transform-editor-options > .formula-box .formula {
-    flex: 1;
-    resize: none;
-    text-indent: 1.5em;
+/* each formula's box (see formulafield.css for its layout); the boxes of a
+   row join up into one bar */
+.jmv-transform-editor-options > .formula-box .formula-list-item {
     font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
     font-size: 12px;
-    padding-top: 0;
-    padding-inline-end: 20px;
-    padding-bottom: 0px;
-    padding-inline-start: 1ex;
-    background-color: #FFFFFF;
-    border: 1px solid #CCCCCC;
-    border-inline-start: none;
-    border-inline-end: none;
-    cursor: text;
-    overflow-y: auto;
     line-height: inherit;
-    min-height: 1em;
-    height: inherit;
+    padding-inline: 1ch 20px;
+    background-color: #FFFFFF;
+    border-block: 1px solid #CCCCCC;
     box-sizing: border-box;
-    transition: .2s text-indent;
-    white-space: pre-wrap;
+    min-width: 0;
 }
 
-.jmv-transform-editor-options > .formula-box .formula:empty {
-    white-space: nowrap;
-}
-
-.jmv-transform-editor-options > .formula-box .item-0 .formula {
+.jmv-transform-editor-options > .formula-box .formula-list-item.item-0 {
     border-inline-start: 1px solid #CCCCCC;
 }
 
-.jmv-transform-editor-options > .formula-box .item-last .formula {
+.jmv-transform-editor-options > .formula-box .formula-list-item.item-last {
     border-inline-end: 1px solid #CCCCCC;
+}
+
+.jmv-transform-editor-options > .formula-box .formula-list-item > .equal {
+    color: #3e6da9;
+}
+
+.jmv-transform-editor-options > .formula-box .formula-list-item > .equal .dollar {
+    color: rgba(62, 109, 169, 0.35);
+}
+
+/* over the operator at the start of the formula (which reads left to right
+   in any language), the full height of the box; its width is set to fit the
+   operator */
+.jmv-transform-editor-options > .formula-box .formula-text > .down-arrow {
+    position: absolute;
+    top: -1px;
+    height: calc(1lh + 2px);
+    left: -0.5ch;
+    width: 3ch;
+    background-image: url('../../assets/filters-down-arrow.svg');
+    background-position: right 2px top 1px;
+    background-repeat: no-repeat;
+    background-size: 5px 5px;
+    border-inline: 1px dashed rgba(62, 109, 169, 0.28);
+    box-sizing: border-box;
+    color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.jmv-transform-editor-options > .formula-box .formula-text > .down-arrow:hover {
+    background-color: rgba(62, 109, 169, 0.05);
+    border-inline: 1px solid rgba(62, 109, 169, 0.28);
 }
 
 .jmv-transform-editor-options > .formula-box .item-0.item-last {

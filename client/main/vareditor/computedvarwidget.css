@@ -87,23 +87,11 @@
     height: 5px;
 }
 
-.jmv-variable-computed-options > .formula-box > .equal {
-    padding-top: 5px;
-    padding-inline-end: 5px;
-    padding-bottom: 0px;
-    padding-inline-start: 34px;
-    position: absolute;
-    top: 0;
-    inset-inline-start: 0;
-    pointer-events: none;
-    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-    font-size: 12px;
-}
-
 .jmv-variable-computed-options > .formula-box .formula-pair {
     display: flex;
     flex-direction: column;
     flex-grow: 1;
+    min-width: 0;
 }
 
 .jmv-variable-computed-options > .formula-box .formulaMessageBox {
@@ -122,10 +110,9 @@
     display: none;
 }
 
-.jmv-variable-computed-options > .formula-box .formula {
+/* the box around the formula (see formulafield.css for its layout) */
+.jmv-variable-computed-options > .formula-box .formula-field {
     flex: 1;
-    resize: none;
-    text-indent: 1em;
     font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
     font-size: 12px;
     padding-top: 5px;
@@ -134,12 +121,9 @@
     padding-inline-start: 5px;
     background-color: #FFFFFF;
     border: 1px solid #CCCCCC;
-    cursor: text;
     overflow-y: auto;
     line-height: 1em;
-    min-height: 1em;
     box-sizing: border-box;
-    white-space: pre-wrap;
 }
 
 [contenteditable=true]:empty:before {

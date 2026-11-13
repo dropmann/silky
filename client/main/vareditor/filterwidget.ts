@@ -3,6 +3,7 @@
 
 import formulaToolbar from './formulatoolbar';
 import dropdown from './dropdown';
+import FormulaField from './formulafield';
 import Notify from '../notification';
 import { h }  from '../../common/htmlelementcreator';
 import DataSetViewModel, { Column, ColumnType } from '../dataset';
@@ -22,36 +23,6 @@ const EXAMPLE_FORMULAS = [
 
 function randomExample() {
     return EXAMPLE_FORMULAS[Math.floor(Math.random() * EXAMPLE_FORMULAS.length)];
-}
-
-// the number of characters of el's text before (node, offset)
-function charOffset(el: HTMLElement, node: Node, offset: number) {
-    let range = document.createRange();
-    range.selectNodeContents(el);
-    range.setEnd(node, offset);
-    return range.toString().length;
-}
-
-function placeCaret(el: HTMLElement, offset: number) {
-    let text = el.firstChild;
-    if (text && text.nodeType === Node.TEXT_NODE)
-        window.getSelection()?.setBaseAndExtent(text, offset, text, offset);
-    else
-        window.getSelection()?.setBaseAndExtent(el, 0, el, 0);
-}
-
-// collapses el's contents to a single text node (or nothing, when empty, so
-// :empty and the placeholder apply), keeping the caret where it was
-function flattenText(el: HTMLElement) {
-    let first = el.firstChild;
-    if (el.childNodes.length === 0 || (el.childNodes.length === 1 && first?.nodeType === Node.TEXT_NODE && first.textContent !== ''))
-        return;
-
-    let sel = window.getSelection();
-    let caret = sel && sel.rangeCount > 0 && el.contains(sel.anchorNode) ? charOffset(el, sel.anchorNode!, sel.anchorOffset) : null;
-    el.textContent = el.textContent;
-    if (caret !== null)
-        placeCaret(el, Math.min(caret, el.textContent.length));
 }
 
 /*
@@ -74,8 +45,7 @@ class FormulaBox {
     private isFirst: boolean | undefined;
     private shownFormula: string | undefined;
     private shownMessage: string | undefined;
-    private $equal: HTMLElement;
-    private $equalText: HTMLElement;
+    private field: FormulaField;
     private $nested: HTMLButtonElement;
     private $nestedIcon: HTMLElement;
     private $showEditor: HTMLButtonElement;
@@ -87,22 +57,16 @@ class FormulaBox {
         this.group = group;
         this.columnId = column.id;
 
-        // the prefix ('=' or 'and'), the formula and the nested button sit side
-        // by side inside .formula-field, which draws the box around them. Being
-        // in the flow (rather than overlaid on an indented formula) keeps the
-        // formula text, its wrapped lines and the caret clear of the prefix.
-        // the prefix holds an invisible copy of the translated 'and' so that an
-        // '=' prefix takes the same width, and the formulas line up in any language
-        this.$equalText = h('span');
-        this.$equal = h('div', { class: 'equal', 'aria-hidden': 'true' },
-            this.$equalText,
-            h('span', { class: 'equal-sizer' }, _('and')));
+        // the prefix ('=' or 'and') is sized to fit 'and' in the current
+        // language, so that the formulas of a filter line up
+        this.field = new FormulaField({ sizer: _('and'), placeholder: 'e.g. ' + randomExample() });
+        this.$formula = this.field.$formula;
+        this.$field = this.field.el;
         this.$nestedIcon = h('span');
         this.$nested = h('button', { }, this.$nestedIcon) as HTMLButtonElement;
+        this.$field.append(this.$nested);
         this.$showEditor = h('button', { 'aria-controls': widget.formulaSetup.id, class: 'show-editor', 'aria-label': _('Show formula editor') },
             h('div', { class: 'down-arrow' })) as HTMLButtonElement;
-        this.$formula = h('div', { class: 'formula', role: 'textbox', 'aria-label': _('Formula'), spellcheck: 'false', placeholder: 'e.g. ' + randomExample(), contenteditable: 'true', tabindex: '0' });
-        this.$field = h('div', { class: 'formula-field' }, this.$equal, this.$formula, this.$nested);
         this.$message = h('div', { class: 'formulaMessage' });
 
         this.el = h('div', { class: 'formula-box filter-hidden' },
@@ -110,40 +74,6 @@ class FormulaBox {
             h('div', { class: 'formula-pair' },
                 this.$field,
                 h('div', { class: 'formulaMessageBox' }, this.$message)));
-
-        // clicks on the prefix or the padding around the formula edit it
-        this.$field.addEventListener('mousedown', (event) => {
-            let target = event.target as Element;
-            if (target === this.$formula || this.$formula.contains(target) || target.closest('button'))
-                return;
-            event.preventDefault();
-            this.$formula.focus();
-            placeCaret(this.$formula, this.$formula.textContent.length);
-        });
-
-        // keep the formula a single text node: pastes come in as plain text on
-        // one line, and anything the browser adds while editing (such as the
-        // <br> left after deleting everything) is flattened back to text
-        this.$formula.addEventListener('paste', (event) => {
-            event.preventDefault();
-            let text = (event.clipboardData?.getData('text/plain') ?? '').replace(/\s*[\r\n]+\s*/g, ' ');
-            // insertText keeps the browser's undo history; insert by hand where it's unavailable
-            if ( ! document.execCommand('insertText', false, text)) {
-                let sel = window.getSelection();
-                if ( ! sel || sel.rangeCount === 0)
-                    return;
-                let range = sel.getRangeAt(0);
-                range.deleteContents();
-                let node = document.createTextNode(text);
-                range.insertNode(node);
-                range.setStartAfter(node);
-                range.collapse(true);
-                sel.removeAllRanges();
-                sel.addRange(range);
-                flattenText(this.$formula);
-            }
-        });
-        this.$formula.addEventListener('input', () => flattenText(this.$formula));
 
         this.$nested.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -171,8 +101,6 @@ class FormulaBox {
         });
 
         this.$formula.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && event.shiftKey)  // a formula is one line; plain Enter commits it
-                event.preventDefault();
             if (event.key === 'Tab') {
                 if (dropdown.isVisible()) {
                     dropdown.enter();
@@ -196,7 +124,7 @@ class FormulaBox {
 
         if (isFirst !== this.isFirst) {
             this.isFirst = isFirst;
-            this.$equalText.textContent = isFirst ? '=' : _('and');
+            this.field.prefix = isFirst ? '=' : _('and');
             this.$nested.className = isFirst ? 'add-nested' : 'remove-nested';
             this.$nested.setAttribute('aria-label', isFirst ? _('Add another nested filter') : _('Remove nested filter'));
             this.$nestedIcon.className = isFirst ? 'mif-plus' : 'mif-cross';
@@ -380,22 +308,6 @@ class FilterWidget extends HTMLElement {
         this.model.on('columnsChanged', this._sync, this);
         this.model.on('change:filtersVisible', this._updateEyeButton, this);
 
-        // a single listener for every formula box; records the caret position
-        // on whichever formula holds the selection, for the formula toolbar
-        document.addEventListener('selectionchange', () => {
-            const sel = window.getSelection();
-            if ( ! sel || sel.rangeCount === 0 || ! sel.anchorNode)
-                return;
-            const $anchor = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode.parentElement;
-            const $formula = $anchor?.closest<HTMLElement>('.formula');
-            if ( ! $formula || ! this.$filterList.contains($formula))
-                return;
-            // offsets count characters from the start of the formula, whatever
-            // node the selection is in, as the formula toolbar expects
-            const range = sel.getRangeAt(0);
-            $formula.setAttribute('sel-start', charOffset($formula, range.startContainer, range.startOffset).toString());
-            $formula.setAttribute('sel-end', charOffset($formula, range.endContainer, range.endOffset).toString());
-        });
     }
 
     /* ---- reconciling the DOM with the model ---- */

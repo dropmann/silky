@@ -20,146 +20,81 @@
     background-color: #DDDDDD;
 }*/
 
-
-.jmv-missing-value-list-item .remove-cond {
-    text-align: center;
-    position: absolute;
-    margin-top: 0px;
-    margin-inline-end: 10px;
-    margin-bottom: 0px;
-    margin-inline-start: 5px;
-    font-size: 10px;
-    color: #bbbbbb;
-    cursor: default;
-    line-height: 21px;
-    top: 3px;
-    inset-inline-end: 5px;
-    border: none;
-    background-color: transparent;
-}
-
-.jmv-missing-value-list-item .remove-cond:hover {
-    color: #c15050;
-}
-
 .jmv-missing-value-list-item.hidden {
     opacity: 0;
     height: 0px;
 }
 
-.jmv-missing-value-list-item .formula-list-item > .down-arrow {
-    position: absolute;
-    background-image: url('../../assets/filters-down-arrow.svg');
-    background-position: right 2px top 1px;
-    background-repeat: no-repeat;
-    background-size: 5px 5px;
-    top: 0px;
-    border-top: 1px solid transparent;
-    border-bottom: 1px solid transparent;
-    width: 3ch;
-    inset-inline-start: 11.5ch;
-    border-inline-end: 1px dashed rgba(62, 109, 169, 0.28);
-    border-inline-start: 1px dashed rgba(62, 109, 169, 0.28);
-    box-sizing: border-box;
-    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-    font-size: 12px;
-    color: rgba(220, 220, 220, 0);
-    line-height: 2;
-}
-
-.jmv-missing-value-list-item .formula-list-item > .down-arrow:hover {
-    background-color: rgba(62, 109, 169, 0.05);
-    border-inline-end: 1px solid rgba(62, 109, 169, 0.28);
-    border-inline-start: 1px solid rgba(62, 109, 169, 0.28);
-}
-
-.jmv-missing-value-list-item .formula-list-item {
-    position: relative;
-    height: 100%;
-    width: 100%;
-    line-height: 200px;
-    overflow: hidden;
-}
-
-.jmv-missing-value-list-item .formula {
+/* the box around the formula (see formulafield.css for its layout) */
+.jmv-missing-value-list-item > .formula-field {
     flex: 1;
-    resize: none;
-    text-indent: 1.5em;
+    min-width: 0;
     font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
     font-size: 12px;
-    padding-top: 6px;
-    padding-inline-end: 20px;
-    padding-bottom: 6px;
-    padding-inline-start: 1ex;
+    line-height: 1.3em;
+    padding-block: 6px;
+    padding-inline-start: 1ch;
+    margin-inline-end: 5px;
     background-color: #FFFFFF;
     border: 1px solid #CCCCCC;
-    border-inline-start: none;
-    border-inline-end: none;
-    cursor: text;
-    overflow-y: auto;
-    line-height: 1.3em;
-    min-height: 1em;
-    height: inherit;
-    box-sizing: border-box;
-    transition: .2s text-indent;
-    margin-inline-end: 5px;
-    overflow: hidden;
 }
 
-.jmv-missing-value-list-item .formula {
-    border-inline-start: 1px solid #CCCCCC;
-    border-inline-end: 1px solid #CCCCCC;
+.jmv-missing-value-list-item > .formula-field > .equal {
+    color: #3e6da9;
 }
 
-.jmv-missing-value-list-item .equal span {
+.jmv-missing-value-list-item > .formula-field > .equal .dollar {
     color: rgba(62, 109, 169, 0.35);
 }
 
-.jmv-missing-value-list-item .equal {
+/* over the operator at the start of the formula (which reads left to right
+   in any language), the full height of the field; its width is set to fit
+   the operator */
+.jmv-missing-value-list-item .formula-text > .down-arrow {
     position: absolute;
-    top: 0;
-    inset-inline-start: 0;
-    pointer-events: none;
-    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-    font-size: 12px;
-    color: #3e6da9;
-    padding-top: 6px;
-    padding-inline-end: 0;
-    padding-bottom: 0px;
-    padding-inline-start: 1ch;
-    border: 1px solid transparent;
-    /* vertical-align: middle; */
-    line-height: 1.3em;
-    position: absolute;
-    /* top: 50%; */
-    /* inset-inline-start: 50%; */
-    height: 20px;
-    /* width: 50%; */
-    /* margin-top: -5%; */
-}
-
-.jmv-missing-value-list-item .formula-list-item > .down-arrow:hover {
-    background-color: rgba(62, 109, 169, 0.05);
-    border-inline-end: 1px solid rgba(62, 109, 169, 0.28);
-    border-inline-start: 1px solid rgba(62, 109, 169, 0.28);
-}
-
-.jmv-missing-value-list-item .formula-list-item > .down-arrow {
-    position: absolute;
+    top: -7px;
+    height: calc(1lh + 14px);
+    left: -0.5ch;
+    width: 3ch;
     background-image: url('../../assets/filters-down-arrow.svg');
     background-position: right 2px top 1px;
     background-repeat: no-repeat;
     background-size: 5px 5px;
-    top: 0px;
-    border-top: 1px solid transparent;
-    border-bottom: 1px solid transparent;
-    width: 3ch;
-    inset-inline-start: 13.5ch;
-    border-inline-end: 1px dashed rgba(62, 109, 169, 0.28);
-    border-inline-start: 1px dashed rgba(62, 109, 169, 0.28);
+    border-inline: 1px dashed rgba(62, 109, 169, 0.28);
     box-sizing: border-box;
-    font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
-    font-size: 12px;
-    color: rgba(220, 220, 220, 0);
-    line-height: 2;
+    color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.jmv-missing-value-list-item .formula-text > .down-arrow:hover {
+    background-color: rgba(62, 109, 169, 0.05);
+    border-inline: 1px solid rgba(62, 109, 169, 0.28);
+}
+
+/* one line of the field tall, level with the first line of the formula */
+.jmv-missing-value-list-item .remove-cond {
+    flex: none;
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1lh;
+    padding: 0;
+    margin-inline: 4px 8px;
+    font-size: 10px;
+    line-height: inherit;
+    color: #bbbbbb;
+    cursor: default;
+    border: none;
+    background-color: transparent;
+}
+
+.jmv-missing-value-list-item .remove-cond > span {
+    display: block;
+    line-height: 1;
+}
+
+.jmv-missing-value-list-item .remove-cond:hover {
+    color: #c15050;
 }

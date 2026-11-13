@@ -1,0 +1,93 @@
+
+/* the layout shared by every formula field (see formulafield.ts); each editor
+   adds the border, padding, font and line height of its own fields.
+
+   The parts are top aligned rather than baseline aligned: they share a font
+   and line height, so their text lines up anyway, and an empty formula (which
+   has no baseline) can't shift the prefix */
+.formula-field {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    cursor: text;
+}
+
+/* the field shows the focus ring for the formula inside it, following the
+   same mouse/keyboard rules as everything else (see focusoutline.css) */
+.formula-field:has(.formula:focus) {
+    outline: auto 1px;
+    outline: -webkit-focus-ring-color auto 1px;
+}
+
+body[focusmode="default"] .formula-field:has(.formula:focus),
+body[focusmode="hover"] .formula-field:has(.formula:focus) {
+    outline: none;
+}
+
+/* the visible prefix and an optional invisible sizer share one grid cell, so
+   the prefix is as wide as the wider of them, with the text at its end */
+.formula-field > .equal {
+    flex: none;
+    display: inline-grid;
+    margin-inline-end: 0.75ch;
+    white-space: nowrap;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.formula-field > .equal.empty {
+    display: none;
+}
+
+.formula-field > .equal > span {
+    grid-area: 1 / 1;
+    justify-self: end;
+}
+
+.formula-field > .equal > .equal-sizer {
+    visibility: hidden;
+}
+
+.formula-field > .formula-text {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+}
+
+.formula-field .formula {
+    position: relative;
+    min-height: 14px;
+    min-height: 1lh;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    text-align: left;
+    outline: none;
+    cursor: text;
+}
+
+/* overlaid, so the caret of an empty formula sits at its start */
+.formula-field .formula:empty::before {
+    position: absolute;
+    left: 0;
+    top: 0;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* Right to left, the formula (still left to right inside) is only as wide as
+   its text and sits against the prefix, so it begins where it would in a
+   left to right layout: right after the prefix, with anything overlaid on its
+   start in the same place. What follows it is pushed to the far end. */
+body[dir="rtl"] .formula-field > .formula-text {
+    flex: 0 1 auto;
+    margin-inline-end: auto;
+}
+
+body[dir="rtl"] .formula-field .formula {
+    min-width: 2px;
+}
+
+body[dir="rtl"] .formula-field .formula:empty::before {
+    left: auto;
+    right: 0;
+}

@@ -2,6 +2,7 @@
 'use strict';
 
 import dropdown from './dropdown';
+import FormulaField from './formulafield';
 import opsToolbar from '../editors/operatordropdown';
 import { h }  from '../../common/htmlelementcreator';
 
@@ -43,31 +44,18 @@ class MissingValueListItem extends HTMLElement {
     _createUI() {
 
         let formula = this.value;
-        let prefix = `${_('when')} $source`;
-        let indent = (prefix.length + 1) + 'ch';
 
-        let hasOp = true;
+        let _example = this._exampleFormulas[Math.floor(Math.random() * this._exampleFormulas.length)].a;
+        let _sign = this._exampleFormulas[Math.floor(Math.random() * this._exampleFormulas.length)].s + ' ';
 
-        let _example = this._exampleFormulas[Math.floor(Math.random() * Math.floor(this._exampleFormulas.length - 1))].a;
-        let _sign = this._exampleFormulas[Math.floor(Math.random() * Math.floor(this._exampleFormulas.length - 1))].s + ' ';
+        let field = new FormulaField({ prefix: `${_('when')} $source`, placeholder: _sign + 'e.g. ' + _example });
+        let $formula = field.$formula;
+        $formula.textContent = formula;
+        this.append(field.el);
 
-        let $fp = h('div', { class: 'formula-list-item' });
-        this.append($fp);
-
-        let $formula = h('div', { class: 'formula', tabindex: '0', type: 'text', placeholder: _sign + 'e.g. ' + _example, contenteditable: 'true', spellcheck: 'false', style: 'text-indent:' + indent }, formula);
-        $fp.append($formula);
-
-        let indexOfDollar = prefix.indexOf('$');
-        let $equal = h('div', { class: 'equal' });
-        if (indexOfDollar !== -1)
-            $equal.append(prefix.slice(0, indexOfDollar), h('span', {}, prefix.slice(indexOfDollar, indexOfDollar + 1)), prefix.slice(indexOfDollar + 1));
-        else
-            $equal.append(prefix);
-        $fp.append($equal);
-
-        let $rm = h('button', { class: 'remove-cond', 'data-index': '0' },
+        let $rm = h('button', { class: 'remove-cond', 'data-index': '0', 'aria-label': _('Remove') },
             h('span', { class: 'mif-cross' }));
-        $fp.append($rm);
+        field.el.append($rm);
         $rm.addEventListener('click', (event) => {
             this.dispatchEvent(new CustomEvent('removed'));
         });
@@ -108,15 +96,16 @@ class MissingValueListItem extends HTMLElement {
             dropdown.hide();
         });
 
+        // over the operator at the start of the formula; opens the operator list
         $opEdit = h('div', { class: 'down-arrow' }, 'a');
-        $fp.append($opEdit);
+        field.$text.append($opEdit);
         $opEdit.style.width = `${_sign.length}ch`;
         $opEdit.style.display = 'none';
 
         $opEdit.addEventListener('click', (event) => {
             if (this._$wasEditingOpsFormula !== $formula || dropdown.content() !== this.opsToolbar) {
                 this.opsToolbar.show($formula);
-                dropdown.show($formula, this.opsToolbar);
+                dropdown.show($formula, this.opsToolbar, false, undefined, field.el);
 
                 let sel = window.getSelection();
 

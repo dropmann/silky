@@ -249,14 +249,8 @@
     min-width: 0;
 }
 
-/* the box around a formula: its prefix ('=' or 'and'), the formula itself and
-   the add/remove nested button, side by side. They are top aligned rather than
-   baseline aligned: they share a font and line height, so their text lines up
-   anyway, and an empty formula (which has no baseline) can't shift the prefix */
+/* the box around a formula (see formulafield.css for its layout) */
 .jmv-filter-options > .formula-list > .formula-box .formula-field {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
     background-color: #FFFFFF;
     border: 1px solid #CCCCCC;
     padding-block: 4px;
@@ -264,60 +258,6 @@
     font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
     font-size: 12px;
     line-height: calc(1em + 2px);  /* scales with a minimum font size setting */
-    cursor: text;
-}
-
-/* the field shows the focus ring for the formula inside it, following the
-   same mouse/keyboard rules as everything else (see focusoutline.css) */
-.jmv-filter-options > .formula-list > .formula-box .formula-field:has(> .formula:focus) {
-    outline: auto 1px;
-    outline: -webkit-focus-ring-color auto 1px;
-}
-
-body[focusmode="default"] .jmv-filter-options > .formula-list > .formula-box .formula-field:has(> .formula:focus),
-body[focusmode="hover"] .jmv-filter-options > .formula-list > .formula-box .formula-field:has(> .formula:focus) {
-    outline: none;
-}
-
-/* the visible prefix and an invisible copy of 'and' share one grid cell, so
-   every prefix is as wide as 'and' in the current language, and the formulas
-   of a filter line up */
-.jmv-filter-options > .formula-list > .formula-box .equal {
-    flex: none;
-    display: inline-grid;
-    margin-inline-end: 0.75ch;
-    -webkit-user-select: none;
-    user-select: none;
-}
-
-.jmv-filter-options > .formula-list > .formula-box .equal > span {
-    grid-area: 1 / 1;
-    justify-self: end;  /* '=' sits against the formula, the same gap as 'and' */
-}
-
-.jmv-filter-options > .formula-list > .formula-box .equal > .equal-sizer {
-    visibility: hidden;
-}
-
-.jmv-filter-options > .formula-list > .formula-box .formula {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-    min-height: 14px;
-    min-height: 1lh;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    outline: none;
-    cursor: text;
-}
-
-/* overlaid, so the caret of an empty formula sits at its start */
-.jmv-filter-options > .formula-list > .formula-box .formula:empty::before {
-    position: absolute;
-    inset-inline-start: 0;
-    top: 0;
-    white-space: nowrap;
-    pointer-events: none;
 }
 
 .jmv-filter-options > .formula-list > .formula-box .add-nested,
