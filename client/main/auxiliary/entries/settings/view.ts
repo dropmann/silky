@@ -35,6 +35,7 @@ export default class SettingsAuxView extends AuxView {
     missings = h('input', { type: 'text', spellcheck: 'false', size: '10' });
     language = h('select', {});
     devMode = h('input', { type: 'checkbox' });
+    fixed = true;
 
     constructor(model: Instance) {
         super('settings');
@@ -120,15 +121,21 @@ export default class SettingsAuxView extends AuxView {
                 row(_('Default missings'), this.missings)));
         body.classList.add('aux-settings');
 
-        // zoom, the language and developer mode are the desktop app's
-        if (host.isElectron)
-            body.append(this.createApplicationGroup());
+        body.append(this.createApplicationGroup());
 
         return body;
     }
 
+    // developer mode everywhere; zoom, the language and the version only in
+    // the desktop app (as the application menu had it): in a browser, zoom
+    // is the browser's and the language follows it
     createApplicationGroup(): HTMLElement {
         const settings = this.model.settings();
+        this.devMode.addEventListener('change', () => settings.setSetting('devMode', this.devMode.checked));
+        const devMode = row(_('Developer mode'), this.devMode);
+
+        if ( ! host.isElectron)
+            return group(_('Application'), devMode);
 
         const zoomOut = h('button', { type: 'button', 'aria-label': _('Zoom out') }, '-');
         const zoomIn = h('button', { type: 'button', 'aria-label': _('Zoom in') }, '+');
@@ -155,7 +162,6 @@ export default class SettingsAuxView extends AuxView {
                 message: _('A change of language requires jamovi to be restarted'),
             });
         });
-        this.devMode.addEventListener('change', () => settings.setSetting('devMode', this.devMode.checked));
 
         const version = h('div', { class: 'aux-settings-version' });
         void host.version.then((v: string) => version.textContent = _('Version {v}', { v }));
@@ -165,7 +171,7 @@ export default class SettingsAuxView extends AuxView {
                 h('span', {}, _('Zoom')),
                 h('span', { class: 'aux-settings-zoom' }, zoomOut, this.zoomLevel, zoomIn)),
             row(_('Language'), this.language),
-            row(_('Developer mode'), this.devMode),
+            devMode,
             version);
     }
 

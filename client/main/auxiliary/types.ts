@@ -81,6 +81,8 @@ export class AuxView {
     // the panel's width when the view's first shown, from its entry; null
     // for the shell's default
     defaultWidth: number | null = null;
+    // kept at the toolbar's end, and never reordered (i.e. the settings)
+    fixed = false;
     private cleanups: Array<() => void> = [];
 
     constructor(id: AuxViewId) {

@@ -1,15 +1,5 @@
-/* The settings view, and its button, which is kept at the toolbar's end.
-   shortcut: only its position's fixed, and the toolbar's not reorderable in
-   the app (see main.ts); enable reordering and it must be left out of it */
-.aux-toolbar-button[data-aux-view='account'],
-.aux-toolbar-button[data-aux-view='settings'] {
-    margin-top: auto;
-}
-
-/* the account's above it, and takes the space instead */
-.aux-toolbar-button[data-aux-view='account']:not([hidden]) + .aux-toolbar-button[data-aux-view='settings'] {
-    margin-top: 0;
-}
+/* The settings view. Its button's fixed at the toolbar's end (see
+   .aux-toolbar-fixed in the side panel's style.css) */
 
 .aux-settings-group {
     margin: 0 0 16px;

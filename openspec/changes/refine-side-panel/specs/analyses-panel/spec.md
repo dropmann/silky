@@ -47,3 +47,10 @@ Typing in the search box SHALL replace the modules with a flat list of the analy
 #### Scenario: Not knowing the module
 - **WHEN** the user searches for "anova"
 - **THEN** every ANOVA analysis is listed with "jmv" beside it
+
+### Requirement: Adding modules
+The panel's header SHALL have a + button ("Add modules") beside the pin, shown only while the Analyses panel is. Clicking it SHALL open the Module Library on its "Not installed" filter, with the library's search cleared.
+
+#### Scenario: Looking for more analyses
+- **WHEN** the user clicks + in the Analyses panel's header
+- **THEN** the Module Library opens, showing only the modules not installed

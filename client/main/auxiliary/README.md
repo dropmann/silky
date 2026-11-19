@@ -43,7 +43,7 @@ Use gaps between order values so new entries can be inserted without renumbering
 
 An entry may also give a `width`, the overlay panel's width in pixels when it's first shown; without one it gets the shell's default (320). As an overlay each entry keeps its own width: resizing the panel changes the width of the entry showing, and switching entries switches to theirs (clamped to the panel's allowed range). Docked (pinned), the panel is part of the layout, so it keeps one width whatever it's showing: it's pinned at the size it is, and resizing it then changes that docked width.
 
-By default, the toolbar buttons can be reordered by dragging them, or with Ctrl+ArrowUp/ArrowDown. Pass `{ reorderable: false }` to the `AuxShell` constructor to fix them in their registered order, or call `setReorderable()` at runtime; disabling reordering puts the buttons back in their registered order.
+By default, the toolbar buttons can be reordered by dragging them, or with Ctrl+ArrowUp/ArrowDown. Pass `{ reorderable: false }` to the `AuxShell` constructor to fix them in their registered order, or call `setReorderable()` at runtime; disabling reordering puts the buttons back in their registered order. A view with `fixed` set (Settings, Account) is never reordered: its button is kept at the toolbar's end, can't be dragged or moved with the keyboard, and nothing can be dropped among the fixed buttons.
 
 The `AuxEntryContext` passed to every entry contains:
 

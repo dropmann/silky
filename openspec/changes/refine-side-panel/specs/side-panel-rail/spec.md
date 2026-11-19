@@ -31,6 +31,17 @@ The rail SHALL show, from the top: Analyses, Module Library and Help. At its bot
 - **WHEN** a user is signed in
 - **THEN** their avatar is shown directly above Settings
 
+### Requirement: Settings and Account are never moved
+Settings and Account SHALL stay at the rail's bottom whether or not the rail's buttons can be reordered. They SHALL NOT be dragged or moved with Ctrl+ArrowUp/ArrowDown, and another button SHALL NOT be dropped among them or moved below them.
+
+#### Scenario: Reordering switched on
+- **WHEN** the rail's buttons can be reordered and the user drags Help toward the bottom, or presses Ctrl+ArrowDown on the last button above Account and Settings
+- **THEN** Help stays above Account and Settings
+
+#### Scenario: Dragging Settings
+- **WHEN** the rail's buttons can be reordered and the user drags Settings
+- **THEN** nothing moves, and releasing the drag opens or closes the Settings panel as a click does
+
 ### Requirement: Opening and switching panels
 Clicking a rail button SHALL open its panel, and clicking the button of the panel showing SHALL close it. Clicking another button while a panel is open SHALL switch to that panel. When a panel is opened or switched to, focus SHALL move to its search box if it has one, otherwise to its first control, otherwise to the panel. A click on a rail button SHALL NOT itself move focus to the button. Enter or Space on a focused rail button SHALL open its panel in the same way.
 

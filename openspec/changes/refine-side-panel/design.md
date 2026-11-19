@@ -41,7 +41,7 @@ Interactive content inside `<summary>` would also expand the row and is invalid 
 The Analyses panel runs analyses and shows or hides modules; the Module Library installs, updates and removes them. The Library's Hide/Show and "Analyses (n)" list were removed so that each job has one home.
 
 ### Settings is a rail entry, fixed at the bottom
-It replaces the kebab, which sat next to the rail and opened a panel from the same edge. It is placed with `margin-top: auto`; the Account entry, when shown, takes that space above it. This only holds while reordering is off (see the `shortcut:` comment in the settings stylesheet).
+It replaces the kebab, which sat next to the rail and opened a panel from the same edge. Settings and Account are `fixed` views (`AuxView.fixed`): the toolbar puts their buttons last whatever the registered order, marks them `aux-toolbar-fixed`, and leaves them out of reordering (no drag, no Ctrl+Arrow, not drop targets, and no button can be moved below them), so they hold their place even if reordering is switched on. The first fixed button shown takes the free space above with `margin-top: auto`.
 
 ### Account is a panel, not a popover
 A popover sized to its content was considered. A panel keeps the rule that every rail button opens a panel, and leaves room for more (storage, plan limits).
@@ -58,8 +58,8 @@ Text and search are compared after Unicode decomposition with combining marks re
 ### Help follows until you navigate
 Help was always tied to the selected analysis, so a page couldn't be kept open while setting up an analysis, or opened before one existed. It now follows only until the user navigates (the home, a link, the breadcrumb), and a target button beside the pin, like the filled pin, shows and switches following. A status strip above the page was considered and dropped: clearer, but it takes a line from the document. The button is added through `AuxView.getPanelActions`, which the panel shows only while that view is.
 
-### The help home reuses the Analyses panel's rows
-Same expanding module rows and search, without the ribbon toggle, so both panels look and work alike. A module counts as having help when it has a `docs/index.md`; topics aren't listed, since the server can't list a module's docs, and are reached from the module's overview.
+### The help home reads as documentation
+It first reused the Analyses panel's expanding module rows, but the two panels then looked too alike for different jobs: one runs analyses, the other is reading. The home is now a contents page in the documents' own type: a section per module with a blue heading, the analyses as text links under the ribbon menu's groups, and the modules without help on one muted line at the end. Searching narrows that page rather than switching to a flat list, so results keep their module and group. It shares only the search box with the Analyses panel. A module counts as having help when it has a `docs/index.md`; topics aren't listed, since the server can't list a module's docs, and are reached from the module's overview.
 
 ## Risks / Trade-offs
 
@@ -67,5 +67,4 @@ Same expanding module rows and search, without the ribbon toggle, so both panels
 
 - **Cloud auth contract:** the `IUser` fields (name, email, plan, picture, manageUrl) are a guess at what jamovi cloud's user carries. → Confirm with the cloud auth module's owner; the account view only reads those fields.
 - **Two user buttons in the cloud:** the ribbon's `#jmv-user-button`, which the cloud fills today, is still there. → The cloud should stop filling it, then it can be removed.
-- **Settings is fixed by CSS only:** if rail reordering is switched on, the Settings and Account buttons could be dragged. → Leave them out of reordering if it's switched on.
-- **The language list and zoom are desktop only:** the Application group is built only when `host.isElectron`, and wasn't seen running.
+- **The language list and zoom are desktop only:** as in the application menu (which hid them with `body:not(.electron)`), they're built only when `host.isElectron`, and weren't seen running. Developer mode is shown everywhere, as the menu showed it.

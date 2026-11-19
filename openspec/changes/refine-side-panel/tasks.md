@@ -42,6 +42,8 @@ Done on `side-panel-refinements` unless unchecked.
 - [x] 5.2 Remove the application menu and its key tip from the ribbon, and point Alt+M at the Settings panel
 - [ ] 5.3 Check the Application group (zoom, language, developer mode) in the desktop app
 - [ ] 5.4 Check Alt+M, Default missings and the plot settings
+- [x] 5.5 Make Settings and Account fixed views, left out of the rail's reordering
+- [ ] 5.6 With reordering switched on, check that neither moves (drag or Ctrl+Arrow), and nothing can be moved below them
 
 ## 6. Account
 

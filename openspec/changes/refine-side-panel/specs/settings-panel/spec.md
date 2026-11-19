@@ -18,7 +18,7 @@ The panel SHALL group the settings under blue headings, each setting a label wit
 - **Results:** Number format, p-value format, Decimal symbol, References, Syntax mode.
 - **Plots:** Plot theme, Color palette.
 - **Import:** Default missings.
-- **Application** (desktop app only): Zoom, Language, Developer mode, and the version.
+- **Application**: Developer mode everywhere; Zoom, Language and the version in the desktop app only, as the application menu had them (in a browser, zoom is the browser's and the language follows it).
 
 #### Scenario: In a browser
 - **WHEN** jamovi runs in a browser

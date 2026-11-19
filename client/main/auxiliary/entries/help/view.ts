@@ -30,7 +30,7 @@ type DocFocus = 'crumb' | 'link' | null;
 type Translator = (value: string) => string;
 
 // the help home's modules, with whether each has documents
-type HomeModule = { module: IModuleMeta; tone: number; translate: Translator; hasDocs: boolean };
+type HomeModule = { module: IModuleMeta; translate: Translator; hasDocs: boolean };
 
 export default class HelpAuxView extends AuxView {
     model: Instance;
@@ -46,7 +46,8 @@ export default class HelpAuxView extends AuxView {
     followButton: HTMLButtonElement | null = null;
     searchBox: SearchBox | null = null;
     homeModules: HomeModule[] = [];
-    homeExpanded = new Set<string>();
+    // the help home's modules collapsed (they start open), kept as it's rebuilt
+    homeCollapsed = new Set<string>();
     // the document showing, and those its links were followed from, which
     // the breadcrumb leads back to
     current: DocRef | null = null;
@@ -288,7 +289,7 @@ export default class HelpAuxView extends AuxView {
         if (this.contentElement === null || this.searchBox === null)
             return;
         this.contentElement.removeAttribute('aria-busy');
-        this.contentElement.replaceChildren(this.searchBox.element, h('div', { class: 'aux-analyses-list' }));
+        this.contentElement.replaceChildren(this.searchBox.element, h('div', { class: 'aux-help-toc' }));
         this.scrollToTop();
         if (focus)
             this.searchBox.input.focus({ preventScroll: true });
@@ -306,72 +307,89 @@ export default class HelpAuxView extends AuxView {
         if (loadId !== this.loadId || this.current !== null)
             return;
 
-        this.homeModules = modules.map((module, index) => ({ module, tone: index % 4, translate: translators[index], hasDocs: hasDocs[index] }));
+        this.homeModules = modules.map((module, index) => ({ module, translate: translators[index], hasDocs: hasDocs[index] }));
         this.renderHome();
     }
 
+    // the home reads as a documentation's contents: a section per module, its
+    // analyses' documents listed under the ribbon menu's groups. searching
+    // narrows the same page, rather than giving way to a list
     renderHome(): void {
-        const list = this.contentElement?.querySelector('.aux-analyses-list');
-        if ( ! list)
+        const toc = this.contentElement?.querySelector('.aux-help-toc');
+        if ( ! toc)
             return;
         const query = (this.searchBox?.input.value ?? '').trim();
-        if (query === '') {
-            list.replaceChildren(...this.homeModules.map(item => this.createHomeModule(item)));
+
+        const sections = this.homeModules
+            .filter(item => item.hasDocs)
+            .map(item => this.createHomeSection(item, query))
+            .filter((section): section is HTMLElement => section !== null);
+
+        if (sections.length === 0 && query !== '') {
+            toc.replaceChildren(h('div', { class: 'aux-panel-placeholder' }, _('No help found.')));
             return;
         }
 
-        const items = h('div', { class: 'aux-analyses-items aux-analyses-results' });
-        for (const { module, translate, hasDocs } of this.homeModules) {
-            if ( ! hasDocs)
+        toc.replaceChildren(...sections);
+
+        const without = this.homeModules.filter(item => ! item.hasDocs).map(item => item.module.name);
+        if (without.length > 0 && query === '')
+            toc.append(h('p', { class: 'aux-help-toc-nodocs' }, _('No help yet: {modules}', { modules: without.join(', ') })));
+    }
+
+    // the module's section; null, searching, when nothing in it matches
+    createHomeSection({ module, translate }: HomeModule, query: string): HTMLElement | null {
+        const mark = (text: string) => highlightSearch(text, query);
+        const moduleTitle = translate(module.title);
+        const moduleMatches = query !== '' && (matchesSearch(module.name, query) || matchesSearch(moduleTitle, query));
+
+        // the analyses, under their menu groups, in the menu's order
+        const groups = new Map<string, HTMLElement>();
+        for (const analysis of this.getAnalyses(module)) {
+            const title = translate(analysis.title || analysis.menuTitle);
+            const text = [ title, translate(analysis.menuTitle || ''), translate(analysis.menuSubtitle || '') ].join('\n');
+            if (query !== '' && ! moduleMatches && ! matchesSearch(text, query))
                 continue;
-            const moduleMatches = matchesSearch(module.name, query);
-            for (const analysis of this.getAnalyses(module)) {
-                const title = translate(analysis.menuTitle || analysis.title);
-                if (moduleMatches || matchesSearch(title, query))
-                    items.append(this.createHomeItem(module, `${ analysis.name.toLowerCase() }.md`, highlightSearch(title, query), module.name));
+            const group = translate(analysis.menuGroup || '') || moduleTitle;
+            let list = groups.get(group);
+            if (list === undefined) {
+                list = h('ul', { class: 'aux-help-toc-list' });
+                groups.set(group, list);
             }
-        }
-        list.replaceChildren(items.childElementCount === 0
-            ? h('div', { class: 'aux-panel-placeholder' }, _('No help found.'))
-            : items);
-    }
-
-    createHomeModule({ module, tone, translate, hasDocs }: HomeModule): HTMLElement {
-        const summary = h('summary', { class: 'aux-analyses-module-summary' },
-            h('span', { class: 'aux-analyses-icon', 'data-tone': String(tone), 'aria-hidden': 'true' }, module.name.slice(0, 2).toLocaleUpperCase()),
-            h('span', { class: 'aux-analyses-module-text' },
-                h('span', { class: 'aux-analyses-module-name' }, module.name),
-                h('span', { class: 'aux-analyses-module-title', dir: 'auto' }, translate(module.title))),
-            hasDocs ? '' : h('span', { class: 'aux-help-nohelp' }, _('No help yet')));
-
-        const body = h('div', { class: 'aux-analyses-module-body' });
-        if (hasDocs) {
-            body.append(this.createHomeItem(module, 'index.md', _('Overview')));
-            for (const analysis of this.getAnalyses(module)) {
-                const title = translate(analysis.menuTitle || analysis.title);
-                const subtitle = analysis.menuSubtitle ? ` ${ translate(analysis.menuSubtitle) }` : '';
-                body.append(this.createHomeItem(module, `${ analysis.name.toLowerCase() }.md`, title + subtitle));
-            }
-        }
-        else {
-            body.append(h('div', { class: 'aux-panel-placeholder' }, _('This module has no help yet.')));
+            list.append(h('li', {}, this.createHomeItem(module, `${ analysis.name.toLowerCase() }.md`, mark(title))));
         }
 
-        const details = h('details', { class: 'aux-analyses-module-details' }, summary, body);
-        details.open = this.homeExpanded.has(module.name);
-        details.addEventListener('toggle', () => {
-            if (details.open)
-                this.homeExpanded.add(module.name);
+        if (query !== '' && ! moduleMatches && groups.size === 0)
+            return null;
+
+        const body = h('div', { class: 'aux-help-toc-module-body' },
+            h('ul', { class: 'aux-help-toc-list' },
+                h('li', {}, this.createHomeItem(module, 'index.md', _('Overview')))));
+        for (const [ group, list ] of groups)
+            body.append(h('h3', { class: 'aux-help-toc-group', dir: 'auto' }, mark(group)), list);
+
+        // the module's heading collapses it; searching, every section's open,
+        // so no match is hidden (and toggling then isn't remembered)
+        const section = h('details', { class: 'aux-help-toc-module' },
+            h('summary', { class: 'aux-help-toc-module-summary' },
+                h('h2', { class: 'aux-help-toc-module-title' },
+                    h('span', { dir: 'auto' }, mark(moduleTitle)),
+                    h('span', { class: 'aux-help-toc-module-name' }, mark(module.name)))),
+            body);
+        section.open = query !== '' || ! this.homeCollapsed.has(module.name);
+        section.addEventListener('toggle', () => {
+            if (query !== '')
+                return;
+            if (section.open)
+                this.homeCollapsed.delete(module.name);
             else
-                this.homeExpanded.delete(module.name);
+                this.homeCollapsed.add(module.name);
         });
-        return h('div', { class: `aux-analyses-module${ hasDocs ? '' : ' aux-help-nodocs' }` }, details);
+        return section;
     }
 
-    createHomeItem(module: IModuleMeta, path: string, label: string | Node, moduleName?: string): HTMLElement {
-        const button = h('button', { type: 'button', class: 'aux-analyses-item' }, h('span', { dir: 'auto' }, label));
-        if (moduleName !== undefined)
-            button.append(h('span', { class: 'aux-analyses-item-module' }, moduleName));
+    createHomeItem(module: IModuleMeta, path: string, label: string | Node): HTMLElement {
+        const button = h('button', { type: 'button', class: 'aux-help-toc-link' }, h('span', { dir: 'auto' }, label));
         button.addEventListener('click', event => {
             this.setFollowing(false);
             void this.show({ ns: module.name, path }, this.isKeyboardClick(event, button) ? 'crumb' : null);

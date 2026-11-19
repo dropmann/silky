@@ -41,9 +41,14 @@ export default class AuxToolbar {
             label: _('Assistance panel toolbar'),
         });
 
+        // the fixed buttons go last, whatever their registered order, so the
+        // reorderable ones come before them and can't be moved past them
+        views = [ ...views.filter(view => ! view.fixed), ...views.filter(view => view.fixed) ];
+
         for (const view of views) {
             const button = view.createToolbarButton();
             button.dataset.auxView = view.id;
+            button.classList.toggle('aux-toolbar-fixed', view.fixed);
             button.addEventListener('click', event => this.handleClick(event, view.id));
             // a click leaves focus where it is, for the view to take: focus
             // landing in the toolbar first, the focus manager pulls it back
@@ -69,7 +74,7 @@ export default class AuxToolbar {
         this.reorderable = reorderable;
 
         for (const button of this.buttons.values()) {
-            if (reorderable)
+            if (reorderable && ! this.isFixed(button))
                 button.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown');
             else
                 button.removeAttribute('aria-keyshortcuts');
@@ -92,6 +97,10 @@ export default class AuxToolbar {
             focused.focus();
     }
 
+    isFixed(button: Element | null | undefined): boolean {
+        return button?.classList.contains('aux-toolbar-fixed') ?? false;
+    }
+
     handleClick(event: MouseEvent, view: AuxViewId) {
         if (this.suppressClickView === view) {
             event.preventDefault();
@@ -103,7 +112,7 @@ export default class AuxToolbar {
     }
 
     handlePointerDown(event: PointerEvent, view: AuxViewId) {
-        if (event.button !== 0 || ! this.reorderable)
+        if (event.button !== 0 || ! this.reorderable || this.isFixed(this.buttons.get(view)))
             return;
 
         this.pressedView = view;
@@ -198,7 +207,8 @@ export default class AuxToolbar {
 
         this.updateDragCursor(true);
 
-        const buttons = Array.from(this.element.querySelectorAll<HTMLButtonElement>('.aux-toolbar-button:not(.dragging)'));
+        // the fixed buttons aren't dropped beside, so nothing lands among them
+        const buttons = Array.from(this.element.querySelectorAll<HTMLButtonElement>('.aux-toolbar-button:not(.dragging):not(.aux-toolbar-fixed)'));
         if (buttons.length === 0) {
             this.clearDropIndicator();
             return;
@@ -288,7 +298,7 @@ export default class AuxToolbar {
             return;
 
         const button = this.buttons.get(view);
-        if ( ! button)
+        if ( ! button || this.isFixed(button))
             return;
 
         // keep keyboard navigation from also moving focus
@@ -303,13 +313,13 @@ export default class AuxToolbar {
         }
         else {
             const next = button.nextElementSibling;
-            if (next === null)
+            if (next === null || this.isFixed(next))
                 return;
             this.element.insertBefore(button, next.nextElementSibling);
         }
 
         button.focus();
-        const buttons = Array.from(this.element.querySelectorAll('.aux-toolbar-button'));
+        const buttons = Array.from(this.element.querySelectorAll('.aux-toolbar-button:not(.aux-toolbar-fixed)'));
         interactionManager.announce(_('{title} moved to position {position} of {count}', {
             title: button.title,
             position: (buttons.indexOf(button) + 1).toLocaleString(),

@@ -45,6 +45,7 @@ import keyboardJS  from 'keyboardjs';
 import HighContrast from '../common/highcontrast';
 import type { IModuleLibrary } from './modulelibrary';
 import ModulesAuxView from './auxiliary/entries/modules/view';
+import AnalysesAuxView from './auxiliary/entries/analyses/view';
 import { relocate } from './relocate';
 
 declare global {
@@ -738,6 +739,21 @@ ready(async() => {
             auxShell?.showView('modules');
         },
     };
+
+    // Alt, M opens the settings, as it did the application menu they replaced
+    const settingsButton = auxShell.toolbar.buttons.get('settings');
+    if (settingsButton !== undefined) {
+        keyTips.register(settingsButton, {
+            key: 'M',
+            position: { x: '50%', y: '0%' },
+            action: () => auxShell?.showView('settings'),
+        });
+    }
+
+    // the analyses panel's + goes to the library's modules to install
+    const analysesView = auxShell.views.find(view => view.id === 'analyses');
+    if (analysesView instanceof AnalysesAuxView)
+        analysesView.onAddModules = () => library.show('not-installed');
 
     let mainTable = new TableView(dataSetModel, viewController, instance.settings());
     mainTable.id = 'spreadsheet';

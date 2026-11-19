@@ -5,7 +5,7 @@
 //   searchTerm takes the library's search syntax: 'module::<name>' for a
 //   module by name, 'plot::' for modules providing plots
 
-export type ModuleLibraryFilter = 'all' | 'installed';
+export type ModuleLibraryFilter = 'all' | 'installed' | 'not-installed';
 
 export interface IModuleLibrary {
     show(filter: ModuleLibraryFilter, searchTerm?: string): void;

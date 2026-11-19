@@ -103,6 +103,16 @@ body[dir='rtl'] #main-view {
     display: none;
 }
 
+/* the fixed buttons (i.e. the settings) sit at the toolbar's end, the first
+   one shown taking the space above them */
+.aux-toolbar-button.aux-toolbar-fixed {
+    margin-top: auto;
+}
+
+.aux-toolbar-button.aux-toolbar-fixed:not([hidden]) ~ .aux-toolbar-button.aux-toolbar-fixed {
+    margin-top: 0;
+}
+
 .aux-toolbar-button.dragging,
 #aux-toolbar.reordering .aux-toolbar-button {
     cursor: move;

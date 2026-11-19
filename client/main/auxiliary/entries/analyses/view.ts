@@ -1,6 +1,6 @@
 import type Instance from '../../../instance';
 import type { IModuleMeta } from '../../../modules';
-import { h } from '../../../../common/htmlelementcreator';
+import { h, htmlTrusted } from '../../../../common/htmlelementcreator';
 import { AuxView } from '../../types';
 import { createSearchBox, highlightSearch, matchesSearch, type SearchBox } from '../../search';
 
@@ -15,6 +15,10 @@ export default class AnalysesAuxView extends AuxView {
     // the modules expanded, kept as the list's rebuilt
     expanded = new Set<string>();
     updateId = 0;
+    // opens the module library on the modules not installed, for the header's
+    // + (set by main.ts, which has the library)
+    onAddModules: (() => void) | null = null;
+    addButton: HTMLButtonElement | null = null;
 
     constructor(model: Instance) {
         super('analyses');
@@ -31,6 +35,18 @@ export default class AnalysesAuxView extends AuxView {
                 <path data-fill="currentColor" d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z" />
             </svg>
         `;
+    }
+
+    getPanelActions(): HTMLElement[] {
+        const label = _('Add modules');
+        this.addButton = h('button', { type: 'button', class: 'aux-panel-action', 'aria-label': label, title: label },
+            h('div', { class: 'aux-panel-action-icon', 'aria-hidden': 'true' }, htmlTrusted(`
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                </svg>
+            `)));
+        this.addButton.addEventListener('click', () => this.onAddModules?.());
+        return [ this.addButton ];
     }
 
     getBody() {

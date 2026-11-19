@@ -20,6 +20,8 @@ function avatar(user: auth.IUser, className: string): HTMLElement {
 export default class AccountAuxView extends AuxView {
     button: HTMLButtonElement | null = null;
     content = h('div', { class: 'aux-account' });
+    // at the toolbar's end, above the settings
+    fixed = true;
 
     constructor() {
         super('account');
